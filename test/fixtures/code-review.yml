@@ -1,0 +1,38 @@
+name: code-review
+steps:
+  - id: analyze
+    description: コードベース分析
+    required_output:
+      - file_list
+      - complexity_score
+    validation:
+      - field: file_list
+        op: type
+        value: array
+      - field: file_list
+        op: min_length
+        value: 1
+      - field: complexity_score
+        op: min
+        value: 1
+      - field: complexity_score
+        op: max
+        value: 10
+
+  - id: review
+    description: レビューコメント作成
+    depends_on: analyze
+    required_output:
+      - comments
+      - severity_counts
+    validation:
+      - field: comments
+        op: type
+        value: array
+
+  - id: summary
+    description: レビューサマリー作成
+    depends_on: review
+    required_output:
+      - verdict
+      - summary_text

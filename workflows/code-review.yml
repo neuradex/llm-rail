@@ -1,0 +1,59 @@
+name: code-review
+steps:
+  - id: analyze
+    description: コードベース分析
+    required_output:
+      - file_list
+      - complexity_score
+    validation:
+      - field: file_list
+        op: type
+        value: array
+      - field: file_list
+        op: min_length
+        value: 1
+      - field: complexity_score
+        op: min
+        value: 1
+      - field: complexity_score
+        op: max
+        value: 10
+    tips:
+      - 変更のあったファイルだけでなく影響範囲も含めろ
+      - complexity_scoreは1-10のスケールで評価
+      - テストファイルも分析対象に含めろ
+
+  - id: review
+    description: レビューコメント作成
+    depends_on: analyze
+    required_output:
+      - comments
+      - severity_counts
+    validation:
+      - field: comments
+        op: type
+        value: array
+      - field: comments
+        op: min_length
+        value: 1
+    tips:
+      - セキュリティ関連を先に確認
+      - コメントにはファイルパスと行番号を含めろ
+      - 重要度レベル（critical/warning/info）を付与
+
+  - id: summary
+    description: レビューサマリー作成
+    depends_on: review
+    required_output:
+      - verdict
+      - summary_text
+    validation:
+      - field: verdict
+        op: type
+        value: string
+      - field: summary_text
+        op: min_length
+        value: 10
+    tips:
+      - verdictはapprove/request_changes/commentのいずれか
+      - サマリーにはcriticalな問題を必ず含めろ

@@ -51,7 +51,7 @@ Your AI agent failed a complex code review? Break it into 3 validated steps. Run
 
 ## Why Rails
 
-LLMs have **recency bias** — the longer the context, the more they forget their original instructions. This is the fundamental failure mode of complex agentic tasks.
+LLMs have **recency bias** — the longer the context, the more they forget their original instructions ([Lost in the Middle, Liu et al. 2023](https://arxiv.org/abs/2307.03172)). This is the fundamental failure mode of complex agentic tasks.
 
 Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. llm-rail fills this gap.
 

@@ -63,7 +63,9 @@ llm-rail solves the recency problem by **keeping each step's context small and f
 
 This is why **Haiku can replace Opus**. It's not about model capability — it's about scope. A small model in a small context outperforms a large model drowning in a large context.
 
-For enterprises, this answers two critical questions: **"Can you control it?"** — yes, with policy rails. **"Can you trace issues?"** — yes, with audit rails. Both answered at the architecture level, not with prompt-level promises.
+And because the workflow engine — not the LLM — tracks progress, **every step executes without exception**, even in a workflow with hundreds of steps. An LLM agent in a long context will inevitably skip steps. A workflow engine never forgets.
+
+For enterprises, this answers three critical questions: **"Can it handle complex processes?"** — yes, the engine guarantees every step completes. **"Can you control it?"** — yes, with policy rails. **"Can you trace issues?"** — yes, with audit rails. All answered at the architecture level, not with prompt-level promises.
 
 ---
 

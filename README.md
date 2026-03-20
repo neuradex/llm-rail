@@ -5,12 +5,13 @@
 </p>
 
 <p align="center">
-  <strong>Deterministic workflow control for LLM agents.</strong>
+  <strong>Guardrails for agentic work.</strong>
 </p>
 
 <p align="center">
-  <a href="#getting-started">Getting Started</a> ·
+  <a href="#why-rails">Why Rails</a> ·
   <a href="#how-it-works">How It Works</a> ·
+  <a href="#getting-started">Getting Started</a> ·
   <a href="#claude-code-plugin">Plugin</a> ·
   <a href="./docs/CONTRIBUTING.md">Contributing</a>
 </p>
@@ -23,55 +24,155 @@
 
 ---
 
-LLM agents choke on complex tasks. They skip steps, hallucinate outputs, and the bigger model you throw at it, the more it costs — with no guarantee it'll work.
+Ruby on Rails laid rails for web development. **llm-rail lays rails for agentic work.**
 
-**llm-rail** fixes this by decomposing the task into small, validated steps. Each step is simple enough for a fast, cheap model to handle reliably.
+The word "rail" carries a dual meaning — and both are intentional:
+
+- **Rail as track**: Pre-defined workflow steps that agents run on. Fast, efficient, no wasted motion.
+- **Rail as guardrail**: Structural controls that prevent agents from going off course.
+
+LLM agents choke on complex tasks. They skip steps, hallucinate outputs, and lose track of what they were supposed to do as context grows. Throwing a bigger model at it costs more — with no guarantee it'll work. The root cause: **LLMs have recency bias**. In a long context, they forget the original instructions and drift.
+
+Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." llm-rail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
+
+**llm-rail** fixes this with three layers of rails:
+
+| Rail | What it controls |
+|---|---|
+| **Workflow Rail** | Decompose tasks into validated steps. Each step runs in a narrow context — small enough for Haiku instead of Opus. |
+| **Policy Rail** | Every shell command goes through a bash proxy with IAM-style allow/deny rules. Agents can only do what's explicitly permitted. |
+| **Audit Rail** | Every action, command, and validation — logged. Full traceability per instance. |
+
+Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. llm-rail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
 
 Your AI agent failed a complex code review? Break it into 3 validated steps. Run each with Haiku. Total cost drops from $2 to $0.08. Every output verified. Full audit trail.
 
-| | |
-|---|---|
-| 📋 **YAML Workflows** | Declare steps, dependencies, required outputs, and validation rules in plain YAML. |
-| ✅ **Validation Gates** | 21 built-in operators check each step's output before advancing. Reject & retry on failure. |
-| 🔗 **Explicit Data Flow** | `context_in` passes data between steps — no implicit merging, no surprises. |
-| 🪝 **Lifecycle Hooks** | Gate and event hooks at every stage (`step:before_start`, `step:completed`, etc.). |
-| 📝 **Audit Logs** | Every event recorded in `.llm-rail/logs/<id>.jsonl` for full traceability. |
-| 🤖 **Claude Code Plugin** | Built-in skills & agents — design, run, and audit workflows without leaving the editor. |
+---
+
+## Why Rails
+
+LLMs have **recency bias** — the longer the context, the more they forget their original instructions. This is the fundamental failure mode of complex agentic tasks.
+
+Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. llm-rail fills this gap.
+
+llm-rail solves the recency problem by **keeping each step's context small and focused**:
+
+- Each step gets a clean agent with only the data it needs via `context_in`
+- No accumulated context pollution from prior steps
+- The agent doesn't need to be smart — it just needs to follow a narrow instruction precisely
+
+This is why **Haiku can replace Opus**. It's not about model capability — it's about scope. A small model in a small context outperforms a large model drowning in a large context.
+
+For enterprises, this answers two critical questions: **"Can you control it?"** — yes, with policy rails. **"Can you trace issues?"** — yes, with audit rails. Both answered at the architecture level, not with prompt-level promises.
 
 ---
 
 ## How It Works
 
-Define your workflow in YAML. Each step declares its required outputs and validation rules.
+### Step Types
+
+llm-rail supports two step types in a single workflow:
 
 ```yaml
 steps:
+  # Programmatic: no LLM needed. CLI executes directly.
+  - id: fetch-data
+    type: programmatic
+    actions:
+      - run: "curl -s {{api_url}}/data"
+        extract: { records: "data", count: "total" }
+
+  # Agentic: LLM agent does the work. Output validated.
   - id: analyze
-    description: "Analyze codebase at {{target}}"
-    required_output: [file_list, complexity_score]
+    description: "Analyze {{count}} records for anomalies"
+    depends_on: fetch-data
+    context_in:
+      records: "{fetch-data.records}"
+    required_output: [anomalies, risk_score]
     validation:
-      - field: file_list
+      - field: anomalies
         op: type
         value: array
-      - field: complexity_score
+      - field: risk_score
         op: between
-        value: [1, 10]
+        value: [0, 100]
 
-  - id: review
+  # Programmatic: post-processing without LLM
+  - id: notify
+    type: programmatic
     depends_on: analyze
-    context_in:
-      files: "{analyze.file_list}"
-    required_output: [comments, severity_counts]
-    assertions:
-      - field: comments
-        op: each_has
-        value: file
-        message: Every comment must reference a file
+    actions:
+      - run: "curl -X POST {{webhook}} -d '{\"score\": {{risk_score}}}'"
 ```
 
-The agent runs step by step. At each gate, llm-rail validates the output against your rules. **Bad output gets rejected, not passed forward.**
+**Programmatic steps** execute in milliseconds with zero token cost. **Agentic steps** get a focused, validated scope that Haiku handles reliably.
 
-> **21 built-in validation operators** — type checks, range constraints, regex matching, array element assertions, and more. Structural validation and business logic assertions are separated, each with custom error messages.
+### Policy System
+
+Control what agents can execute — inspired by AWS IAM:
+
+```yaml
+policy:
+  mode: enforce
+  rules:
+    - effect: allow
+      commands: ["curl *", "jq *", "node *"]
+    - effect: deny
+      commands: ["rm *", "sudo *"]
+```
+
+- **Trail mode**: Allow everything, log everything. For development and policy discovery.
+- **Enforce mode**: Deny-first rule evaluation. For production.
+- **Policy generation**: Auto-generate minimal allow-list from trail logs.
+
+All commands go through the bash proxy (`llm-rail <id> bash "<cmd>"`), which enforces policy and logs every execution.
+
+### Validation Gates
+
+21 built-in operators check each step's output before advancing:
+
+```yaml
+validation:
+  - field: file_list
+    op: type
+    value: array
+  - field: complexity_score
+    op: between
+    value: [1, 10]
+assertions:
+  - field: comments
+    op: each_has
+    value: file
+    message: Every comment must reference a file
+```
+
+Bad output gets rejected, not passed forward. The agent retries with the error message — no human intervention needed.
+
+### Audit Trail
+
+Every event is recorded per instance:
+
+```
+.llm-rail/{workflow}/{instance}/
+  ├── state.yaml      # Instance state
+  ├── audit.jsonl      # All lifecycle events
+  └── policy.jsonl     # All command executions
+```
+
+---
+
+## Feature Summary
+
+| | |
+|---|---|
+| **Step Types** | `programmatic` (no LLM, direct execution) and `agentic` (LLM agent with validation) in one workflow. |
+| **Actions** | Shell commands with template interpolation and JSON extraction. Sequential with context accumulation. |
+| **Policy** | AWS IAM-inspired allow/deny rules with trail and enforce modes. Bash proxy for all agent commands. |
+| **Validation Gates** | 21 built-in operators. Structural validation + business logic assertions with custom error messages. |
+| **Explicit Data Flow** | `context_in` passes only needed data between steps — no implicit merging, no context pollution. |
+| **Lifecycle Hooks** | Gate and event hooks at every stage (`step:before_start`, `step:completed`, `policy:denied`, etc.). |
+| **Audit Logs** | Every event recorded in JSONL. Audit + policy logs per instance for full traceability. |
+| **Claude Code Plugin** | Built-in skills & agents — design, run, and audit workflows without leaving the editor. |
 
 ---
 
@@ -101,8 +202,15 @@ llm-rail create code-review --param target=src/
 llm-rail 0321-143022 start
 llm-rail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
 
+# Execute commands through policy-enforced proxy
+llm-rail 0321-143022 bash 'git diff --stat'
+
 # Check progress anytime
 llm-rail 0321-143022 status
+
+# Policy management
+llm-rail policy check code-review --command 'curl https://api.example.com'
+llm-rail policy generate 0321-143022 --workflow code-review
 ```
 
 ---
@@ -115,7 +223,7 @@ Install as a Claude Code plugin and never touch the CLI manually.
 |---|---|
 | `/llm-rail:init` | Set up llm-rail in your project |
 | `/llm-rail:design` | Describe a task in natural language → get a validated YAML workflow |
-| `/llm-rail:run` | Execute end-to-end — each step auto-delegated to Haiku |
+| `/llm-rail:run` | Execute end-to-end — a single Haiku agent runs all steps sequentially |
 | `/llm-rail:audit` | Analyze an existing workflow for quality improvements |
 | `/llm-rail:status` | Check progress on running workflows |
 
@@ -126,19 +234,21 @@ Orchestrator (your main agent)
   │
   ├── validate workflow → create instance
   │
-  ├── Step 1 → spawn haiku agent → start → work → next ✓
-  ├── Step 2 → spawn haiku agent → start → work → next ✓
-  ├── Step 3 → spawn haiku agent → start → work → next ✓
-  │
-  └── done. each step validated. full audit log.
+  └── spawn one Haiku agent for the entire instance
+        │
+        ├── start → [programmatic steps auto-execute] → agentic step prompt
+        ├── work → next → [programmatic steps auto-execute] → agentic step prompt
+        ├── work → next → ...
+        │
+        └── workflow complete. every step validated. full audit trail.
 ```
 
-Each step-runner agent only knows two commands: **start** (read the task) and **next** (submit the result). Minimal context, minimal cost.
+One agent, one instance, start to finish. Each step gets a narrow, validated scope. Minimal context, minimal cost.
 
 ---
 
 <p align="center">
-  <strong>Stop paying for expensive models to fail at complex tasks.</strong>
+  <strong>Safe AI = building structures where bad things can't happen, not asking models to be good.</strong>
   <br>
-  Define the steps. Validate the outputs. Delegate to cheap models.
+  Define the rails. Let cheap models run on them — fast, safe, and transparent.
 </p>

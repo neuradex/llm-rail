@@ -32,6 +32,23 @@ export interface AssertionRule {
 /** @deprecated Use AssertionRule instead */
 export type ValidationRule = AssertionRule;
 
+// ── Action / Policy ──
+
+export interface ActionDef {
+  run: string;
+  extract?: Record<string, string>;
+}
+
+export interface PolicyRule {
+  effect: "allow" | "deny";
+  commands: string[];
+}
+
+export interface PolicyDef {
+  mode: "trail" | "enforce";
+  rules?: PolicyRule[];
+}
+
 // ── Workflow Definition (YAML) ──
 
 export interface ParamDef {
@@ -44,14 +61,16 @@ export interface ParamDef {
 
 export interface StepDef {
   id: string;
-  description: string;
+  type?: "programmatic" | "agentic";
+  description?: string;
   depends_on?: string | string[];
-  required_output: string[];
+  required_output?: string[];
   validation?: AssertionRule[];
   assertions?: AssertionRule[];
   tips?: string[];
   context_in?: Record<string, string>;
   meta?: Record<string, unknown>;
+  actions?: ActionDef[];
 }
 
 export interface WorkflowDef {
@@ -61,6 +80,7 @@ export interface WorkflowDef {
   params?: Record<string, ParamDef>;
   context?: Record<string, unknown>;
   steps: StepDef[];
+  policy?: PolicyDef;
 }
 
 // ── Instance State (runtime YAML) ──
@@ -114,7 +134,11 @@ export type HookEvent =
   | "step:before_complete"
   | "step:completed"
   | "step:rejected"
-  | "step:reset";
+  | "step:reset"
+  | "action:before_run"
+  | "action:completed"
+  | "action:failed"
+  | "policy:denied";
 
 export interface HookPayload {
   event: HookEvent;

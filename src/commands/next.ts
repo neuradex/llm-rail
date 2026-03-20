@@ -1,11 +1,12 @@
 import { loadInstance, saveInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
 import { validateStepOutput, runAssertions } from "../engine/validator.js";
-import { formatStepStart, formatRejection, formatCompletion } from "../engine/output.js";
+import { formatStepStart, formatRejection, formatCompletion, formatAutoCompleted } from "../engine/output.js";
 import { appendLog } from "../audit/logger.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
-import { isReady } from "../engine/dependency.js";
 import { collectStepOutputs } from "../engine/context.js";
+import { executeActions } from "../engine/actions.js";
+import { advanceThrough } from "../engine/runner.js";
 import { nowISO } from "../util.js";
 import type { WorkflowDef, InstanceState } from "../types.js";
 
@@ -38,7 +39,7 @@ export function runNext(id: string, resultJson: string): void {
   const result = validateStepOutput(currentStep, output);
 
   if (!result.valid) {
-    appendLog(state.id, "step_rejected", currentStep.id, { errors: result.errors });
+    appendLog(state.workflow_name, state.id, "step_rejected", currentStep.id, { errors: result.errors });
     fireHook(
       makeHookPayload("step:rejected", state.id, state.workflow_name, currentStep.id, {
         errors: result.errors,
@@ -66,15 +67,27 @@ export function runNext(id: string, resultJson: string): void {
     process.exit(1);
   }
 
+  // Execute post-validation actions if defined on agentic step
+  if (currentStep.actions && currentStep.actions.length > 0) {
+    try {
+      const extracted = executeActions(currentStep.actions, { ...state.context, ...output });
+      Object.assign(output, extracted);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Action failed in step '${currentStep.id}': ${message}`);
+      process.exit(1);
+    }
+  }
+
   // Complete current step
   state.steps[currentStep.id].status = "completed";
   state.steps[currentStep.id].output = output;
   state.steps[currentStep.id].completed_at = nowISO();
 
-  // Merge output into context (flat merge for backward compatibility)
+  // Merge output into context
   Object.assign(state.context, output);
 
-  appendLog(state.id, "step_completed", currentStep.id, { output });
+  appendLog(state.workflow_name, state.id, "step_completed", currentStep.id, { output });
 
   // Event hook: step:completed
   fireHook(
@@ -83,12 +96,10 @@ export function runNext(id: string, resultJson: string): void {
 
   // Run cross-step assertions if defined
   if (currentStep.assertions) {
-    const stepOutputs = collectStepOutputs(state.steps);
-    // Build merged data: all step outputs flattened + params
     const mergedData: Record<string, unknown> = { ...state.context };
     const assertResult = runAssertions(currentStep.assertions, mergedData);
     if (!assertResult.valid) {
-      appendLog(state.id, "assertion_failed", currentStep.id, { errors: assertResult.errors });
+      appendLog(state.workflow_name, state.id, "assertion_failed", currentStep.id, { errors: assertResult.errors });
       // Revert step completion
       state.steps[currentStep.id].status = "in_progress";
       state.steps[currentStep.id].output = undefined;
@@ -103,42 +114,39 @@ export function runNext(id: string, resultJson: string): void {
     }
   }
 
-  // Find next step
-  const nextIndex = findNextPending(def, state);
+  // Advance through programmatic steps
+  try {
+    const { reachedStep, autoCompleted } = advanceThrough(def, state);
 
-  if (nextIndex === -1) {
-    // Workflow complete
-    state.status = "completed";
+    if (autoCompleted.length > 0) {
+      console.log(formatAutoCompleted(autoCompleted));
+    }
+
+    if (reachedStep === -1) {
+      // Workflow complete
+      state.status = "completed";
+      saveInstance(state);
+      appendLog(state.workflow_name, state.id, "workflow_completed");
+      fireHook(makeHookPayload("workflow:completed", state.id, state.workflow_name));
+      console.log(formatCompletion(state));
+      return;
+    }
+
+    // Start next agentic step
+    const nextStep = def.steps[reachedStep];
+    state.steps[nextStep.id].status = "in_progress";
+    state.current_step = reachedStep;
     saveInstance(state);
-    appendLog(state.id, "workflow_completed");
-    fireHook(makeHookPayload("workflow:completed", state.id, state.workflow_name));
-    console.log(formatCompletion(state));
-    return;
+
+    appendLog(state.workflow_name, state.id, "step_started", nextStep.id);
+    fireHook(
+      makeHookPayload("step:started", state.id, state.workflow_name, nextStep.id, undefined, nextStep.meta),
+    );
+
+    console.log(formatStepStart(def, state, reachedStep));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    process.exit(1);
   }
-
-  // Start next step
-  const nextStep = def.steps[nextIndex];
-  state.steps[nextStep.id].status = "in_progress";
-  state.current_step = nextIndex;
-  saveInstance(state);
-
-  appendLog(state.id, "step_started", nextStep.id);
-  fireHook(
-    makeHookPayload("step:started", state.id, state.workflow_name, nextStep.id, undefined, nextStep.meta),
-  );
-
-  console.log(formatStepStart(def, state, nextIndex));
-}
-
-function findNextPending(def: WorkflowDef, state: InstanceState): number {
-  for (let i = 0; i < def.steps.length; i++) {
-    const step = def.steps[i];
-    const ss = state.steps[step.id];
-    if (ss.status !== "pending") continue;
-
-    if (!isReady(def, step.id, state.steps)) continue;
-
-    return i;
-  }
-  return -1;
 }

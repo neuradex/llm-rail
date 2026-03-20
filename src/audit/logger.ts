@@ -3,15 +3,19 @@ import * as path from "node:path";
 import type { AuditEntry } from "../types.js";
 import { ensureDir, nowISO } from "../util.js";
 
-const LOGS_DIR = path.resolve(".llm-rail", "logs");
+export function instanceDir(workflowName: string, instanceId: string): string {
+  return path.resolve(".llm-rail", workflowName, instanceId);
+}
 
 export function appendLog(
+  workflowName: string,
   instanceId: string,
   event: string,
   stepId?: string,
   data?: Record<string, unknown>,
 ): void {
-  ensureDir(LOGS_DIR);
+  const dir = instanceDir(workflowName, instanceId);
+  ensureDir(dir);
 
   const entry: AuditEntry = {
     timestamp: nowISO(),
@@ -21,6 +25,6 @@ export function appendLog(
     ...(data && { data }),
   };
 
-  const logPath = path.resolve(LOGS_DIR, `${instanceId}.jsonl`);
+  const logPath = path.resolve(dir, "audit.jsonl");
   fs.appendFileSync(logPath, JSON.stringify(entry) + "\n", "utf-8");
 }

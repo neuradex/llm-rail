@@ -6,6 +6,8 @@ import { runQuery } from "./commands/query.js";
 import { runReset } from "./commands/reset.js";
 import { runList } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
+import { runBash } from "./commands/bash.js";
+import { runPolicyGenerate, runPolicyCheck } from "./commands/policy.js";
 
 const args = process.argv.slice(2);
 
@@ -17,8 +19,11 @@ function usage(): never {
   llm-rail <id> status
   llm-rail <id> query [--step <stepId>]
   llm-rail <id> reset <step-id>
+  llm-rail <id> bash '<command>'
   llm-rail list [--status <status>]
-  llm-rail validate <workflow-name>`);
+  llm-rail validate <workflow-name>
+  llm-rail policy generate <id> --workflow <name>
+  llm-rail policy check <workflow-name> --command '<command>'`);
   process.exit(1);
 }
 
@@ -49,6 +54,29 @@ if (first === "create") {
   const workflowName = args[1];
   if (!workflowName) usage();
   runValidate(workflowName);
+} else if (first === "policy") {
+  const subcommand = args[1];
+  if (subcommand === "generate") {
+    const instanceId = args[2];
+    const wfIdx = args.indexOf("--workflow");
+    const workflowName = wfIdx !== -1 ? args[wfIdx + 1] : undefined;
+    if (!instanceId || !workflowName) {
+      console.error("Usage: llm-rail policy generate <id> --workflow <name>");
+      process.exit(1);
+    }
+    runPolicyGenerate(instanceId, workflowName);
+  } else if (subcommand === "check") {
+    const workflowName = args[2];
+    const cmdIdx = args.indexOf("--command");
+    const command = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
+    if (!workflowName || !command) {
+      console.error("Usage: llm-rail policy check <workflow-name> --command '<command>'");
+      process.exit(1);
+    }
+    runPolicyCheck(workflowName, command);
+  } else {
+    usage();
+  }
 } else {
   // first arg is instance ID
   const id = first;
@@ -92,6 +120,16 @@ if (first === "create") {
         process.exit(1);
       }
       runReset(id, stepId);
+      break;
+    }
+
+    case "bash": {
+      const bashCmd = args[2];
+      if (!bashCmd) {
+        console.error("Missing command for bash");
+        process.exit(1);
+      }
+      runBash(id, bashCmd);
       break;
     }
 

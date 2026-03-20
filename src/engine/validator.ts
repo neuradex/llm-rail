@@ -195,7 +195,7 @@ export function validateStepOutput(
 ): ValidationResult {
   const errors: string[] = [];
 
-  for (const field of step.required_output) {
+  for (const field of step.required_output || []) {
     if (!(field in output) || output[field] === undefined || output[field] === null) {
       errors.push(`Missing required field: '${field}'`);
     }

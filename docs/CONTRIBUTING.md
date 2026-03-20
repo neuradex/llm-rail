@@ -7,24 +7,28 @@
 ```
 src/
 ├── cli.ts                # CLI entry point
-├── types.ts              # Type definitions
+├── types.ts              # Type definitions (StepDef, ActionDef, PolicyDef, etc.)
 ├── util.ts               # YAML I/O, ID generation, utilities
 ├── engine/
 │   ├── workflow.ts       # Workflow loading & schema validation
-│   ├── state.ts          # Instance state CRUD
+│   ├── state.ts          # Instance state CRUD (.llm-rail/{workflow}/{instance}/)
 │   ├── validator.ts      # Step output validation (21 operators)
 │   ├── context.ts        # Cross-step context resolution & template interpolation
 │   ├── dependency.ts     # Step dependency resolution
 │   ├── hooks.ts          # Lifecycle hooks (gate / event)
+│   ├── actions.ts        # Action executor (template, stdin, extract)
+│   ├── runner.ts         # Programmatic step auto-execution (advanceThrough)
+│   ├── policy.ts         # Policy evaluation + trail logging
 │   ├── tip-pool.ts       # Random tip selection
 │   └── output.ts         # CLI output formatting
 ├── commands/
 │   ├── create.ts         ├── start.ts
 │   ├── next.ts           ├── status.ts
 │   ├── query.ts          ├── reset.ts
-│   ├── list.ts           └── validate.ts
+│   ├── list.ts           ├── validate.ts
+│   ├── bash.ts           └── policy.ts
 └── audit/
-    └── logger.ts         # Audit log (JSONL)
+    └── logger.ts         # Audit log (JSONL) + instanceDir helper
 ```
 
 ## Development
@@ -39,14 +43,17 @@ npm run dev -- create code-review    # Dev mode
 ## CLI Reference
 
 ```
-llm-rail create <workflow> [--param k=v]     Create instance from workflow definition
-llm-rail <id> start                          Start the next pending step
-llm-rail <id> next --result '<json>'         Submit step output (validated)
-llm-rail <id> status                         Show instance progress
-llm-rail <id> query [--step <step-id>]       Query step details
-llm-rail <id> reset <step-id>               Reset a step for re-execution
-llm-rail validate <workflow>                 Validate workflow YAML schema
-llm-rail list [--status <status>]            List all instances
+llm-rail create <workflow> [--param k=v]                Create instance from workflow definition
+llm-rail <id> start                                     Start the next pending step
+llm-rail <id> next --result '<json>'                    Submit step output (validated)
+llm-rail <id> bash '<command>'                          Execute command through policy-enforced proxy
+llm-rail <id> status                                    Show instance progress
+llm-rail <id> query [--step <step-id>]                  Query step details
+llm-rail <id> reset <step-id>                           Reset a step for re-execution
+llm-rail validate <workflow>                            Validate workflow YAML schema
+llm-rail list [--status <status>]                       List all instances
+llm-rail policy check <workflow> --command '<cmd>'      Dry-run policy check
+llm-rail policy generate <id> --workflow <name>         Generate allow-list from trail logs
 ```
 
 ## Workflow Schema
@@ -60,6 +67,7 @@ llm-rail list [--status <status>]            List all instances
 | `description` | string | no | Human-readable purpose |
 | `params` | object | no | Input parameters (type, required, default, description, validation) |
 | `context` | object | no | Shared context |
+| `policy` | PolicyDef | no | Command execution policy (trail/enforce) |
 | `steps` | StepDef[] | yes | Ordered step definitions |
 
 ### Step fields
@@ -67,18 +75,34 @@ llm-rail list [--status <status>]            List all instances
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | Unique step identifier |
-| `description` | string | yes | Supports `{{param}}` interpolation |
+| `type` | string | no | `"agentic"` (default) or `"programmatic"` |
+| `description` | string | agentic only | Supports `{{param}}` interpolation |
 | `depends_on` | string \| string[] | no | Step ID(s) this depends on |
-| `required_output` | string[] | yes | Fields the agent must produce |
+| `required_output` | string[] | agentic only | Fields the agent must produce |
+| `actions` | ActionDef[] | programmatic required | Shell commands to execute |
 | `validation` | Rule[] | no | Structural validation rules |
 | `assertions` | Rule[] | no | Business logic assertions |
 | `context_in` | object | no | Explicit data flow: `local_name: "{stepId.field}"` |
 | `tips` | string[] | no | Execution hints (2 randomly shown per step) |
 | `meta` | object | no | Arbitrary metadata for hooks |
 
+### ActionDef
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `run` | string | yes | Shell command. Supports `{{field}}` template interpolation. |
+| `extract` | object | no | Map of `targetKey: sourceKey` to extract from stdout JSON. |
+
+### PolicyDef
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mode` | string | yes | `"trail"` (log only) or `"enforce"` (deny-first rules) |
+| `rules` | PolicyRule[] | enforce only | Array of `{ effect: "allow"\|"deny", commands: string[] }` |
+
 ### Template Syntax
 
-- `{{param}}` — Parameter interpolation in description fields
+- `{{param}}` — Parameter interpolation in description and action `run` fields
 - `{stepId.field}` — Step output reference in `context_in` values
 
 ## Validation Operators
@@ -124,9 +148,27 @@ Hooks fire at workflow/step lifecycle events:
 | `step:rejected` | event | Fires when validation fails |
 | `step:before_complete` | gate | Can block step completion |
 | `step:completed` | event | Fires after step completes |
+| `step:reset` | event | Fires when step is reset |
+| `workflow:created` | event | Fires when instance is created |
 | `workflow:completed` | event | Fires when all steps are done |
+| `workflow:error` | event | Fires on workflow error |
+| `action:before_run` | event | Fires before action execution |
+| `action:completed` | event | Fires after action completes |
+| `action:failed` | event | Fires when action fails |
+| `policy:denied` | event | Fires when policy blocks a command |
 
 Gate hooks return `{ allow: boolean, message?: string }`.
+
+## Instance Directory Structure
+
+All instance data is stored under a unified directory:
+
+```
+.llm-rail/{workflow-name}/{instance-id}/
+  ├── state.yaml      # Instance state (steps, context, status)
+  ├── audit.jsonl      # Lifecycle event log
+  └── policy.jsonl     # Command execution log (bash proxy)
+```
 
 ## License
 

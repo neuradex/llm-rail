@@ -18,7 +18,7 @@ export function runCreate(workflowName: string, rawParams?: string[]): void {
   const params = parseParams(rawParams || [], def.params);
 
   const state = createInstance(def, params);
-  appendLog(state.id, "created", undefined, { workflow_name: def.name, params });
+  appendLog(def.name, state.id, "created", undefined, { workflow_name: def.name, params });
 
   // Fire hook
   fireHook(makeHookPayload("workflow:created", state.id, def.name));

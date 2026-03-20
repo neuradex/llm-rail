@@ -52,7 +52,7 @@ export function runReset(id: string, stepId: string): void {
 
   // Log and fire hooks
   for (const sid of resetSteps) {
-    appendLog(state.id, "step_reset", sid);
+    appendLog(state.workflow_name, state.id, "step_reset", sid);
     fireHook(makeHookPayload("step:reset", state.id, state.workflow_name, sid));
   }
 

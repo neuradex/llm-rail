@@ -23,6 +23,7 @@ Here is a reference workflow for style and structure:
 
 2. **Propose step breakdown**: Before writing YAML, outline the steps:
    - What each step produces
+   - Which steps should be **programmatic** (deterministic: API calls, file ops, data transforms) vs **agentic** (needs LLM judgment: analysis, review, summarization)
    - Data flow between steps
    - Which steps can run in parallel
 
@@ -30,6 +31,8 @@ Here is a reference workflow for style and structure:
 
 3. **Write the YAML**: Create the workflow file in `workflows/<name>.yml` following these rules:
    - Each step has ONE clear deliverable
+   - Use `type: programmatic` for steps that don't need LLM judgment — they run faster and cost nothing
+   - Use `type: agentic` (or omit type) for steps that need LLM reasoning
    - `required_output` only includes fields consumed downstream or as final output
    - Use `validation` for structural checks (type, length, emptiness)
    - Use `assertions` for business logic checks (value ranges, allowed values)
@@ -37,6 +40,7 @@ Here is a reference workflow for style and structure:
    - Write specific, actionable `tips` (tools, APIs, pitfalls)
    - Use `{{param}}` in descriptions for clarity
    - Set `depends_on` only for actual data dependencies
+   - Add `policy` if the workflow involves shell commands (start with `mode: trail`)
 
 4. **Validate**: Run `node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js validate <workflow-name>` and fix any errors.
 

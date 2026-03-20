@@ -13,12 +13,12 @@ export function formatStepStart(
   const total = def.steps.length;
   const stepNum = stepIndex + 1;
   const tips = pickTips(step.tips, 2);
-  const fields = step.required_output.join(", ");
+  const fields = (step.required_output || []).join(", ");
   const exampleResult = buildExampleResult(step);
 
   const params = state.params || {};
   const stepOutputs = collectStepOutputs(state.steps);
-  const description = resolveDescription(step.description, params, stepOutputs);
+  const description = resolveDescription(step.description || step.id, params, stepOutputs);
 
   const lines: string[] = [
     SEPARATOR,
@@ -56,12 +56,17 @@ export function formatStepStart(
   return lines.join("\n");
 }
 
+export function formatAutoCompleted(stepIds: string[]): string {
+  const lines = stepIds.map((id) => `  Auto-completed: '${id}'`);
+  return lines.join("\n");
+}
+
 export function formatRejection(
   state: InstanceState,
   step: StepDef,
   errors: string[],
 ): string {
-  const fields = step.required_output.join(", ");
+  const fields = (step.required_output || []).join(", ");
   const exampleResult = buildExampleResult(step);
 
   const lines: string[] = [
@@ -105,7 +110,7 @@ export function formatStatus(def: WorkflowDef, state: InstanceState): string {
     const ss = state.steps[step.id];
     const marker =
       ss.status === "completed" ? "[x]" : ss.status === "in_progress" ? "[>]" : "[ ]";
-    lines.push(`  ${marker} ${i + 1}. ${step.id} - ${step.description} (${ss.status})`);
+    lines.push(`  ${marker} ${i + 1}. ${step.id} - ${step.description || step.id} (${ss.status})`);
   }
 
   if (state.params && Object.keys(state.params).length > 0) {
@@ -121,7 +126,7 @@ export function formatStatus(def: WorkflowDef, state: InstanceState): string {
 
 function buildExampleResult(step: StepDef): string {
   const obj: Record<string, string> = {};
-  for (const field of step.required_output) {
+  for (const field of step.required_output || []) {
     obj[field] = "...";
   }
   return JSON.stringify(obj);

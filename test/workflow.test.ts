@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
-import type { WorkflowDef, InstanceState } from "../src/types.js";
+import type { WorkflowDef, InstanceState, StepDef } from "../src/types.js";
 import { validateWorkflowDef } from "../src/engine/workflow.js";
 import { validateStepOutput, runAssertions } from "../src/engine/validator.js";
 import { pickTips } from "../src/engine/tip-pool.js";
@@ -108,6 +108,80 @@ describe("validateWorkflowDef", () => {
     };
     const errors = validateWorkflowDef(def);
     assert.ok(errors.some((e) => e.includes("unknown step 'unknown'")));
+  });
+
+  it("accepts explicit agentic type with description and required_output", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", type: "agentic", description: "Step 1", required_output: ["a"] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
+  });
+
+  it("accepts programmatic type with actions", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", type: "programmatic", actions: [{ run: "echo hello" }] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
+  });
+
+  it("rejects programmatic type without actions", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", type: "programmatic" } as any,
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("must have at least one action")));
+  });
+
+  it("rejects action with empty run", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", type: "programmatic", actions: [{ run: "" }] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("non-empty 'run'")));
+  });
+
+  it("validates policy mode", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      policy: { mode: "invalid" as any },
+      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("trail") && e.includes("enforce")));
+  });
+
+  it("requires rules for enforce mode", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      policy: { mode: "enforce" },
+      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("enforce") && e.includes("rule")));
+  });
+
+  it("accepts trail mode without rules", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      policy: { mode: "trail" },
+      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
   });
 
   it("validates param definitions", () => {
@@ -493,8 +567,8 @@ describe("E2E workflow flow", () => {
     assert.equal(badResult.errors.length, 2);
 
     // Verify audit log
-    appendLog(state.id, "test_event", "analyze", { test: true });
-    const logPath = path.resolve(".llm-rail", "logs", `${state.id}.jsonl`);
+    appendLog(def.name, state.id, "test_event", "analyze", { test: true });
+    const logPath = path.resolve(".llm-rail", def.name, state.id, "audit.jsonl");
     assert.ok(fs.existsSync(logPath));
     const logLines = fs.readFileSync(logPath, "utf-8").trim().split("\n");
     assert.ok(logLines.length >= 1);
@@ -654,5 +728,161 @@ describe("reset cascade", () => {
     assert.equal(reloaded.steps["s3"].status, "pending");
     assert.equal(reloaded.status, "in_progress");
     assert.deepEqual(reloaded.context, {});
+  });
+});
+
+// ── Mixed step types (programmatic + agentic) ──
+
+describe("mixed step types", () => {
+  const testDir = path.resolve("test-mixed-tmp");
+  const origCwd = process.cwd();
+
+  before(() => {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.chdir(testDir);
+    fs.mkdirSync("workflows", { recursive: true });
+
+    const workflow = {
+      name: "mixed-test",
+      steps: [
+        {
+          id: "setup",
+          type: "programmatic",
+          actions: [
+            { run: `echo '{"version": "1.0", "ready": true}'`, extract: { version: "version", ready: "ready" } },
+          ],
+        },
+        {
+          id: "analyze",
+          description: "Analyze the project",
+          required_output: ["result"],
+        },
+        {
+          id: "post-process",
+          type: "programmatic",
+          depends_on: "analyze",
+          actions: [
+            { run: `echo '{"processed": true}'`, extract: { processed: "processed" } },
+          ],
+        },
+        {
+          id: "review",
+          description: "Review results",
+          depends_on: "post-process",
+          required_output: ["verdict"],
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.resolve(testDir, "workflows/mixed-test.yml"),
+      yaml.dump(workflow),
+    );
+  });
+
+  after(() => {
+    process.chdir(origCwd);
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("auto-executes programmatic steps and stops at agentic", async () => {
+    const { createInstance, saveInstance, loadInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { advanceThrough } = await import("../src/engine/runner.js");
+
+    const def = loadWorkflow("mixed-test");
+    const state = createInstance(def);
+    state.status = "in_progress";
+
+    // advanceThrough should auto-complete "setup" and stop at "analyze"
+    const { reachedStep, autoCompleted } = advanceThrough(def, state);
+
+    assert.deepEqual(autoCompleted, ["setup"]);
+    assert.equal(reachedStep, 1); // index of "analyze"
+    assert.equal(state.steps["setup"].status, "completed");
+    assert.equal(state.steps["setup"].output?.version, "1.0");
+    assert.equal(state.context.version, "1.0");
+    assert.equal(state.context.ready, true);
+  });
+
+  it("auto-executes consecutive programmatic steps after agentic completion", async () => {
+    const { createInstance, saveInstance, loadInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { advanceThrough } = await import("../src/engine/runner.js");
+    const { nowISO } = await import("../src/util.js");
+
+    const def = loadWorkflow("mixed-test");
+    const state = createInstance(def);
+    state.status = "in_progress";
+
+    // Manually complete setup and analyze
+    state.steps["setup"] = { status: "completed", output: { version: "1.0", ready: true } };
+    state.steps["analyze"] = { status: "completed", output: { result: "found bugs" }, completed_at: nowISO() };
+    Object.assign(state.context, { version: "1.0", ready: true, result: "found bugs" });
+
+    // advanceThrough should auto-complete "post-process" and stop at "review"
+    const { reachedStep, autoCompleted } = advanceThrough(def, state);
+
+    assert.deepEqual(autoCompleted, ["post-process"]);
+    assert.equal(reachedStep, 3); // index of "review"
+    assert.equal(state.steps["post-process"].status, "completed");
+    assert.equal(state.context.processed, true);
+  });
+
+  it("returns -1 when all remaining steps are programmatic and complete", async () => {
+    const { createInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { advanceThrough } = await import("../src/engine/runner.js");
+    const { nowISO } = await import("../src/util.js");
+
+    // Create a workflow with only programmatic steps
+    const allProgWorkflow = {
+      name: "all-prog",
+      steps: [
+        { id: "s1", type: "programmatic", actions: [{ run: `echo '{"a":1}'`, extract: { a: "a" } }] },
+        { id: "s2", type: "programmatic", depends_on: "s1", actions: [{ run: `echo '{"b":2}'`, extract: { b: "b" } }] },
+      ],
+    };
+    fs.writeFileSync(
+      path.resolve(testDir, "workflows/all-prog.yml"),
+      yaml.dump(allProgWorkflow),
+    );
+
+    const def = loadWorkflow("all-prog");
+    const state = createInstance(def);
+    state.status = "in_progress";
+
+    const { reachedStep, autoCompleted } = advanceThrough(def, state);
+
+    assert.equal(reachedStep, -1);
+    assert.deepEqual(autoCompleted, ["s1", "s2"]);
+    assert.equal(state.context.a, 1);
+    assert.equal(state.context.b, 2);
+  });
+
+  it("sets error state when programmatic action fails", async () => {
+    const { createInstance, loadInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { advanceThrough } = await import("../src/engine/runner.js");
+
+    const failWorkflow = {
+      name: "fail-prog",
+      steps: [
+        { id: "s1", type: "programmatic", actions: [{ run: "exit 1" }] },
+      ],
+    };
+    fs.writeFileSync(
+      path.resolve(testDir, "workflows/fail-prog.yml"),
+      yaml.dump(failWorkflow),
+    );
+
+    const def = loadWorkflow("fail-prog");
+    const state = createInstance(def);
+    state.status = "in_progress";
+
+    assert.throws(() => {
+      advanceThrough(def, state);
+    }, /Action failed/);
+
+    assert.equal(state.status, "error");
   });
 });

@@ -37,11 +37,37 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
     }
     ids.add(step.id);
 
-    if (!step.description) {
-      errors.push(`Step '${step.id}' must have a description`);
+    const stepType = step.type || "agentic";
+
+    if (stepType === "programmatic") {
+      // programmatic: actions required, description/required_output optional
+      if (!Array.isArray(step.actions) || step.actions.length === 0) {
+        errors.push(`Programmatic step '${step.id}' must have at least one action`);
+      } else {
+        for (let i = 0; i < step.actions.length; i++) {
+          if (!step.actions[i].run || step.actions[i].run.trim() === "") {
+            errors.push(`Step '${step.id}' action[${i}] must have a non-empty 'run'`);
+          }
+        }
+      }
+    } else {
+      // agentic: description + required_output required
+      if (!step.description) {
+        errors.push(`Step '${step.id}' must have a description`);
+      }
+      if (!Array.isArray(step.required_output) || step.required_output.length === 0) {
+        errors.push(`Step '${step.id}' must have at least one required_output`);
+      }
     }
-    if (!Array.isArray(step.required_output) || step.required_output.length === 0) {
-      errors.push(`Step '${step.id}' must have at least one required_output`);
+  }
+
+  // Validate policy
+  if (def.policy) {
+    if (def.policy.mode !== "trail" && def.policy.mode !== "enforce") {
+      errors.push(`Policy mode must be 'trail' or 'enforce'`);
+    }
+    if (def.policy.mode === "enforce" && (!Array.isArray(def.policy.rules) || def.policy.rules.length === 0)) {
+      errors.push(`Policy in enforce mode must have at least one rule`);
     }
   }
 

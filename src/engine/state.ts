@@ -9,7 +9,10 @@ function statePath(id: string): string {
   return path.resolve(STATE_DIR, `${id}.yaml`);
 }
 
-export function createInstance(def: WorkflowDef): InstanceState {
+export function createInstance(
+  def: WorkflowDef,
+  params?: Record<string, unknown>,
+): InstanceState {
   const id = generateId();
   const now = nowISO();
 
@@ -26,7 +29,8 @@ export function createInstance(def: WorkflowDef): InstanceState {
     updated_at: now,
     current_step: 0,
     steps,
-    context: {},
+    context: def.context ? { ...def.context } : {},
+    ...(params && Object.keys(params).length > 0 && { params }),
   };
 
   ensureDir(STATE_DIR);
@@ -46,4 +50,23 @@ export function saveInstance(state: InstanceState): void {
   state.updated_at = nowISO();
   ensureDir(STATE_DIR);
   saveYaml(statePath(state.id), state);
+}
+
+export function listInstances(): InstanceState[] {
+  ensureDir(STATE_DIR);
+  const files = fs.readdirSync(path.resolve(STATE_DIR));
+  const instances: InstanceState[] = [];
+  for (const file of files) {
+    if (!file.endsWith(".yaml")) continue;
+    if (file === "hooks") continue;
+    try {
+      const state = loadYaml<InstanceState>(path.resolve(STATE_DIR, file));
+      if (state.id && state.workflow_name) {
+        instances.push(state);
+      }
+    } catch {
+      // skip invalid files
+    }
+  }
+  return instances;
 }

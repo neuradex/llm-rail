@@ -1,15 +1,26 @@
 {
   "name": "llm-rail",
-  "version": "0.0.0-develop",
+  "version": "0.1.0",
   "description": "Deterministic workflow control CLI for LLM agents",
   "type": "module",
+  "keywords": ["claude-code-plugin", "llm", "workflow", "agent"],
   "bin": {
     "llm-rail": "./bin/llm-rail.js"
   },
+  "files": [
+    "dist/",
+    "bin/",
+    "workflows/",
+    ".claude-plugin/",
+    "skills/",
+    "agents/",
+    "settings.json"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli.ts",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepublishOnly": "tsup"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

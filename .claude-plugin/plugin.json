@@ -1,0 +1,6 @@
+{
+  "name": "llm-rail",
+  "version": "0.1.0",
+  "description": "Deterministic workflow control for LLM agents — design, validate, and execute YAML workflows",
+  "author": { "name": "neuradex" }
+}

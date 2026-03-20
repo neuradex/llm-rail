@@ -1,8 +1,11 @@
 import { loadInstance, saveInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
-import { validateStepOutput } from "../engine/validator.js";
+import { validateStepOutput, runAssertions } from "../engine/validator.js";
 import { formatStepStart, formatRejection, formatCompletion } from "../engine/output.js";
 import { appendLog } from "../audit/logger.js";
+import { fireHook, makeHookPayload } from "../engine/hooks.js";
+import { isReady } from "../engine/dependency.js";
+import { collectStepOutputs } from "../engine/context.js";
 import { nowISO } from "../util.js";
 import type { WorkflowDef, InstanceState } from "../types.js";
 
@@ -10,7 +13,7 @@ export function runNext(id: string, resultJson: string): void {
   const state = loadInstance(id);
 
   if (state.status !== "in_progress") {
-    console.error(`Workflow is not in progress (status: ${state.status}).`);
+    console.error(`Workflow is not in progress (status: ${state.status}). Run 'llm-rail ${id} start' first.`);
     process.exit(1);
   }
 
@@ -31,12 +34,35 @@ export function runNext(id: string, resultJson: string): void {
     process.exit(1);
   }
 
-  // Validate
+  // Validate step output (validation rules)
   const result = validateStepOutput(currentStep, output);
 
   if (!result.valid) {
     appendLog(state.id, "step_rejected", currentStep.id, { errors: result.errors });
+    fireHook(
+      makeHookPayload("step:rejected", state.id, state.workflow_name, currentStep.id, {
+        errors: result.errors,
+      }),
+    );
     console.log(formatRejection(state, currentStep, result.errors));
+    process.exit(1);
+  }
+
+  // Gate hook: step:before_complete
+  const hookResult = fireHook(
+    makeHookPayload(
+      "step:before_complete",
+      state.id,
+      state.workflow_name,
+      currentStep.id,
+      { output },
+      currentStep.meta,
+    ),
+  );
+  if (!hookResult.allow) {
+    console.error(
+      `Step '${currentStep.id}' completion blocked by hook: ${hookResult.message || "no reason given"}`,
+    );
     process.exit(1);
   }
 
@@ -45,10 +71,37 @@ export function runNext(id: string, resultJson: string): void {
   state.steps[currentStep.id].output = output;
   state.steps[currentStep.id].completed_at = nowISO();
 
-  // Merge output into context
+  // Merge output into context (flat merge for backward compatibility)
   Object.assign(state.context, output);
 
   appendLog(state.id, "step_completed", currentStep.id, { output });
+
+  // Event hook: step:completed
+  fireHook(
+    makeHookPayload("step:completed", state.id, state.workflow_name, currentStep.id, { output }, currentStep.meta),
+  );
+
+  // Run cross-step assertions if defined
+  if (currentStep.assertions) {
+    const stepOutputs = collectStepOutputs(state.steps);
+    // Build merged data: all step outputs flattened + params
+    const mergedData: Record<string, unknown> = { ...state.context };
+    const assertResult = runAssertions(currentStep.assertions, mergedData);
+    if (!assertResult.valid) {
+      appendLog(state.id, "assertion_failed", currentStep.id, { errors: assertResult.errors });
+      // Revert step completion
+      state.steps[currentStep.id].status = "in_progress";
+      state.steps[currentStep.id].output = undefined;
+      state.steps[currentStep.id].completed_at = undefined;
+      // Remove output from context
+      for (const key of Object.keys(output)) {
+        delete state.context[key];
+      }
+      saveInstance(state);
+      console.log(formatRejection(state, currentStep, assertResult.errors));
+      process.exit(1);
+    }
+  }
 
   // Find next step
   const nextIndex = findNextPending(def, state);
@@ -58,6 +111,7 @@ export function runNext(id: string, resultJson: string): void {
     state.status = "completed";
     saveInstance(state);
     appendLog(state.id, "workflow_completed");
+    fireHook(makeHookPayload("workflow:completed", state.id, state.workflow_name));
     console.log(formatCompletion(state));
     return;
   }
@@ -69,6 +123,9 @@ export function runNext(id: string, resultJson: string): void {
   saveInstance(state);
 
   appendLog(state.id, "step_started", nextStep.id);
+  fireHook(
+    makeHookPayload("step:started", state.id, state.workflow_name, nextStep.id, undefined, nextStep.meta),
+  );
 
   console.log(formatStepStart(def, state, nextIndex));
 }
@@ -79,10 +136,7 @@ function findNextPending(def: WorkflowDef, state: InstanceState): number {
     const ss = state.steps[step.id];
     if (ss.status !== "pending") continue;
 
-    if (step.depends_on) {
-      const depState = state.steps[step.depends_on];
-      if (!depState || depState.status !== "completed") continue;
-    }
+    if (!isReady(def, step.id, state.steps)) continue;
 
     return i;
   }

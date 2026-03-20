@@ -1,0 +1,80 @@
+name: data-pipeline
+version: "0.1.0"
+description: データ取得・変換・レポート生成パイプライン
+params:
+  source:
+    type: string
+    required: true
+    description: データソースURL or パス
+  format:
+    type: string
+    required: false
+    default: json
+    description: 出力フォーマット
+steps:
+  - id: fetch
+    description: "{{source}} からデータを取得"
+    required_output:
+      - raw_data
+      - record_count
+      - schema
+    validation:
+      - field: raw_data
+        op: type
+        value: array
+      - field: raw_data
+        op: not_empty
+      - field: record_count
+        op: gt
+        value: 0
+      - field: schema
+        op: type
+        value: object
+    tips:
+      - データソースのレート制限に注意
+      - schemaにはフィールド名と型を含める
+
+  - id: transform
+    description: データ変換・クレンジング
+    depends_on: fetch
+    context_in:
+      data: "{fetch.raw_data}"
+      schema: "{fetch.schema}"
+    required_output:
+      - transformed_data
+      - dropped_count
+      - transform_log
+    validation:
+      - field: transformed_data
+        op: type
+        value: array
+      - field: dropped_count
+        op: gte
+        value: 0
+      - field: transform_log
+        op: type
+        value: array
+    assertions:
+      - field: dropped_count
+        op: lte
+        value: 100
+        message: ドロップされたレコードが多すぎます
+
+  - id: report
+    description: "{{format}} 形式でレポート生成"
+    depends_on: transform
+    context_in:
+      data: "{transform.transformed_data}"
+      dropped: "{transform.dropped_count}"
+      log: "{transform.transform_log}"
+    required_output:
+      - report_content
+      - summary
+    validation:
+      - field: report_content
+        op: not_empty
+      - field: summary
+        op: min_length
+        value: 20
+    meta:
+      requires_approval: true

@@ -1,5 +1,6 @@
 import type { StepDef, WorkflowDef, InstanceState } from "../types.js";
 import { pickTips } from "./tip-pool.js";
+import { resolveDescription, buildStepContext, collectStepOutputs } from "./context.js";
 
 const SEPARATOR = "────────────────────────────────────────";
 
@@ -15,17 +16,37 @@ export function formatStepStart(
   const fields = step.required_output.join(", ");
   const exampleResult = buildExampleResult(step);
 
+  const params = state.params || {};
+  const stepOutputs = collectStepOutputs(state.steps);
+  const description = resolveDescription(step.description, params, stepOutputs);
+
   const lines: string[] = [
     SEPARATOR,
-    `Step ${stepNum}/${total}: ${step.description}`,
+    `Step ${stepNum}/${total}: ${description}`,
     "",
     `Required output fields: ${fields}`,
+  ];
+
+  // Show resolved context if context_in is present
+  if (step.context_in) {
+    const ctx = buildStepContext(step, params, stepOutputs);
+    if (Object.keys(ctx).length > 0) {
+      lines.push("");
+      lines.push("Context:");
+      for (const [key, val] of Object.entries(ctx)) {
+        const display = typeof val === "object" ? JSON.stringify(val) : String(val);
+        lines.push(`  ${key}: ${display}`);
+      }
+    }
+  }
+
+  lines.push(
     "",
-    `>>> NEXT ACTION: ${step.description}`,
+    `>>> NEXT ACTION: ${description}`,
     `    llm-rail ${state.id} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Submit ALL required fields or submission will be rejected.",
-  ];
+  );
 
   for (const tip of tips) {
     lines.push(`\nTIP: ${tip}`);
@@ -85,6 +106,14 @@ export function formatStatus(def: WorkflowDef, state: InstanceState): string {
     const marker =
       ss.status === "completed" ? "[x]" : ss.status === "in_progress" ? "[>]" : "[ ]";
     lines.push(`  ${marker} ${i + 1}. ${step.id} - ${step.description} (${ss.status})`);
+  }
+
+  if (state.params && Object.keys(state.params).length > 0) {
+    lines.push("");
+    lines.push("Params:");
+    for (const [key, val] of Object.entries(state.params)) {
+      lines.push(`  ${key}: ${String(val)}`);
+    }
   }
 
   return lines.join("\n");

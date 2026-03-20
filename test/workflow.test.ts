@@ -5,9 +5,13 @@ import * as path from "node:path";
 import * as yaml from "js-yaml";
 import type { WorkflowDef, InstanceState } from "../src/types.js";
 import { validateWorkflowDef } from "../src/engine/workflow.js";
-import { validateStepOutput } from "../src/engine/validator.js";
+import { validateStepOutput, runAssertions } from "../src/engine/validator.js";
 import { pickTips } from "../src/engine/tip-pool.js";
 import { generateId } from "../src/util.js";
+import { resolveTemplate, buildStepContext, collectStepOutputs } from "../src/engine/context.js";
+import { collectDownstream, isReady } from "../src/engine/dependency.js";
+
+// ── validateWorkflowDef ──
 
 describe("validateWorkflowDef", () => {
   it("accepts a valid workflow", () => {
@@ -16,6 +20,19 @@ describe("validateWorkflowDef", () => {
       steps: [
         { id: "s1", description: "Step 1", required_output: ["a"] },
         { id: "s2", description: "Step 2", depends_on: "s1", required_output: ["b"] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
+  });
+
+  it("accepts multiple depends_on", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "Step 1", required_output: ["a"] },
+        { id: "s2", description: "Step 2", required_output: ["b"] },
+        { id: "s3", description: "Step 3", depends_on: ["s1", "s2"], required_output: ["c"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -45,6 +62,18 @@ describe("validateWorkflowDef", () => {
     assert.ok(errors.some((e) => e.includes("unknown step")));
   });
 
+  it("rejects invalid depends_on in array form", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "Step 1", required_output: ["a"] },
+        { id: "s2", description: "Step 2", depends_on: ["s1", "bad"], required_output: ["b"] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("unknown step 'bad'")));
+  });
+
   it("detects cycles", () => {
     const def: WorkflowDef = {
       name: "test",
@@ -62,7 +91,37 @@ describe("validateWorkflowDef", () => {
     const errors = validateWorkflowDef(def);
     assert.ok(errors.some((e) => e.includes("at least one step")));
   });
+
+  it("validates context_in references", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "Step 1", required_output: ["a"] },
+        {
+          id: "s2",
+          description: "Step 2",
+          depends_on: "s1",
+          required_output: ["b"],
+          context_in: { data: "{unknown.field}" },
+        },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("unknown step 'unknown'")));
+  });
+
+  it("validates param definitions", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      params: { x: { type: "invalid" as any } },
+      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("invalid type")));
+  });
 });
+
+// ── validateStepOutput ──
 
 describe("validateStepOutput", () => {
   it("passes with all required fields", () => {
@@ -117,6 +176,196 @@ describe("validateStepOutput", () => {
   });
 });
 
+// ── New assertion ops ──
+
+describe("assertion ops", () => {
+  it("eq / neq", () => {
+    const rules = [{ field: "status", op: "eq" as const, value: "ok" }];
+    assert.ok(runAssertions(rules, { status: "ok" }).valid);
+    assert.ok(!runAssertions(rules, { status: "fail" }).valid);
+
+    const neqRules = [{ field: "x", op: "neq" as const, value: 0 }];
+    assert.ok(runAssertions(neqRules, { x: 1 }).valid);
+    assert.ok(!runAssertions(neqRules, { x: 0 }).valid);
+  });
+
+  it("between", () => {
+    const rules = [{ field: "score", op: "between" as const, value: [1, 10] }];
+    assert.ok(runAssertions(rules, { score: 5 }).valid);
+    assert.ok(!runAssertions(rules, { score: 0 }).valid);
+    assert.ok(!runAssertions(rules, { score: 11 }).valid);
+  });
+
+  it("contains / not_contains", () => {
+    const rules = [{ field: "text", op: "contains" as const, value: "hello" }];
+    assert.ok(runAssertions(rules, { text: "say hello world" }).valid);
+    assert.ok(!runAssertions(rules, { text: "goodbye" }).valid);
+
+    const ncRules = [{ field: "text", op: "not_contains" as const, value: "secret" }];
+    assert.ok(runAssertions(ncRules, { text: "hello" }).valid);
+    assert.ok(!runAssertions(ncRules, { text: "top secret" }).valid);
+  });
+
+  it("matches (regex)", () => {
+    const rules = [{ field: "email", op: "matches" as const, value: "^\\S+@\\S+$" }];
+    assert.ok(runAssertions(rules, { email: "a@b.com" }).valid);
+    assert.ok(!runAssertions(rules, { email: "not email" }).valid);
+  });
+
+  it("one_of", () => {
+    const rules = [{ field: "v", op: "one_of" as const, value: ["a", "b", "c"] }];
+    assert.ok(runAssertions(rules, { v: "b" }).valid);
+    assert.ok(!runAssertions(rules, { v: "d" }).valid);
+  });
+
+  it("each_has", () => {
+    const rules = [{ field: "items", op: "each_has" as const, value: "id" }];
+    assert.ok(runAssertions(rules, { items: [{ id: 1 }, { id: 2 }] }).valid);
+    assert.ok(!runAssertions(rules, { items: [{ id: 1 }, { name: "x" }] }).valid);
+  });
+
+  it("not_empty", () => {
+    const rules = [{ field: "x", op: "not_empty" as const }];
+    assert.ok(runAssertions(rules, { x: "hello" }).valid);
+    assert.ok(!runAssertions(rules, { x: "" }).valid);
+    assert.ok(!runAssertions(rules, { x: [] }).valid);
+  });
+
+  it("gt / gte / lt / lte", () => {
+    assert.ok(runAssertions([{ field: "n", op: "gt" as const, value: 5 }], { n: 6 }).valid);
+    assert.ok(!runAssertions([{ field: "n", op: "gt" as const, value: 5 }], { n: 5 }).valid);
+    assert.ok(runAssertions([{ field: "n", op: "gte" as const, value: 5 }], { n: 5 }).valid);
+    assert.ok(runAssertions([{ field: "n", op: "lt" as const, value: 5 }], { n: 4 }).valid);
+    assert.ok(!runAssertions([{ field: "n", op: "lt" as const, value: 5 }], { n: 5 }).valid);
+    assert.ok(runAssertions([{ field: "n", op: "lte" as const, value: 5 }], { n: 5 }).valid);
+  });
+
+  it("max_length / length", () => {
+    assert.ok(
+      runAssertions([{ field: "s", op: "max_length" as const, value: 5 }], { s: "abc" }).valid,
+    );
+    assert.ok(
+      !runAssertions([{ field: "s", op: "max_length" as const, value: 2 }], { s: "abc" }).valid,
+    );
+    assert.ok(
+      runAssertions([{ field: "s", op: "length" as const, value: 3 }], { s: "abc" }).valid,
+    );
+    assert.ok(
+      !runAssertions([{ field: "s", op: "length" as const, value: 2 }], { s: "abc" }).valid,
+    );
+  });
+
+  it("custom message", () => {
+    const rules = [
+      { field: "x", op: "eq" as const, value: 0, message: "x must be zero" },
+    ];
+    const result = runAssertions(rules, { x: 1 });
+    assert.ok(!result.valid);
+    assert.ok(result.errors[0].includes("x must be zero"));
+  });
+});
+
+// ── Context resolution ──
+
+describe("context resolution", () => {
+  it("resolves {{param}} templates", () => {
+    const result = resolveTemplate("Review {{repo}} on {{branch}}", { repo: "src/", branch: "main" }, {});
+    assert.equal(result, "Review src/ on main");
+  });
+
+  it("resolves {stepId.field} templates", () => {
+    const outputs = { analyze: { file_list: ["a.ts"], score: 7 } };
+    const result = resolveTemplate("Score is {analyze.score}", {}, outputs);
+    assert.equal(result, "Score is 7");
+  });
+
+  it("resolves mixed templates", () => {
+    const result = resolveTemplate(
+      "{{repo}}: {analyze.score} files",
+      { repo: "myapp" },
+      { analyze: { score: 5 } },
+    );
+    assert.equal(result, "myapp: 5 files");
+  });
+
+  it("preserves unresolved templates", () => {
+    const result = resolveTemplate("{{unknown}} and {missing.field}", {}, {});
+    assert.equal(result, "{{unknown}} and {missing.field}");
+  });
+
+  it("buildStepContext resolves context_in", () => {
+    const stepDef = {
+      id: "s2",
+      description: "test",
+      required_output: ["x"],
+      context_in: {
+        files: "{s1.file_list}",
+        name: "{{repo}}",
+      },
+    };
+    const ctx = buildStepContext(stepDef, { repo: "myrepo" }, { s1: { file_list: ["a.ts", "b.ts"] } });
+    assert.deepEqual(ctx.files, ["a.ts", "b.ts"]);
+    assert.equal(ctx.name, "myrepo");
+  });
+
+  it("collectStepOutputs gathers outputs", () => {
+    const steps = {
+      s1: { status: "completed" as const, output: { a: 1 } },
+      s2: { status: "pending" as const },
+    };
+    const outputs = collectStepOutputs(steps);
+    assert.deepEqual(outputs, { s1: { a: 1 } });
+  });
+});
+
+// ── Dependency ──
+
+describe("dependency", () => {
+  it("collectDownstream finds cascade targets", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "1", required_output: ["a"] },
+        { id: "s2", description: "2", depends_on: "s1", required_output: ["b"] },
+        { id: "s3", description: "3", depends_on: "s2", required_output: ["c"] },
+        { id: "s4", description: "4", required_output: ["d"] },
+      ],
+    };
+    const downstream = collectDownstream(def, "s1");
+    assert.deepEqual(downstream.sort(), ["s2", "s3"]);
+  });
+
+  it("isReady checks all dependencies", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "1", required_output: ["a"] },
+        { id: "s2", description: "2", required_output: ["b"] },
+        { id: "s3", description: "3", depends_on: ["s1", "s2"], required_output: ["c"] },
+      ],
+    };
+    const steps: InstanceState["steps"] = {
+      s1: { status: "completed" },
+      s2: { status: "pending" },
+      s3: { status: "pending" },
+    };
+    assert.equal(isReady(def, "s3", steps), false);
+
+    steps.s2.status = "completed";
+    assert.equal(isReady(def, "s3", steps), true);
+  });
+
+  it("isReady returns true for steps with no dependencies", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [{ id: "s1", description: "1", required_output: ["a"] }],
+    };
+    assert.equal(isReady(def, "s1", { s1: { status: "pending" } }), true);
+  });
+});
+
+// ── pickTips ──
+
 describe("pickTips", () => {
   it("returns empty for no tips", () => {
     assert.deepEqual(pickTips(undefined, 2), []);
@@ -137,12 +386,16 @@ describe("pickTips", () => {
   });
 });
 
+// ── generateId ──
+
 describe("generateId", () => {
   it("returns MMDD-HHmmss format", () => {
     const id = generateId();
     assert.match(id, /^\d{4}-\d{6}$/);
   });
 });
+
+// ── E2E workflow flow ──
 
 describe("E2E workflow flow", () => {
   const testDir = path.resolve("test-e2e-tmp");
@@ -151,7 +404,6 @@ describe("E2E workflow flow", () => {
   before(() => {
     fs.mkdirSync(testDir, { recursive: true });
     process.chdir(testDir);
-    // Copy workflow fixture
     fs.mkdirSync("workflows", { recursive: true });
     fs.copyFileSync(
       path.resolve(origCwd, "test/fixtures/code-review.yml"),
@@ -165,7 +417,6 @@ describe("E2E workflow flow", () => {
   });
 
   it("runs full create → start → next → complete cycle", async () => {
-    // Dynamic imports to run in test dir context
     const { createInstance } = await import("../src/engine/state.js");
     const { loadWorkflow } = await import("../src/engine/workflow.js");
     const { loadInstance, saveInstance } = await import("../src/engine/state.js");
@@ -239,7 +490,7 @@ describe("E2E workflow flow", () => {
     // Verify rejection
     const badResult = validateStepOutput(def.steps[0], {});
     assert.ok(!badResult.valid);
-    assert.equal(badResult.errors.length, 2); // missing file_list, complexity_score
+    assert.equal(badResult.errors.length, 2);
 
     // Verify audit log
     appendLog(state.id, "test_event", "analyze", { test: true });
@@ -249,5 +500,159 @@ describe("E2E workflow flow", () => {
     assert.ok(logLines.length >= 1);
     const entry = JSON.parse(logLines[0]);
     assert.equal(entry.instance_id, state.id);
+  });
+});
+
+// ── E2E with params and context ──
+
+describe("E2E with params and context_in", () => {
+  const testDir = path.resolve("test-e2e-params-tmp");
+  const origCwd = process.cwd();
+
+  before(() => {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.chdir(testDir);
+    fs.mkdirSync("workflows", { recursive: true });
+
+    const workflow = {
+      name: "param-test",
+      params: {
+        target: { type: "string", required: true },
+      },
+      steps: [
+        {
+          id: "step1",
+          description: "Analyze {{target}}",
+          required_output: ["result"],
+          validation: [{ field: "result", op: "not_empty" }],
+        },
+        {
+          id: "step2",
+          description: "Process result",
+          depends_on: "step1",
+          context_in: { data: "{step1.result}" },
+          required_output: ["summary"],
+          assertions: [{ field: "summary", op: "min_length", value: 5 }],
+        },
+      ],
+    };
+
+    fs.writeFileSync(
+      path.resolve(testDir, "workflows/param-test.yml"),
+      yaml.dump(workflow),
+    );
+  });
+
+  after(() => {
+    process.chdir(origCwd);
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("creates instance with params and resolves context", async () => {
+    const { createInstance, loadInstance, saveInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { validateStepOutput, runAssertions } = await import("../src/engine/validator.js");
+    const { resolveDescription, buildStepContext, collectStepOutputs } = await import("../src/engine/context.js");
+
+    const def = loadWorkflow("param-test");
+    const state = createInstance(def, { target: "myrepo" });
+    assert.deepEqual(state.params, { target: "myrepo" });
+
+    // Resolve description
+    const desc = resolveDescription(def.steps[0].description, state.params!, {});
+    assert.equal(desc, "Analyze myrepo");
+
+    // Step 1 complete
+    state.steps["step1"].status = "completed";
+    state.steps["step1"].output = { result: "found issues" };
+    Object.assign(state.context, state.steps["step1"].output);
+    saveInstance(state);
+
+    // Build context for step 2
+    const outputs = collectStepOutputs(state.steps);
+    const ctx = buildStepContext(def.steps[1], state.params!, outputs);
+    assert.equal(ctx.data, "found issues");
+
+    // Assertions pass
+    const aResult = runAssertions(def.steps[1].assertions!, { summary: "All clear no issues" });
+    assert.ok(aResult.valid);
+
+    // Assertions fail
+    const aFail = runAssertions(def.steps[1].assertions!, { summary: "ok" });
+    assert.ok(!aFail.valid);
+  });
+});
+
+// ── Reset cascade ──
+
+describe("reset cascade", () => {
+  const testDir = path.resolve("test-reset-tmp");
+  const origCwd = process.cwd();
+
+  before(() => {
+    fs.mkdirSync(testDir, { recursive: true });
+    process.chdir(testDir);
+    fs.mkdirSync("workflows", { recursive: true });
+
+    const workflow = {
+      name: "reset-test",
+      steps: [
+        { id: "s1", description: "Step 1", required_output: ["a"] },
+        { id: "s2", description: "Step 2", depends_on: "s1", required_output: ["b"] },
+        { id: "s3", description: "Step 3", depends_on: "s2", required_output: ["c"] },
+      ],
+    };
+    fs.writeFileSync(
+      path.resolve(testDir, "workflows/reset-test.yml"),
+      yaml.dump(workflow),
+    );
+  });
+
+  after(() => {
+    process.chdir(origCwd);
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("resets step and cascades downstream", async () => {
+    const { createInstance, saveInstance, loadInstance } = await import("../src/engine/state.js");
+    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { collectDownstream } = await import("../src/engine/dependency.js");
+
+    const def = loadWorkflow("reset-test");
+    const state = createInstance(def);
+
+    // Complete all steps
+    state.status = "completed";
+    state.steps["s1"] = { status: "completed", output: { a: 1 } };
+    state.steps["s2"] = { status: "completed", output: { b: 2 } };
+    state.steps["s3"] = { status: "completed", output: { c: 3 } };
+    Object.assign(state.context, { a: 1, b: 2, c: 3 });
+    saveInstance(state);
+
+    // Simulate reset of s1
+    const downstream = collectDownstream(def, "s1");
+    assert.deepEqual(downstream.sort(), ["s2", "s3"]);
+
+    const allToReset = ["s1", ...downstream];
+    for (const sid of allToReset) {
+      const ss = state.steps[sid];
+      if (ss.output) {
+        for (const key of Object.keys(ss.output)) {
+          delete state.context[key];
+        }
+      }
+      ss.status = "pending";
+      ss.output = undefined;
+      ss.completed_at = undefined;
+    }
+    state.status = "in_progress";
+    saveInstance(state);
+
+    const reloaded = loadInstance(state.id);
+    assert.equal(reloaded.steps["s1"].status, "pending");
+    assert.equal(reloaded.steps["s2"].status, "pending");
+    assert.equal(reloaded.steps["s3"].status, "pending");
+    assert.equal(reloaded.status, "in_progress");
+    assert.deepEqual(reloaded.context, {});
   });
 });

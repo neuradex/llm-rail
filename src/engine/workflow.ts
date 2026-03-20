@@ -11,6 +11,12 @@ export function loadWorkflow(name: string): WorkflowDef {
   return loadYaml<WorkflowDef>(filePath);
 }
 
+/** Normalize depends_on to always be an array */
+export function normalizeDeps(dep?: string | string[]): string[] {
+  if (!dep) return [];
+  return Array.isArray(dep) ? dep : [dep];
+}
+
 export function validateWorkflowDef(def: WorkflowDef): string[] {
   const errors: string[] = [];
 
@@ -39,14 +45,37 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
     }
   }
 
-  // depends_on reference check
+  // depends_on reference check (supports string | string[])
   for (const step of def.steps) {
-    if (step.depends_on && !ids.has(step.depends_on)) {
-      errors.push(`Step '${step.id}' depends_on unknown step '${step.depends_on}'`);
+    const deps = normalizeDeps(step.depends_on);
+    for (const dep of deps) {
+      if (!ids.has(dep)) {
+        errors.push(`Step '${step.id}' depends_on unknown step '${dep}'`);
+      }
     }
   }
 
-  // cycle detection
+  // context_in reference check
+  for (const step of def.steps) {
+    if (!step.context_in) continue;
+    for (const [key, tmpl] of Object.entries(step.context_in)) {
+      const stepRef = tmpl.match(/^\{(\w+)\.\w+\}$/);
+      if (stepRef && !ids.has(stepRef[1])) {
+        errors.push(`Step '${step.id}' context_in '${key}' references unknown step '${stepRef[1]}'`);
+      }
+    }
+  }
+
+  // params validation
+  if (def.params) {
+    for (const [name, paramDef] of Object.entries(def.params)) {
+      if (!["string", "number", "boolean"].includes(paramDef.type)) {
+        errors.push(`Param '${name}' has invalid type '${paramDef.type}'`);
+      }
+    }
+  }
+
+  // cycle detection (multi-dep)
   const cycleErrors = detectCycles(def.steps);
   errors.push(...cycleErrors);
 
@@ -54,28 +83,46 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
 }
 
 function detectCycles(steps: StepDef[]): string[] {
-  const graph = new Map<string, string>();
+  // Build adjacency: step → its dependencies
+  const graph = new Map<string, string[]>();
   for (const step of steps) {
-    if (step.depends_on) {
-      graph.set(step.id, step.depends_on);
-    }
+    graph.set(step.id, normalizeDeps(step.depends_on));
   }
 
   const visited = new Set<string>();
   const errors: string[] = [];
 
   for (const step of steps) {
-    const path = new Set<string>();
-    let current: string | undefined = step.id;
-    while (current && !visited.has(current)) {
-      if (path.has(current)) {
-        errors.push(`Cycle detected involving step '${current}'`);
-        break;
+    if (visited.has(step.id)) continue;
+    const pathSet = new Set<string>();
+    const stack = [step.id];
+
+    while (stack.length > 0) {
+      const current = stack[stack.length - 1];
+
+      if (pathSet.has(current)) {
+        // We're revisiting — pop
+        pathSet.delete(current);
+        visited.add(current);
+        stack.pop();
+        continue;
       }
-      path.add(current);
-      current = graph.get(current);
+
+      if (visited.has(current)) {
+        stack.pop();
+        continue;
+      }
+
+      pathSet.add(current);
+      const deps = graph.get(current) || [];
+      for (const dep of deps) {
+        if (pathSet.has(dep)) {
+          errors.push(`Cycle detected involving step '${dep}'`);
+        } else if (!visited.has(dep)) {
+          stack.push(dep);
+        }
+      }
     }
-    for (const id of path) visited.add(id);
   }
 
   return errors;

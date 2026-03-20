@@ -1,8 +1,10 @@
 import { loadInstance, saveInstance } from "../engine/state.js";
-import { loadWorkflow } from "../engine/workflow.js";
+import { loadWorkflow, normalizeDeps } from "../engine/workflow.js";
 import { formatStepStart } from "../engine/output.js";
 import { appendLog } from "../audit/logger.js";
-import type { WorkflowDef } from "../types.js";
+import { fireHook, makeHookPayload } from "../engine/hooks.js";
+import { isReady } from "../engine/dependency.js";
+import type { WorkflowDef, InstanceState } from "../types.js";
 
 export function runStart(id: string): void {
   const state = loadInstance(id);
@@ -25,6 +27,16 @@ export function runStart(id: string): void {
   }
 
   const step = def.steps[stepIndex];
+
+  // Gate hook: step:before_start
+  const hookResult = fireHook(
+    makeHookPayload("step:before_start", state.id, state.workflow_name, step.id, undefined, step.meta),
+  );
+  if (!hookResult.allow) {
+    console.error(`Step '${step.id}' blocked by hook: ${hookResult.message || "no reason given"}`);
+    process.exit(1);
+  }
+
   state.steps[step.id].status = "in_progress";
   state.current_step = stepIndex;
   state.status = "in_progress";
@@ -32,20 +44,19 @@ export function runStart(id: string): void {
 
   appendLog(state.id, "step_started", step.id);
 
+  // Event hook: step:started
+  fireHook(makeHookPayload("step:started", state.id, state.workflow_name, step.id, undefined, step.meta));
+
   console.log(formatStepStart(def, state, stepIndex));
 }
 
-function findNextStep(def: WorkflowDef, state: ReturnType<typeof loadInstance>): number {
+function findNextStep(def: WorkflowDef, state: InstanceState): number {
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i];
     const ss = state.steps[step.id];
     if (ss.status !== "pending") continue;
 
-    // Check depends_on
-    if (step.depends_on) {
-      const depState = state.steps[step.depends_on];
-      if (!depState || depState.status !== "completed") continue;
-    }
+    if (!isReady(def, step.id, state.steps)) continue;
 
     return i;
   }

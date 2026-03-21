@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
+  <img src="https://img.shields.io/npm/v/lrail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="license" />
 </p>
@@ -24,7 +24,7 @@
 
 ---
 
-Ruby on Railsがウェブ開発にレールを敷いたように、**llm-railはエージェンティック作業にレールを敷く。**
+Ruby on Railsがウェブ開発にレールを敷いたように、**lrailはエージェンティック作業にレールを敷く。**
 
 「レール」という言葉には二重の意味がある — どちらも意図的だ：
 
@@ -33,9 +33,9 @@ Ruby on Railsがウェブ開発にレールを敷いたように、**llm-railは
 
 LLMエージェントは複雑なタスクで崩壊する。ステップを飛ばし、出力をでっち上げ、コンテキストが長くなると本来やるべきことを忘れる。より大きなモデルを投入してもコストだけが膨らむ — 成功の保証もなく。根本原因：**LLMにはrecency bias（最新性バイアス）がある。** 長いコンテキストでは元の指示を忘れて漂流する。
 
-現在のAI安全性アプローチは**ダッシュボードに貼ったステッカー**レベルだ — 「注意しろ」「間違えるな」というプロンプトレベルの警告。llm-railは異なるアプローチを取る：**構造的安全性**。モデルに良い子でいろと頼むのではなく、悪いことが*起こり得ない*実行構造を構築する。
+現在のAI安全性アプローチは**ダッシュボードに貼ったステッカー**レベルだ — 「注意しろ」「間違えるな」というプロンプトレベルの警告。lrailは異なるアプローチを取る：**構造的安全性**。モデルに良い子でいろと頼むのではなく、悪いことが*起こり得ない*実行構造を構築する。
 
-**llm-rail**は3層のレールでこれを解決する：
+**lrail**は3層のレールでこれを解決する：
 
 | レール | 制御対象 |
 |---|---|
@@ -43,7 +43,7 @@ LLMエージェントは複雑なタスクで崩壊する。ステップを飛�
 | **ポリシーレール** | すべてのシェルコマンドがIAMスタイルのallow/denyルール付きbashプロキシを通過。明示的に許可されたことだけ実行可能。 |
 | **監査レール** | すべてのアクション、コマンド、検証 — 記録。インスタンスごとの完全なトレーサビリティ。 |
 
-これは**LLM時代のConvention over Configuration**だ。RailsがMVCで「ウェブアプリの作り方」を定義したように、llm-railはワークフロー分解＋実行制御＋監査証跡で「AIエージェントの動かし方」を定義する。Opusがワークフローを設計し、Haikuがその上を走る。
+これは**LLM時代のConvention over Configuration**だ。RailsがMVCで「ウェブアプリの作り方」を定義したように、lrailはワークフロー分解＋実行制御＋監査証跡で「AIエージェントの動かし方」を定義する。Opusがワークフローを設計し、Haikuがその上を走る。
 
 AIエージェントが複雑なコードレビューに失敗した？ 検証可能な3ステップに分けてそれぞれHaikuで実行しろ。総コスト$2 → $0.08。全出力検証済み。完全な監査ログ。
 
@@ -53,9 +53,9 @@ AIエージェントが複雑なコードレビューに失敗した？ 検証�
 
 LLMには**recency bias（最新性バイアス）**がある — コンテキストが長くなるほど元の指示を忘れる（[Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427)、[Liu et al. 2023](https://arxiv.org/abs/2307.03172)）。これが複雑なエージェンティックタスクの根本的な失敗パターンだ。
 
-LangChainやCrewAIのような既存フレームワークはオーケストレーションを扱うが、フレームワークレベルの**実行制御と監査証跡**は持たない。エージェントに*何を*するかは伝えるが、*どこまでやっていいか*は制御しない。llm-railがこのギャップを埋める。
+LangChainやCrewAIのような既存フレームワークはオーケストレーションを扱うが、フレームワークレベルの**実行制御と監査証跡**は持たない。エージェントに*何を*するかは伝えるが、*どこまでやっていいか*は制御しない。lrailがこのギャップを埋める。
 
-llm-railはrecencyの問題を**各ステップのコンテキストを小さく集中的に保つ**ことで解決する：
+lrailはrecencyの問題を**各ステップのコンテキストを小さく集中的に保つ**ことで解決する：
 
 - 各ステップは`context_in`で必要なデータだけを受け取るクリーンなエージェント
 - 前のステップからのコンテキスト汚染なし
@@ -73,7 +73,7 @@ llm-railはrecencyの問題を**各ステップのコンテキストを小さく
 
 ### ステップタイプ
 
-llm-railは単一のワークフローで2つのステップタイプをサポートする：
+lrailは単一のワークフローで2つのステップタイプをサポートする：
 
 ```yaml
 steps:
@@ -127,7 +127,7 @@ policy:
 - **Enforceモード**: deny-firstのルール評価。本番用。
 - **ポリシー生成**: trailログから最小限のallow-listを自動生成。
 
-すべてのコマンドはbashプロキシ（`llm-rail <id> bash "<cmd>"`）を経由し、ポリシーを適用しすべての実行を記録する。
+すべてのコマンドはbashプロキシ（`lrail <id> bash "<cmd>"`）を経由し、ポリシーを適用しすべての実行を記録する。
 
 ### 検証ゲート
 
@@ -183,36 +183,36 @@ assertions:
 ### インストール
 
 ```bash
-npm install llm-rail
+npm install lrail
 ```
 
 ### Claude Codeプラグインとして
 
 ```bash
-claude install llm-rail
+claude install lrail
 ```
 
-プロジェクトで`/llm-rail:init`を実行すると、ワークフローのセットアップと`CLAUDE.md`への登録が完了する。
+プロジェクトで`/lrail:init`を実行すると、ワークフローのセットアップと`CLAUDE.md`への登録が完了する。
 
 ### 使い方
 
 ```bash
 # ワークフローインスタンスを作成
-llm-rail create code-review --param target=src/
+lrail wf code-review create --param target=src/
 
 # start → 検証 → 次のステップ、の繰り返し
-llm-rail 0321-143022 start
-llm-rail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
+lrail 0321-143022 start
+lrail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
 
 # ポリシー適用済みbashプロキシでコマンド実行
-llm-rail 0321-143022 bash 'git diff --stat'
+lrail 0321-143022 bash 'git diff --stat'
 
 # 進捗確認
-llm-rail 0321-143022 status
+lrail 0321-143022 status
 
 # ポリシー管理
-llm-rail policy check code-review --command 'curl https://api.example.com'
-llm-rail policy generate 0321-143022 --workflow code-review
+lrail wf code-review policy check --command 'curl https://api.example.com'
+lrail 0321-143022 policy generate
 ```
 
 ---
@@ -223,13 +223,13 @@ Claude Codeプラグインとしてインストールすれば、CLIを直接操
 
 | スキル | 説明 |
 |---|---|
-| `/llm-rail:init` | プロジェクトにllm-railをセットアップ |
-| `/llm-rail:design` | 自然言語でタスクを説明 → 検証可能なYAMLワークフローを生成 |
-| `/llm-rail:run` | エンドツーエンド実行 — 単一のHaikuエージェントが全ステップを順次実行 |
-| `/llm-rail:audit` | 既存ワークフローの品質改善を分析 |
-| `/llm-rail:status` | 実行中のワークフローの状態を確認 |
+| `/lrail:init` | プロジェクトにlrailをセットアップ |
+| `/lrail:design` | 自然言語でタスクを説明 → 検証可能なYAMLワークフローを生成 |
+| `/lrail:run` | エンドツーエンド実行 — 単一のHaikuエージェントが全ステップを順次実行 |
+| `/lrail:review` | 試行実行＋分析 — 問題検出、修正提案、ポリシー生成 |
+| `/lrail:status` | 実行中のワークフローの状態を確認 |
 
-### `/llm-rail:run`の実行フロー
+### `/lrail:run`の実行フロー
 
 ```
 オーケストレーター（メインエージェント）

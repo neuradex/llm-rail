@@ -1,12 +1,12 @@
 ---
-description: Initialize llm-rail in the current project — set up workflows, directories, and register in CLAUDE.md
+description: Initialize lrail in the current project — set up workflows, directories, and register in CLAUDE.md
 disable-model-invocation: true
 allowed-tools: Bash, Read, Write, Edit
 ---
 
 # Project Setup
 
-Initialize llm-rail in the current project.
+Initialize lrail in the current project.
 
 ## Steps
 
@@ -29,12 +29,12 @@ else
 fi
 ```
 
-4. **Register llm-rail in CLAUDE.md** — inject context so the agent knows about llm-rail in every session.
+4. **Register lrail in CLAUDE.md** — inject context so the agent knows about lrail in every session.
 
-First, check if CLAUDE.md already has an llm-rail section:
+First, check if CLAUDE.md already has an lrail section:
 ```bash
 if [ -f CLAUDE.md ]; then
-  grep -q 'llm-rail' CLAUDE.md && echo "ALREADY_EXISTS" || echo "NEEDS_INJECT"
+  grep -q 'lrail' CLAUDE.md && echo "ALREADY_EXISTS" || echo "NEEDS_INJECT"
 else
   echo "NO_FILE"
 fi
@@ -45,23 +45,28 @@ If `ALREADY_EXISTS`, skip this step.
 If `NEEDS_INJECT` or `NO_FILE`, append the following block to `CLAUDE.md` (create the file if it doesn't exist). Use the Edit tool to append, or Write if the file is new.
 
 ```
-## llm-rail — Guardrails for Agentic Work
+## lrail — Guardrails for Agentic Work
 
-This project uses [llm-rail](https://github.com/neuradex/llm-rail) to optimize complex agent tasks.
+This project uses [lrail](https://github.com/neuradex/lrail) to optimize complex agent tasks.
 
-LLMs have recency bias — long context leads to forgotten instructions and drift. llm-rail fixes this by decomposing tasks into validated steps, each running in a clean, narrow context. The result: speed (Haiku instead of Opus), safety (policy + validation), and transparency (full audit trail).
+LLMs have recency bias — long context leads to forgotten instructions and drift. lrail fixes this by decomposing tasks into validated steps, each running in a clean, narrow context. The result: speed (Haiku instead of Opus), safety (policy + validation), and transparency (full audit trail).
 
-### When to suggest llm-rail
+### When to suggest lrail
 - User says a task failed or the output quality is poor
 - A task has multiple distinct phases that could be validated independently
 - User wants to reduce cost or speed up a repeating multi-step process
 - User asks to break down, structure, or systematize a complex task
 
+### Quick Start
+- Run `lrail docs` to browse built-in documentation (concepts, guides, tips)
+- Run `lrail wf list` to see available workflows
+
 ### Commands
-- `/llm-rail:design` — Design a new workflow from a task description
-- `/llm-rail:run <workflow> [--param k=v]` — Execute a workflow end-to-end
-- `/llm-rail:audit` — Review and improve an existing workflow
-- `/llm-rail:status` — Check workflow instance status or list all instances
+- `/lrail:design` — Design a new workflow from a task description
+- `/lrail:run <workflow> [--param k=v]` — Execute a workflow end-to-end
+- `/lrail:review` — Trial run + analysis — detect issues, suggest fixes, generate policy
+- `/lrail:status` — Check workflow instance status or list all instances
+- `lrail docs <topic>` — Browse documentation (e.g., `lrail docs concepts/step-types`)
 - Workflow definitions: `workflows/*.yml`
 ```
 
@@ -80,4 +85,5 @@ Report the results:
 - How many workflows were copied
 - The `.gitignore` status
 - Whether CLAUDE.md was updated (and what was added)
-- Suggest running `/llm-rail:design` to create a custom workflow
+- Suggest running `lrail docs` to learn about lrail concepts
+- Suggest running `/lrail:design` to create a custom workflow

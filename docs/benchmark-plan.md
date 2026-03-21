@@ -1,10 +1,10 @@
-# llm-rail Benchmark Plan
+# lrail Benchmark Plan
 
 > [English](./benchmark-plan.md) · [한국어](./benchmark-plan.ko.md)
 
 ## Objective
 
-Demonstrate that llm-rail delivers measurable improvements over single-pass LLM execution across two axes:
+Demonstrate that lrail delivers measurable improvements over single-pass LLM execution across two axes:
 
 1. **Task Efficiency** — success rate, quality, cost, consistency
 2. **AI Safety** — auditability, controllability, transparency of agent actions
@@ -27,14 +27,14 @@ Demonstrate that llm-rail delivers measurable improvements over single-pass LLM 
 |---|---|---|---|---|
 | 1 | Opus-Vague | Vague prompt | Single pass | Opus |
 | 2 | Opus-Detailed | Detailed prompt | Single pass | Opus |
-| 3 | Rail-Detailed | Detailed prompt | llm-rail workflow | Haiku (steps) |
-| 4 | Rail-Vague | Vague prompt | llm-rail:design → workflow | Haiku (steps) |
+| 3 | Rail-Detailed | Detailed prompt | lrail workflow | Haiku (steps) |
+| 4 | Rail-Vague | Vague prompt | lrail:design → workflow | Haiku (steps) |
 
 ### Design
 
 - **Repetitions**: 3 runs per condition (12 runs total)
 - **Controlled variables**: Same search engine access, same date, same market data availability
-- **Conditions 3 & 4**: Workflow designed via `/llm-rail:design`, executed via `/llm-rail:run`
+- **Conditions 3 & 4**: Workflow designed via `/lrail:design`, executed via `/lrail:run`
 
 ### Metrics
 
@@ -43,9 +43,9 @@ Demonstrate that llm-rail delivers measurable improvements over single-pass LLM 
 | **Success Rate** | Did the task complete with all required sections? Binary per run. | Opus may fail to produce complete output on complex tasks. |
 | **Factual Accuracy** | Sample 10 data points per run, verify against real market data. Score 0-10. | LLMs hallucinate financial figures. Validation gates should catch this. |
 | **Completeness** | Checklist: all 20 companies listed? all metrics present? all sections filled? Percentage score. | Single-pass tends to drop items in long outputs. |
-| **Consistency** | Variance across 3 runs: how different are the results? Jaccard similarity of company lists + numeric deviation of scores. | llm-rail should produce more stable results due to structural constraints. |
+| **Consistency** | Variance across 3 runs: how different are the results? Jaccard similarity of company lists + numeric deviation of scores. | lrail should produce more stable results due to structural constraints. |
 | **Cost** | Total input + output tokens × model pricing. | Core value proposition: Haiku steps should be dramatically cheaper. |
-| **Latency** | Wall-clock time from start to completion. | Parallel step potential in llm-rail vs sequential single-pass. |
+| **Latency** | Wall-clock time from start to completion. | Parallel step potential in lrail vs sequential single-pass. |
 
 ### Expected Outcomes
 
@@ -110,15 +110,15 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 - **No visibility** into intermediate reasoning or data sources used
 - **No enforcement** that the agent stayed within its intended scope
 
-### How llm-rail Addresses This
+### How lrail Addresses This
 
-| Safety Property | Single-Pass Agent | llm-rail |
+| Safety Property | Single-Pass Agent | lrail |
 |---|---|---|
 | **Auditability** | Black box. Only see final output. | Every step logged in `.llm-rail/{workflow}/{instance}/audit.jsonl`. Full event history. |
 | **Controllability** | All-or-nothing. Cancel = lose everything. | Pause/resume at any step. Reset individual steps. Gate hooks can block progression. |
 | **Transparency** | No intermediate outputs visible. | Each step produces validated, inspectable output before the next begins. |
 | **Scope Limitation** | Agent has access to all tools. | step-runner agents have restricted tool access. Only know `start` and `next`. |
-| **Command Proxying** | Terminal commands are invisible. | All commands go through bash proxy (`llm-rail <id> bash`). Policy system enforces allow/deny rules. Every execution logged in `policy.jsonl`. |
+| **Command Proxying** | Terminal commands are invisible. | All commands go through bash proxy (`lrail <id> bash`). Policy system enforces allow/deny rules. Every execution logged in `policy.jsonl`. |
 
 ### Experiment: Command Audit Trail
 
@@ -127,7 +127,7 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 | Condition | Method | Command Logging |
 |---|---|---|
 | A | Opus single-pass with tool access | Capture via shell history only |
-| B | llm-rail + Haiku step-runners | Full audit log + command proxy |
+| B | lrail + Haiku step-runners | Full audit log + command proxy |
 
 **Metrics**:
 
@@ -145,7 +145,7 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 | Condition | Expected Behavior |
 |---|---|
 | Opus single-pass | Bad data propagates to final report undetected. |
-| llm-rail | Validation gate rejects Step 2 output. Agent must fix before proceeding. |
+| lrail | Validation gate rejects Step 2 output. Agent must fix before proceeding. |
 
 ### Experiment: Scope Restriction
 
@@ -154,7 +154,7 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 | Condition | Expected Behavior |
 |---|---|
 | Opus single-pass | May execute arbitrary commands, browse unrelated sites, modify files. |
-| llm-rail step-runner | Restricted to `start` and `next` CLI commands + task-scoped tools only. |
+| lrail step-runner | Restricted to `start` and `next` CLI commands + task-scoped tools only. |
 
 ### Experiment: Policy System
 
@@ -165,7 +165,7 @@ Run the workflow with `policy.mode: trail`. All commands are allowed and logged 
 
 After completion, generate a minimal allow-list:
 ```bash
-llm-rail policy generate <instance-id> --workflow stock-screening
+lrail <alias|id> policy generate
 ```
 
 **Round 2 — Enforce Mode (Policy Enforcement)**:
@@ -180,8 +180,8 @@ Apply the generated policy with `policy.mode: enforce`. Re-run the workflow.
 
 **Dry-run check**:
 ```bash
-llm-rail policy check stock-screening --command 'curl https://finance.yahoo.co.jp'
-llm-rail policy check stock-screening --command 'rm -rf /'
+lrail wf stock-screening policy check --command 'curl https://finance.yahoo.co.jp'
+lrail wf stock-screening policy check --command 'rm -rf /'
 ```
 
 ---

@@ -43,17 +43,17 @@ npm run dev -- create code-review    # Dev mode
 ## CLI Reference
 
 ```
-llm-rail create <workflow> [--param k=v]                Create instance from workflow definition
-llm-rail <id> start                                     Start the next pending step
-llm-rail <id> next --result '<json>'                    Submit step output (validated)
-llm-rail <id> bash '<command>'                          Execute command through policy-enforced proxy
-llm-rail <id> status                                    Show instance progress
-llm-rail <id> query [--step <step-id>]                  Query step details
-llm-rail <id> reset <step-id>                           Reset a step for re-execution
-llm-rail validate <workflow>                            Validate workflow YAML schema
-llm-rail list [--status <status>]                       List all instances
-llm-rail policy check <workflow> --command '<cmd>'      Dry-run policy check
-llm-rail policy generate <id> --workflow <name>         Generate allow-list from trail logs
+lrail wf <workflow> create [--param k=v]                Create instance from workflow definition
+lrail <id> start                                     Start the next pending step
+lrail <id> next --result '<json>'                    Submit step output (validated)
+lrail <id> bash '<command>'                          Execute command through policy-enforced proxy
+lrail <id> status                                    Show instance progress
+lrail <id> query [--step <step-id>]                  Query step details
+lrail <id> reset <step-id>                           Reset a step for re-execution
+lrail wf <workflow> validate                            Validate workflow YAML schema
+lrail wf <name> list [--status <status>]                       List all instances
+lrail wf <workflow> policy check --command '<cmd>'      Dry-run policy check
+lrail <alias|id> policy generate         Generate allow-list from trail logs
 ```
 
 ## Workflow Schema

@@ -46,7 +46,8 @@ steps: StepDef[]       # ordered step definitions
 ```yaml
 - id: string                    # unique step identifier
   type: agentic                 # optional, default
-  description: string           # required — supports {{param}} interpolation
+  description: string           # optional — human-readable summary for status/list display
+  instruction: string           # required — agent directive, supports {{param}} interpolation
   depends_on: string | string[] # step id(s) this depends on
   required_output:              # required — fields the agent MUST produce
     - field_name
@@ -89,7 +90,7 @@ policy: PolicyDef          # replaces base policy entirely
 ```
 
 ### Template Syntax
-- `{{param}}` — parameter interpolation in description and action `run` fields
+- `{{param}}` — parameter interpolation in `instruction`, `description`, and action `run` fields
 - `{stepId.field}` — step output reference in context_in values
 
 ## CLI Reference

@@ -1,5 +1,5 @@
 ---
-description: Design an llm-rail workflow — analyze a task and generate optimized YAML
+description: Design an lrail workflow — analyze a task and generate optimized YAML
 context: fork
 agent: workflow-designer
 allowed-tools: Read, Glob, Grep, Write, Bash
@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash
 
 # Workflow Design
 
-You are designing an llm-rail workflow. Your goal is to understand the user's task and produce a well-structured, validated YAML workflow file.
+You are designing an lrail workflow. Your goal is to understand the user's task and produce a well-structured, validated YAML workflow file.
 
 ## Reference Workflow
 
@@ -20,6 +20,12 @@ Here is a reference workflow for style and structure:
 ## Process
 
 1. **Understand the task**: Read $ARGUMENTS and ask clarifying questions if the goal is ambiguous. Identify the inputs (params), processing steps, and expected outputs.
+
+   If you need to review lrail concepts (step types, validation, policy, phases), run:
+   ```bash
+   lrail docs concepts/<topic>
+   ```
+   Available topics: `step-types`, `validation`, `actions`, `policy`, `phases`
 
 2. **Propose step breakdown**: Before writing YAML, outline the steps:
    - What each step produces
@@ -42,7 +48,7 @@ Here is a reference workflow for style and structure:
    - Set `depends_on` only for actual data dependencies
    - Add `policy` if the workflow involves shell commands (start with `mode: trail`)
 
-4. **Validate**: Run `node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js validate <workflow-name>` and fix any errors.
+4. **Validate**: Run `lrail wf <workflow-name> validate` and fix any errors.
 
 5. **Report**: Show the final YAML and validation result to the user.
 

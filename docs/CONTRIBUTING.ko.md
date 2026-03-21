@@ -43,17 +43,17 @@ npm run dev -- create code-review    # 개발 모드
 ## CLI 레퍼런스
 
 ```
-llm-rail create <workflow> [--param k=v]                워크플로우 정의로 인스턴스 생성
-llm-rail <id> start                                     다음 대기 중인 스텝 시작
-llm-rail <id> next --result '<json>'                    스텝 출력 제출 (검증됨)
-llm-rail <id> bash '<command>'                          정책 적용 프록시를 통한 명령 실행
-llm-rail <id> status                                    인스턴스 진행 상황 표시
-llm-rail <id> query [--step <step-id>]                  스텝 상세 조회
-llm-rail <id> reset <step-id>                           스텝 리셋 후 재실행
-llm-rail validate <workflow>                            워크플로우 YAML 스키마 검증
-llm-rail list [--status <status>]                       전체 인스턴스 목록
-llm-rail policy check <workflow> --command '<cmd>'      정책 체크 드라이런
-llm-rail policy generate <id> --workflow <name>         트레일 로그로부터 허용 목록 생성
+lrail wf <workflow> create [--param k=v]                워크플로우 정의로 인스턴스 생성
+lrail <id> start                                     다음 대기 중인 스텝 시작
+lrail <id> next --result '<json>'                    스텝 출력 제출 (검증됨)
+lrail <id> bash '<command>'                          정책 적용 프록시를 통한 명령 실행
+lrail <id> status                                    인스턴스 진행 상황 표시
+lrail <id> query [--step <step-id>]                  스텝 상세 조회
+lrail <id> reset <step-id>                           스텝 리셋 후 재실행
+lrail wf <workflow> validate                            워크플로우 YAML 스키마 검증
+lrail wf <name> list [--status <status>]                       전체 인스턴스 목록
+lrail wf <workflow> policy check --command '<cmd>'      정책 체크 드라이런
+lrail <alias|id> policy generate         트레일 로그로부터 허용 목록 생성
 ```
 
 ## 워크플로우 스키마

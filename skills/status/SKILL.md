@@ -1,12 +1,12 @@
 ---
-description: Check llm-rail workflow instance status or list all instances
+description: Check lrail workflow instance status or list all instances
 disable-model-invocation: true
 allowed-tools: Bash
 ---
 
 # Status Check
 
-Check the status of llm-rail workflow instances.
+Check the status of lrail workflow instances.
 
 If $ARGUMENTS contains an instance ID, show that instance's detailed status:
 ```bash

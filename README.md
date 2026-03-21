@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
+  <img src="https://img.shields.io/npm/v/lrail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="license" />
 </p>
@@ -24,7 +24,7 @@
 
 ---
 
-Ruby on Rails laid rails for web development. **llm-rail lays rails for agentic work.**
+Ruby on Rails laid rails for web development. **lrail lays rails for agentic work.**
 
 The word "rail" carries a dual meaning — and both are intentional:
 
@@ -33,9 +33,9 @@ The word "rail" carries a dual meaning — and both are intentional:
 
 LLM agents choke on complex tasks. They skip steps, hallucinate outputs, and lose track of what they were supposed to do as context grows. Throwing a bigger model at it costs more — with no guarantee it'll work. The root cause: **LLMs have recency bias**. In a long context, they forget the original instructions and drift.
 
-Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." llm-rail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
+Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." lrail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
 
-**llm-rail** fixes this with three layers of rails:
+**lrail** fixes this with three layers of rails:
 
 | Rail | What it controls |
 |---|---|
@@ -43,7 +43,7 @@ Current approaches to AI safety amount to **stickers on a dashboard** — prompt
 | **Policy Rail** | Every shell command goes through a bash proxy with IAM-style allow/deny rules. Agents can only do what's explicitly permitted. |
 | **Audit Rail** | Every action, command, and validation — logged. Full traceability per instance. |
 
-Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. llm-rail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
+Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. lrail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
 
 Your AI agent failed a complex code review? Break it into 3 validated steps. Run each with Haiku. Total cost drops from $2 to $0.08. Every output verified. Full audit trail.
 
@@ -53,9 +53,9 @@ Your AI agent failed a complex code review? Break it into 3 validated steps. Run
 
 LLMs have **recency bias** — the longer the context, the more they forget their original instructions ([Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427), [Liu et al. 2023](https://arxiv.org/abs/2307.03172)). This is the fundamental failure mode of complex agentic tasks.
 
-Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. llm-rail fills this gap.
+Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. lrail fills this gap.
 
-llm-rail solves the recency problem by **keeping each step's context small and focused**:
+lrail solves the recency problem by **keeping each step's context small and focused**:
 
 - Each step gets a clean agent with only the data it needs via `context_in`
 - No accumulated context pollution from prior steps
@@ -73,7 +73,7 @@ For enterprises, this answers three critical questions: **"Can it handle complex
 
 ### Step Types
 
-llm-rail supports two step types in a single workflow:
+lrail supports two step types in a single workflow:
 
 ```yaml
 steps:
@@ -127,7 +127,7 @@ policy:
 - **Enforce mode**: Deny-first rule evaluation. For production.
 - **Policy generation**: Auto-generate minimal allow-list from trail logs.
 
-All commands go through the bash proxy (`llm-rail <id> bash "<cmd>"`), which enforces policy and logs every execution.
+All commands go through the bash proxy (`lrail <id> bash "<cmd>"`), which enforces policy and logs every execution.
 
 ### Validation Gates
 
@@ -183,36 +183,36 @@ Every event is recorded per instance:
 ### Install
 
 ```bash
-npm install llm-rail
+npm install lrail
 ```
 
 ### As a Claude Code Plugin
 
 ```bash
-claude install llm-rail
+claude install lrail
 ```
 
-Then run `/llm-rail:init` in your project to set up workflows and register in `CLAUDE.md`.
+Then run `/lrail:init` in your project to set up workflows and register in `CLAUDE.md`.
 
 ### Usage
 
 ```bash
 # Create a workflow instance
-llm-rail create code-review --param target=src/
+lrail wf code-review create --param target=src/
 
 # Start → validate → advance, step by step
-llm-rail 0321-143022 start
-llm-rail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
+lrail 0321-143022 start
+lrail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
 
 # Execute commands through policy-enforced proxy
-llm-rail 0321-143022 bash 'git diff --stat'
+lrail 0321-143022 bash 'git diff --stat'
 
 # Check progress anytime
-llm-rail 0321-143022 status
+lrail 0321-143022 status
 
 # Policy management
-llm-rail policy check code-review --command 'curl https://api.example.com'
-llm-rail policy generate 0321-143022 --workflow code-review
+lrail wf code-review policy check --command 'curl https://api.example.com'
+lrail 0321-143022 policy generate
 ```
 
 ---
@@ -223,13 +223,13 @@ Install as a Claude Code plugin and never touch the CLI manually.
 
 | Skill | What it does |
 |---|---|
-| `/llm-rail:init` | Set up llm-rail in your project |
-| `/llm-rail:design` | Describe a task in natural language → get a validated YAML workflow |
-| `/llm-rail:run` | Execute end-to-end — a single Haiku agent runs all steps sequentially |
-| `/llm-rail:audit` | Analyze an existing workflow for quality improvements |
-| `/llm-rail:status` | Check progress on running workflows |
+| `/lrail:init` | Set up lrail in your project |
+| `/lrail:design` | Describe a task in natural language → get a validated YAML workflow |
+| `/lrail:run` | Execute end-to-end — a single Haiku agent runs all steps sequentially |
+| `/lrail:review` | Trial run + analysis — detect issues, suggest fixes, generate policy |
+| `/lrail:status` | Check progress on running workflows |
 
-### What happens when you run `/llm-rail:run`
+### What happens when you run `/lrail:run`
 
 ```
 Orchestrator (your main agent)

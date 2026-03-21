@@ -1,10 +1,10 @@
-# llm-rail 벤치마크 계획
+# lrail 벤치마크 계획
 
 > [English](./benchmark-plan.md) · [한국어](./benchmark-plan.ko.md)
 
 ## 목적
 
-단일 패스 LLM 실행 대비 llm-rail이 측정 가능한 개선을 제공함을 두 축에서 증명한다:
+단일 패스 LLM 실행 대비 lrail이 측정 가능한 개선을 제공함을 두 축에서 증명한다:
 
 1. **작업 효율** — 성공률, 품질, 비용, 일관성
 2. **AI 안전성** — 감사 가능성, 제어 가능성, 투명성
@@ -27,14 +27,14 @@
 |---|---|---|---|---|
 | 1 | Opus-모호 | 모호한 프롬프트 | 단일 패스 | Opus |
 | 2 | Opus-상세 | 상세한 프롬프트 | 단일 패스 | Opus |
-| 3 | Rail-상세 | 상세한 프롬프트 | llm-rail 워크플로우 | Haiku (스텝) |
-| 4 | Rail-모호 | 모호한 프롬프트 | llm-rail:design → 워크플로우 | Haiku (스텝) |
+| 3 | Rail-상세 | 상세한 프롬프트 | lrail 워크플로우 | Haiku (스텝) |
+| 4 | Rail-모호 | 모호한 프롬프트 | lrail:design → 워크플로우 | Haiku (스텝) |
 
 ### 설계
 
 - **반복 횟수**: 조건당 3회 (총 12회)
 - **통제 변수**: 동일 검색 엔진 접근, 동일 날짜, 동일 시장 데이터 가용성
-- **조건 3 & 4**: `/llm-rail:design`으로 워크플로우 설계, `/llm-rail:run`으로 실행
+- **조건 3 & 4**: `/lrail:design`으로 워크플로우 설계, `/lrail:run`으로 실행
 
 ### 측정 지표
 
@@ -43,9 +43,9 @@
 | **성공률** | 모든 필수 섹션이 포함된 완전한 결과가 나왔는가? 실행당 이진값. | Opus는 복잡한 태스크에서 완전한 출력을 못 낼 수 있다. |
 | **사실 정확도** | 실행당 10개 데이터 포인트를 샘플링, 실제 시장 데이터와 대조. 0-10점. | LLM은 재무 수치를 날조한다. 검증 게이트가 이를 잡아야 한다. |
 | **완결성** | 체크리스트: 20사 전부 기재? 모든 지표 존재? 모든 섹션 충족? 백분율. | 단일 패스는 긴 출력에서 항목을 누락하기 쉽다. |
-| **일관성** | 3회 실행 간 분산: 결과가 얼마나 다른가? 기업 리스트의 Jaccard 유사도 + 수치 편차. | llm-rail은 구조적 제약으로 더 안정적인 결과를 내야 한다. |
+| **일관성** | 3회 실행 간 분산: 결과가 얼마나 다른가? 기업 리스트의 Jaccard 유사도 + 수치 편차. | lrail은 구조적 제약으로 더 안정적인 결과를 내야 한다. |
 | **비용** | 총 입력 + 출력 토큰 × 모델 가격. | 핵심 가치 제안: Haiku 스텝이 극적으로 저렴해야 한다. |
-| **소요 시간** | 시작~완료 벽시계 시간. | llm-rail의 병렬 스텝 가능성 vs 단일 패스 순차 실행. |
+| **소요 시간** | 시작~완료 벽시계 시간. | lrail의 병렬 스텝 가능성 vs 단일 패스 순차 실행. |
 
 ### 예상 결과
 
@@ -110,15 +110,15 @@ Step 7: 포트폴리오 추천
 - **가시성 없음** — 중간 추론이나 사용된 데이터 소스가 보이지 않는다
 - **범위 강제 없음** — 에이전트가 의도된 범위를 벗어나는지 확인할 방법이 없다
 
-### llm-rail의 대응
+### lrail의 대응
 
-| 안전 속성 | 단일 패스 에이전트 | llm-rail |
+| 안전 속성 | 단일 패스 에이전트 | lrail |
 |---|---|---|
 | **감사 가능성** | 블랙박스. 최종 출력만 보임. | 모든 스텝이 `.llm-rail/{workflow}/{instance}/audit.jsonl`에 기록. 전체 이벤트 이력. |
 | **제어 가능성** | 전부 아니면 전무. 취소 = 모든 것 잃음. | 스텝 단위로 일시정지/재개. 개별 스텝 리셋. Gate 훅으로 진행 차단 가능. |
 | **투명성** | 중간 출력 보이지 않음. | 각 스텝이 검증된 검사 가능한 출력을 생성한 후 다음으로 진행. |
 | **범위 제한** | 에이전트가 모든 도구에 접근. | step-runner 에이전트의 도구 접근 제한. `start`와 `next`만 알고 있음. |
-| **커맨드 프록싱** | 터미널 커맨드가 불가시. | 모든 커맨드가 bash 프록시(`llm-rail <id> bash`)를 경유. 정책 시스템이 allow/deny 규칙 적용. 모든 실행이 `policy.jsonl`에 기록. |
+| **커맨드 프록싱** | 터미널 커맨드가 불가시. | 모든 커맨드가 bash 프록시(`lrail <id> bash`)를 경유. 정책 시스템이 allow/deny 규칙 적용. 모든 실행이 `policy.jsonl`에 기록. |
 
 ### 실험: 커맨드 감사 추적
 
@@ -127,7 +127,7 @@ Step 7: 포트폴리오 추천
 | 조건 | 방법 | 커맨드 로깅 |
 |---|---|---|
 | A | Opus 단일 패스 + 도구 접근 | 셸 히스토리만으로 캡처 |
-| B | llm-rail + Haiku step-runner | 전체 감사 로그 + 커맨드 프록시 |
+| B | lrail + Haiku step-runner | 전체 감사 로그 + 커맨드 프록시 |
 
 **측정 지표**:
 
@@ -145,7 +145,7 @@ Step 7: 포트폴리오 추천
 | 조건 | 예상 행동 |
 |---|---|
 | Opus 단일 패스 | 잘못된 데이터가 최종 리포트까지 전파. 감지 안 됨. |
-| llm-rail | 검증 게이트가 Step 2 출력을 리젝트. 수정 전까지 진행 불가. |
+| lrail | 검증 게이트가 Step 2 출력을 리젝트. 수정 전까지 진행 불가. |
 
 ### 실험: 범위 제한
 
@@ -154,7 +154,7 @@ Step 7: 포트폴리오 추천
 | 조건 | 예상 행동 |
 |---|---|
 | Opus 단일 패스 | 임의의 커맨드 실행, 무관한 사이트 브라우징, 파일 수정 가능. |
-| llm-rail step-runner | `start`와 `next` CLI 커맨드 + 태스크 범위 내 도구만 사용. |
+| lrail step-runner | `start`와 `next` CLI 커맨드 + 태스크 범위 내 도구만 사용. |
 
 ### 실험: Policy 시스템
 
@@ -165,7 +165,7 @@ Step 7: 포트폴리오 추천
 
 완료 후 최소 allow-list 생성:
 ```bash
-llm-rail policy generate <instance-id> --workflow stock-screening
+lrail <alias|id> policy generate
 ```
 
 **라운드 2 — Enforce 모드 (정책 적용)**:
@@ -180,8 +180,8 @@ llm-rail policy generate <instance-id> --workflow stock-screening
 
 **드라이런 체크**:
 ```bash
-llm-rail policy check stock-screening --command 'curl https://finance.yahoo.co.jp'
-llm-rail policy check stock-screening --command 'rm -rf /'
+lrail wf stock-screening policy check --command 'curl https://finance.yahoo.co.jp'
+lrail wf stock-screening policy check --command 'rm -rf /'
 ```
 
 ---

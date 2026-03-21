@@ -43,17 +43,17 @@ npm run dev -- create code-review    # 開発モード
 ## CLI リファレンス
 
 ```
-llm-rail create <workflow> [--param k=v]                ワークフロー定義からインスタンスを作成
-llm-rail <id> start                                     次の待機中ステップを開始
-llm-rail <id> next --result '<json>'                    ステップ出力を提出 (検証あり)
-llm-rail <id> bash '<command>'                          ポリシー適用プロキシ経由でコマンドを実行
-llm-rail <id> status                                    インスタンスの進捗を表示
-llm-rail <id> query [--step <step-id>]                  ステップ詳細を照会
-llm-rail <id> reset <step-id>                           ステップをリセットして再実行
-llm-rail validate <workflow>                            ワークフローYAMLスキーマを検証
-llm-rail list [--status <status>]                       全インスタンスを一覧表示
-llm-rail policy check <workflow> --command '<cmd>'      ポリシーチェックのドライラン
-llm-rail policy generate <id> --workflow <name>         トレイルログから許可リストを生成
+lrail wf <workflow> create [--param k=v]                ワークフロー定義からインスタンスを作成
+lrail <id> start                                     次の待機中ステップを開始
+lrail <id> next --result '<json>'                    ステップ出力を提出 (検証あり)
+lrail <id> bash '<command>'                          ポリシー適用プロキシ経由でコマンドを実行
+lrail <id> status                                    インスタンスの進捗を表示
+lrail <id> query [--step <step-id>]                  ステップ詳細を照会
+lrail <id> reset <step-id>                           ステップをリセットして再実行
+lrail wf <workflow> validate                            ワークフローYAMLスキーマを検証
+lrail wf <name> list [--status <status>]                       全インスタンスを一覧表示
+lrail wf <workflow> policy check --command '<cmd>'      ポリシーチェックのドライラン
+lrail <alias|id> policy generate         トレイルログから許可リストを生成
 ```
 
 ## ワークフロースキーマ

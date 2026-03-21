@@ -1,4 +1,4 @@
-# llm-rail v2 Design Document
+# lrail v2 Design Document
 
 > Status: **Implemented** · Date: 2026-03-21
 
@@ -195,10 +195,10 @@ Stored in `.llm-rail/logs/<id>.policy.jsonl`.
 
 ```bash
 # Generate minimal policy from trail logs
-llm-rail policy generate <id>
+lrail <alias|id> policy generate
 
 # Check a command against a workflow's policy (dry-run)
-llm-rail policy check <workflow-name> "curl https://example.com"
+lrail wf <workflow-name> policy check "curl https://example.com"
 ```
 
 ---
@@ -215,7 +215,7 @@ step-runner agents need to execute shell commands, but we need:
 ### Solution
 
 ```bash
-llm-rail <id> bash "<command>"
+lrail <id> bash "<command>"
 ```
 
 This proxy:
@@ -231,7 +231,7 @@ step-runner agent tools:
 tools: [Read, Glob, Grep, Bash]
 ```
 
-The agent is instructed to use `llm-rail <id> bash "<command>"` instead of raw shell commands. Since the agent only knows `start` and `next` (and the instance ID from `start` output), the proxy naturally carries the instance context.
+The agent is instructed to use `lrail <id> bash "<command>"` instead of raw shell commands. Since the agent only knows `start` and `next` (and the instance ID from `start` output), the proxy naturally carries the instance context.
 
 > **Note**: Write/Edit are intentionally excluded. If file writing is needed, the agent submits data via `next`, and the workflow's `actions` handle file operations.
 
@@ -243,32 +243,32 @@ The agent is instructed to use `llm-rail <id> bash "<command>"` instead of raw s
 
 | Command | Description |
 |---|---|
-| `llm-rail <id> bash "<command>"` | Proxied shell execution with policy + logging |
-| `llm-rail policy generate <id>` | Generate minimal policy from trail log |
-| `llm-rail policy check <workflow> "<cmd>"` | Dry-run policy check |
+| `lrail <id> bash "<command>"` | Proxied shell execution with policy + logging |
+| `lrail <alias|id> policy generate` | Generate minimal policy from trail log |
+| `lrail wf <workflow> policy check "<cmd>"` | Dry-run policy check |
 
 ### Modified Commands
 
 | Command | Change |
 |---|---|
-| `llm-rail <id> next` | After validation, execute `actions` if defined |
-| `llm-rail <id> start` | For `programmatic` steps, auto-execute actions and advance (no agent interaction) |
+| `lrail <id> next` | After validation, execute `actions` if defined |
+| `lrail <id> start` | For `programmatic` steps, auto-execute actions and advance (no agent interaction) |
 
 ### CLI Usage Update
 
 ```
 Usage:
-  llm-rail create <workflow-name> [--param k=v ...]
-  llm-rail <id> start
-  llm-rail <id> next --result '<json>'
-  llm-rail <id> bash "<command>"
-  llm-rail <id> status
-  llm-rail <id> query [--step <stepId>]
-  llm-rail <id> reset <step-id>
-  llm-rail list [--status <status>]
-  llm-rail validate <workflow-name>
-  llm-rail policy generate <id>
-  llm-rail policy check <workflow-name> "<command>"
+  lrail wf <workflow-name> create [--param k=v ...]
+  lrail <id> start
+  lrail <id> next --result '<json>'
+  lrail <id> bash "<command>"
+  lrail <id> status
+  lrail <id> query [--step <stepId>]
+  lrail <id> reset <step-id>
+  lrail wf <name> list [--status <status>]
+  lrail wf <workflow-name> validate
+  lrail <alias|id> policy generate
+  lrail wf <workflow-name> policy check "<command>"
 ```
 
 ---
@@ -445,7 +445,7 @@ start (or auto-advance from previous step)
 ### Bash Proxy Flow
 
 ```
-agent calls: llm-rail <id> bash "curl ..."
+agent calls: lrail <id> bash "curl ..."
   → load instance → load workflow policy
   → trail mode: log command → execute → return
   → enforce mode: check rules → deny? block : execute → return

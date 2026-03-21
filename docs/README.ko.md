@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
+  <img src="https://img.shields.io/npm/v/lrail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
   <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="license" />
 </p>
@@ -24,7 +24,7 @@
 
 ---
 
-Ruby on Rails가 웹 개발에 레일을 깔았듯이, **llm-rail은 에이전틱 작업에 레일을 깐다.**
+Ruby on Rails가 웹 개발에 레일을 깔았듯이, **lrail은 에이전틱 작업에 레일을 깐다.**
 
 "레일"이라는 단어에는 이중 의미가 있다 — 둘 다 의도적이다:
 
@@ -33,9 +33,9 @@ Ruby on Rails가 웹 개발에 레일을 깔았듯이, **llm-rail은 에이전�
 
 LLM 에이전트는 복잡한 작업에서 무너진다. 단계를 건너뛰고, 출력을 날조하고, 컨텍스트가 길어지면 원래 해야 할 일을 잊어버린다. 더 큰 모델을 투입하면 비용만 올라간다 — 성공 보장도 없이. 근본 원인: **LLM에는 최신성 편향(recency bias)이 있다.** 긴 컨텍스트에서 원래 지시를 잊고 흘러간다.
 
-현재의 AI 안전성 접근법은 **대시보드에 붙인 스티커** 수준이다 — "조심해라", "실수하지 마라" 같은 프롬프트 레벨 경고. llm-rail은 다른 접근을 취한다: **구조적 안전성**. 모델에게 착하게 굴라고 부탁하는 대신, 나쁜 일이 *발생할 수 없는* 실행 구조를 만든다.
+현재의 AI 안전성 접근법은 **대시보드에 붙인 스티커** 수준이다 — "조심해라", "실수하지 마라" 같은 프롬프트 레벨 경고. lrail은 다른 접근을 취한다: **구조적 안전성**. 모델에게 착하게 굴라고 부탁하는 대신, 나쁜 일이 *발생할 수 없는* 실행 구조를 만든다.
 
-**llm-rail**은 세 겹의 레일로 이걸 해결한다:
+**lrail**은 세 겹의 레일로 이걸 해결한다:
 
 | 레일 | 제어 대상 |
 |---|---|
@@ -43,7 +43,7 @@ LLM 에이전트는 복잡한 작업에서 무너진다. 단계를 건너뛰고,
 | **정책 레일** | 모든 쉘 명령이 IAM 스타일 allow/deny 규칙이 적용되는 bash 프록시를 거침. 명시적으로 허가된 것만 실행 가능. |
 | **감사 레일** | 모든 액션, 명령, 검증 — 기록. 인스턴스별 완전한 추적성. |
 
-이것은 **LLM 시대의 Convention over Configuration**이다. Rails가 MVC로 "웹 앱을 만드는 법"을 정의했듯이, llm-rail은 워크플로우 분해 + 실행 제어 + 감사 추적으로 "AI 에이전트를 돌리는 법"을 정의한다. Opus가 워크플로우를 설계하고, Haiku가 그 위에서 달린다.
+이것은 **LLM 시대의 Convention over Configuration**이다. Rails가 MVC로 "웹 앱을 만드는 법"을 정의했듯이, lrail은 워크플로우 분해 + 실행 제어 + 감사 추적으로 "AI 에이전트를 돌리는 법"을 정의한다. Opus가 워크플로우를 설계하고, Haiku가 그 위에서 달린다.
 
 AI 에이전트가 복잡한 코드 리뷰에 실패했다면? 검증 가능한 3개 스텝으로 나눠서 각각 Haiku로 실행하라. 총 비용 $2 → $0.08. 모든 출력 검증됨. 전체 감사 로그.
 
@@ -53,9 +53,9 @@ AI 에이전트가 복잡한 코드 리뷰에 실패했다면? 검증 가능한 
 
 LLM에는 **최신성 편향(recency bias)**이 있다 — 컨텍스트가 길어질수록 원래 지시를 잊어버린다 ([Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427), [Liu et al. 2023](https://arxiv.org/abs/2307.03172)). 이게 복잡한 에이전틱 작업의 근본적인 실패 패턴이다.
 
-LangChain이나 CrewAI 같은 기존 프레임워크는 오케스트레이션을 다루지만, 프레임워크 레벨의 **실행 제어와 감사 추적**은 없다. 에이전트에게 *무엇을* 하라고는 알려주지만, *얼마나 할 수 있는지*는 제어하지 않는다. llm-rail이 이 공백을 채운다.
+LangChain이나 CrewAI 같은 기존 프레임워크는 오케스트레이션을 다루지만, 프레임워크 레벨의 **실행 제어와 감사 추적**은 없다. 에이전트에게 *무엇을* 하라고는 알려주지만, *얼마나 할 수 있는지*는 제어하지 않는다. lrail이 이 공백을 채운다.
 
-llm-rail은 recency 문제를 **각 스텝의 컨텍스트를 작고 집중적으로 유지**해서 해결한다:
+lrail은 recency 문제를 **각 스텝의 컨텍스트를 작고 집중적으로 유지**해서 해결한다:
 
 - 각 스텝은 `context_in`으로 필요한 데이터만 받는 깨끗한 에이전트
 - 이전 스텝에서 누적된 컨텍스트 오염 없음
@@ -73,7 +73,7 @@ llm-rail은 recency 문제를 **각 스텝의 컨텍스트를 작고 집중적�
 
 ### 스텝 타입
 
-llm-rail은 하나의 워크플로우에서 두 가지 스텝 타입을 지원한다:
+lrail은 하나의 워크플로우에서 두 가지 스텝 타입을 지원한다:
 
 ```yaml
 steps:
@@ -127,7 +127,7 @@ policy:
 - **Enforce 모드**: deny-first 규칙 평가. 프로덕션용.
 - **정책 생성**: trail 로그에서 최소 allow-list 자동 생성.
 
-모든 명령은 bash 프록시(`llm-rail <id> bash "<cmd>"`)를 거치며, 정책을 적용하고 모든 실행을 기록한다.
+모든 명령은 bash 프록시(`lrail <id> bash "<cmd>"`)를 거치며, 정책을 적용하고 모든 실행을 기록한다.
 
 ### 검증 게이트
 
@@ -183,36 +183,36 @@ assertions:
 ### 설치
 
 ```bash
-npm install llm-rail
+npm install lrail
 ```
 
 ### Claude Code 플러그인으로
 
 ```bash
-claude install llm-rail
+claude install lrail
 ```
 
-프로젝트에서 `/llm-rail:init`을 실행하면 워크플로우 세팅과 `CLAUDE.md` 등록이 완료된다.
+프로젝트에서 `/lrail:init`을 실행하면 워크플로우 세팅과 `CLAUDE.md` 등록이 완료된다.
 
 ### 사용법
 
 ```bash
 # 워크플로우 인스턴스 생성
-llm-rail create code-review --param target=src/
+lrail wf code-review create --param target=src/
 
 # start → 검증 → 다음 스텝, 반복
-llm-rail 0321-143022 start
-llm-rail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
+lrail 0321-143022 start
+lrail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
 
 # 정책이 적용되는 bash 프록시로 명령 실행
-llm-rail 0321-143022 bash 'git diff --stat'
+lrail 0321-143022 bash 'git diff --stat'
 
 # 진행 상황 확인
-llm-rail 0321-143022 status
+lrail 0321-143022 status
 
 # 정책 관리
-llm-rail policy check code-review --command 'curl https://api.example.com'
-llm-rail policy generate 0321-143022 --workflow code-review
+lrail wf code-review policy check --command 'curl https://api.example.com'
+lrail 0321-143022 policy generate
 ```
 
 ---
@@ -223,13 +223,13 @@ Claude Code 플러그인으로 설치하면 CLI를 직접 다룰 필요가 없�
 
 | 스킬 | 설명 |
 |---|---|
-| `/llm-rail:init` | 프로젝트에 llm-rail 세팅 |
-| `/llm-rail:design` | 자연어로 작업 설명 → 검증 가능한 YAML 워크플로우 생성 |
-| `/llm-rail:run` | 엔드투엔드 실행 — 단일 Haiku 에이전트가 전체 스텝을 순차 실행 |
-| `/llm-rail:audit` | 기존 워크플로우의 품질 개선 분석 |
-| `/llm-rail:status` | 실행 중인 워크플로우 상태 확인 |
+| `/lrail:init` | 프로젝트에 lrail 세팅 |
+| `/lrail:design` | 자연어로 작업 설명 → 검증 가능한 YAML 워크플로우 생성 |
+| `/lrail:run` | 엔드투엔드 실행 — 단일 Haiku 에이전트가 전체 스텝을 순차 실행 |
+| `/lrail:review` | 시험 실행 + 분석 — 문제 검출, 수정 제안, 정책 생성 |
+| `/lrail:status` | 실행 중인 워크플로우 상태 확인 |
 
-### `/llm-rail:run` 실행 시
+### `/lrail:run` 실행 시
 
 ```
 오케스트레이터 (메인 에이전트)

@@ -1,3 +1,4 @@
 node_modules/
+dist/
 .llm-rail/
 test-e2e-tmp/

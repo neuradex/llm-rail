@@ -109,6 +109,12 @@ assertions:
 
 Use `script` for comparison logic that can't be expressed with built-in operators (e.g., comparing against baseline metrics from a previous step).
 
+**Logging**: Script execution results (stdout, stderr, exit code) are automatically recorded as `script_assertion` events in the instance audit log (`audit.jsonl`). Use `lrail <id> query` or read the log file directly to inspect results:
+
+```jsonl
+{"event":"script_assertion","step_id":"synthesize","data":{"logs":[{"field":"ratio","command":"...","exit_code":0,"stdout":"...","stderr":""}]}}
+```
+
 ### When to use which
 
 - **validation**: structure checks (is it an array? does it have required fields?)

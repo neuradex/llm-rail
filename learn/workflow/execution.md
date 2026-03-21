@@ -48,7 +48,7 @@ Use this instead of running shell commands directly. The bash proxy:
 5. Run **next** to submit
 6. If rejected, read the error, fix your output, and resubmit
 7. If `next` outputs a new step prompt, repeat from step 2
-8. If `next` outputs "Workflow completed", you are done — report what you accomplished
+8. If `next` outputs "Workflow completed", **STOP IMMEDIATELY** — report what you accomplished and end. Do not run any more commands.
 
 ### Rules
 

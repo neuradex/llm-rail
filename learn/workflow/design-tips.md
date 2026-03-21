@@ -137,3 +137,51 @@ Good — gate lives in the same step that produces the output:
 ```
 
 **Principle:** if a step's failure requires redoing a previous step, those steps should be merged. Wanting `reject_to` / `on_reject` is a code smell — it means the steps are poorly decomposed.
+
+### Deferred quality validation in accumulate pipelines
+
+When a pipeline collects items in one step and filters by quality in a later step, the filter renders earlier collection effort wasted. **Pull the quality gate into the accumulate step** so only qualified items enter the pool.
+
+Bad — collect first, validate quality later:
+```yaml
+- id: collect-companies
+  instruction: "Search for 100 companies"
+  accumulate:
+    companies: { key: name }
+  validation:
+    - field: companies
+      op: min_length
+      value: 100
+
+- id: find-forms
+  depends_on: collect-companies
+  instruction: "Find contact form URLs for each company"
+  # Companies without forms are wasted — we can't go back
+
+- id: extract-structure
+  depends_on: find-forms
+  instruction: "Extract form HTML structure"
+  # If 40% have no forms, we only get 60 usable results from 100 collected
+```
+
+Good — validate quality at collection time:
+```yaml
+- id: collect-companies-with-forms
+  instruction: "Find 100 companies AND verify each has a contact form before adding"
+  accumulate:
+    companies: { key: name }
+  validation:
+    - field: companies
+      op: min_length
+      value: 100
+    - field: companies
+      op: each_has
+      value: form_url
+  # Only companies with verified forms enter the pool
+
+- id: extract-structure
+  depends_on: collect-companies-with-forms
+  instruction: "Extract form HTML structure for each company's form_url"
+```
+
+**Principle:** accumulate validation is the quality gate. If a downstream step would reject or skip items from the pool, move that check into the accumulate step's validation. The pool should only contain items that are fully usable by all downstream steps.

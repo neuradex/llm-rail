@@ -1,0 +1,191 @@
+name: form-sales-automation
+version: "0.1.0"
+description: Collect Japanese companies matching target criteria, find their contact/inquiry form URLs, and extract form structure for auto-submission
+phase: draft
+
+params:
+  target_criteria:
+    type: string
+    required: true
+    description: Describes the kind of companies to find (e.g. 'Japanese B2B SaaS companies in manufacturing industry with 50-200 employees')
+  min_companies:
+    type: number
+    required: false
+    default: 100
+    description: Minimum number of companies to collect
+  search_keywords:
+    type: string
+    required: false
+    default: ""
+    description: Additional search keywords to narrow results (e.g. 'AI DX クラウド')
+
+steps:
+  - id: search-companies
+    description: Search for Japanese companies matching target criteria
+    instruction: |
+      Search the web for Japanese companies matching this criteria: {{target_criteria}}
+      {{search_keywords}}
+
+      For each company you find, collect:
+      - name: the company name (in Japanese if available, otherwise English)
+      - website_url: the company's official website URL (top page)
+      - description: a brief description of what the company does (1-2 sentences)
+      - industry: the company's primary industry/sector
+
+      Return a JSON object with a "companies" array containing the found companies.
+      Submit in batches — each submission will be merged into the pool with dedup by company name.
+      Keep searching and submitting until you have collected at least {{min_companies}} companies.
+    required_output:
+      - companies
+    accumulate:
+      companies:
+        key: name
+    validation:
+      - field: companies
+        op: type
+        value: array
+      - field: companies
+        op: min_length
+        value: "{{min_companies}}"
+        message: "Must collect at least {{min_companies}} companies"
+      - field: companies
+        op: each_has
+        value: name
+      - field: companies
+        op: each_has
+        value: website_url
+      - field: companies
+        op: each_has
+        value: description
+      - field: companies
+        op: each_has
+        value: industry
+    tips:
+      - Use WebSearch to find companies matching the target criteria
+      - Try multiple search queries with different keywords to get diverse results
+      - Search in Japanese (e.g. 「製造業 BtoB SaaS 企業一覧」) for better coverage of Japanese companies
+      - Verify each company's website URL is valid and accessible using WebFetch
+      - Include a variety of companies, not just the most well-known ones
+      - Each company object must have name (string), website_url (string), description (string), industry (string)
+      - Submit batches of 10-20 companies at a time — the pool will accumulate them with dedup
+
+  - id: find-form-urls
+    description: Find contact/inquiry form URLs for each company
+    depends_on: search-companies
+    instruction: |
+      For each company in the provided list, visit their website and find the contact or inquiry form page URL.
+
+      Try these approaches in order:
+      1. Check common URL patterns: /contact, /contact-us, /inquiry, /お問い合わせ, /toiawase, /form
+      2. Visit the company homepage and look for links containing keywords like "contact", "inquiry", "お問い合わせ", "問い合わせ", "get in touch", "フォーム"
+      3. Check the website footer or navigation menu for contact links
+      4. Search for "[company name] お問い合わせフォーム" or "[company name] contact form"
+
+      For each company, provide:
+      - company_name: the company name (must match the name from the companies list)
+      - website_url: the company's website URL
+      - form_url: the URL of the contact/inquiry form page (set to null if not found)
+      - discovery_method: how the form was found (e.g. "direct URL pattern /contact", "link in footer", "navigation menu", "web search", "not found")
+
+      Submit results in batches — each submission will be merged into the pool with dedup by company_name.
+    context_in:
+      companies: "{search-companies.companies}"
+    required_output:
+      - form_results
+    accumulate:
+      form_results:
+        key: company_name
+    validation:
+      - field: form_results
+        op: type
+        value: array
+      - field: form_results
+        op: min_length
+        value: "{{min_companies}}"
+        message: "Must have form results for at least {{min_companies}} companies"
+      - field: form_results
+        op: each_has
+        value: company_name
+      - field: form_results
+        op: each_has
+        value: website_url
+      - field: form_results
+        op: each_has
+        value: form_url
+      - field: form_results
+        op: each_has
+        value: discovery_method
+    tips:
+      - Use WebFetch to visit each company's website and check for contact form URLs
+      - Always try the direct URL pattern first (e.g. website_url + "/contact") before crawling
+      - Japanese company sites often use /お問い合わせ or /toiawase or /contact as form paths
+      - Set form_url to null (not an empty string) if no contact form is found
+      - Some companies use external form services (e.g. Google Forms, Typeform) — include those URLs too
+      - Submit batches of 10-20 results at a time
+
+  - id: extract-form-structure
+    description: Extract form HTML structure (fields, action URL, method) for auto-submission
+    depends_on: find-form-urls
+    instruction: |
+      For each company that has a non-null form_url in the provided form_results, visit the form page and extract the HTML form structure.
+
+      For each form, extract:
+      - company_name: the company name
+      - form_url: the form page URL
+      - fields: an array of form field objects, each containing:
+        - name: the field's name attribute
+        - type: the field's type (text, email, tel, textarea, select, radio, checkbox, hidden, etc.)
+        - required: boolean indicating if the field is required
+        - label: the human-readable label for the field (in Japanese if applicable)
+        - options: for select/radio/checkbox fields, an array of option values (omit for other types)
+      - action_url: the form's action attribute URL (resolve relative URLs to absolute)
+      - method: the form's HTTP method (GET or POST, default POST if not specified)
+      - encoding: the form's enctype if specified (e.g. multipart/form-data, application/x-www-form-urlencoded)
+      - notes: any relevant notes about the form (e.g. "CAPTCHA present", "JavaScript-rendered", "multi-step form")
+
+      Skip companies where form_url is null.
+
+      Submit results in batches — each submission will be merged into the pool with dedup by company_name.
+    context_in:
+      form_results: "{find-form-urls.form_results}"
+    required_output:
+      - form_data
+    accumulate:
+      form_data:
+        key: company_name
+    validation:
+      - field: form_data
+        op: type
+        value: array
+      - field: form_data
+        op: min_length
+        value: 1
+        message: "Must extract at least 1 form structure"
+      - field: form_data
+        op: each_has
+        value: company_name
+      - field: form_data
+        op: each_has
+        value: form_url
+      - field: form_data
+        op: each_has
+        value: fields
+      - field: form_data
+        op: each_has
+        value: action_url
+      - field: form_data
+        op: each_has
+        value: method
+    tips:
+      - Use WebFetch to retrieve the form page HTML
+      - Parse the HTML to find <form> elements and extract field information
+      - If a page has multiple forms, extract the one that is a contact/inquiry form (not search or login forms)
+      - Resolve relative action URLs to absolute URLs based on the form page URL
+      - If the form appears to be JavaScript-rendered (empty form body), note this in the notes field
+      - Common Japanese form fields include: 会社名 (company name), お名前 (name), メールアドレス (email), 電話番号 (phone), お問い合わせ内容 (inquiry content)
+      - For hidden fields, include them as they are often needed for form submission (CSRF tokens, etc.)
+      - If CAPTCHA is detected, note it — such forms cannot be auto-submitted
+      - Submit batches of 5-10 results at a time
+
+policy:
+  mode: trail

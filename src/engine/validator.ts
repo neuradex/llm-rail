@@ -184,8 +184,9 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
     // The command receives the field value as FIELD_VALUE env var and
     // the full step output as CONTEXT env var (set by caller via runAssertions).
     const cmd = String(expected);
+    const label = `[script:${field}]`;
     try {
-      execFileSync("sh", ["-c", cmd], {
+      const stdout = execFileSync("sh", ["-c", cmd], {
         encoding: "utf-8",
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe"],
@@ -194,9 +195,20 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
           FIELD_VALUE: JSON.stringify(value),
         },
       });
+      if (stdout.trim()) {
+        console.error(`${label} stdout:\n${stdout.trimEnd()}`);
+      }
+      console.error(`${label} PASS`);
     } catch (e: unknown) {
-      const err = e as { stderr?: string; status?: number };
+      const err = e as { stdout?: string; stderr?: string; status?: number };
+      if (err.stdout?.trim()) {
+        console.error(`${label} stdout:\n${err.stdout.trimEnd()}`);
+      }
+      if (err.stderr?.trim()) {
+        console.error(`${label} stderr:\n${err.stderr.trimEnd()}`);
+      }
       const msg = err.stderr?.trim() || `script exited with code ${err.status || 1}`;
+      console.error(`${label} FAIL (exit ${err.status || 1})`);
       return `Field '${field}': script assertion failed — ${msg}`;
     }
     return null;

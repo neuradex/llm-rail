@@ -1,0 +1,238 @@
+name: stock-screening
+version: "0.1.0"
+description: Japanese semiconductor stock screening & investment analysis report
+params:
+  market:
+    type: string
+    required: false
+    default: "Japan"
+    description: Target market for stock screening
+  sector:
+    type: string
+    required: false
+    default: "semiconductor"
+    description: Target sector
+  company_count:
+    type: number
+    required: false
+    default: 20
+    description: Number of companies to screen
+policy:
+  mode: trail
+steps:
+  - id: collect-companies
+    description: "Search for {{company_count}} {{sector}}-related listed companies in the {{market}} market. Collect company name, ticker symbol, and exchange for each."
+    required_output:
+      - companies
+    validation:
+      - field: companies
+        op: type
+        value: array
+      - field: companies
+        op: min_length
+        value: 20
+        message: "Must collect at least 20 companies"
+      - field: companies
+        op: each_has
+        value: ticker
+      - field: companies
+        op: each_has
+        value: company_name
+    tips:
+      - Use WebSearch to find semiconductor-related listed companies in the target market
+      - Include fabless, foundry, equipment, and materials companies
+      - Ensure ticker symbols are in the correct format for the exchange (e.g., 6723.T for Tokyo)
+
+  - id: collect-financials
+    description: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
+    depends_on: collect-companies
+    context_in:
+      companies: "{collect-companies.companies}"
+    required_output:
+      - financials
+    validation:
+      - field: financials
+        op: type
+        value: array
+      - field: financials
+        op: each_has
+        value: ticker
+      - field: financials
+        op: each_has
+        value: per
+      - field: financials
+        op: each_has
+        value: roe
+    tips:
+      - Use WebSearch to find financial data from Yahoo Finance, Google Finance, or similar sources
+      - PER (Price-to-Earnings Ratio) should be trailing twelve months
+      - ROE should be in percentage form (e.g., 15 means 15%)
+      - If a metric is unavailable, set it to null rather than guessing
+
+  - id: screen-candidates
+    description: "Apply quantitative screening: PER ≤ 15 AND ROE ≥ 10%. Separate into candidates and filtered_out."
+    depends_on: collect-financials
+    context_in:
+      financials: "{collect-financials.financials}"
+    required_output:
+      - candidates
+      - filtered_out
+      - criteria
+    validation:
+      - field: candidates
+        op: type
+        value: array
+      - field: candidates
+        op: not_empty
+        message: "At least one candidate must pass screening"
+      - field: filtered_out
+        op: type
+        value: array
+      - field: criteria
+        op: type
+        value: object
+    assertions:
+      - field: candidates
+        op: each_has
+        value: ticker
+      - field: candidates
+        op: each_has
+        value: per
+      - field: candidates
+        op: each_has
+        value: roe
+    tips:
+      - Apply filters strictly — do not round or approximate
+      - Companies with null PER or ROE should go to filtered_out
+      - Include the filter criteria used in the criteria field
+
+  - id: news-analysis
+    description: "For each candidate, collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
+    depends_on: screen-candidates
+    context_in:
+      candidates: "{screen-candidates.candidates}"
+    required_output:
+      - analyses
+    validation:
+      - field: analyses
+        op: type
+        value: array
+      - field: analyses
+        op: each_has
+        value: ticker
+      - field: analyses
+        op: each_has
+        value: risks
+      - field: analyses
+        op: each_has
+        value: sentiment
+    tips:
+      - Use WebSearch to find recent news for each candidate company
+      - Focus on news from the last 3 months
+      - Sentiment must be one of positive, neutral, negative
+      - Risk factors should be specific (e.g., "customer concentration — 60% revenue from single client") not generic
+
+  - id: comparison-matrix
+    description: "Build a competitive comparison matrix with all candidates on uniform dimensions."
+    depends_on:
+      - screen-candidates
+      - news-analysis
+    context_in:
+      candidates: "{screen-candidates.candidates}"
+      analyses: "{news-analysis.analyses}"
+    required_output:
+      - matrix
+      - dimensions
+    validation:
+      - field: matrix
+        op: type
+        value: array
+      - field: matrix
+        op: not_empty
+      - field: dimensions
+        op: type
+        value: array
+      - field: dimensions
+        op: min_length
+        value: 3
+        message: "Compare on at least 3 dimensions"
+    tips:
+      - Dimensions should include both quantitative (PER, ROE, market_cap) and qualitative (sentiment, risk level) factors
+      - Ensure every candidate appears in the matrix with values for all dimensions
+      - Normalize numeric dimensions to comparable scales if needed
+
+  - id: scoring
+    description: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
+    depends_on: comparison-matrix
+    context_in:
+      matrix: "{comparison-matrix.matrix}"
+      analyses: "{news-analysis.analyses}"
+    required_output:
+      - scored_candidates
+    validation:
+      - field: scored_candidates
+        op: type
+        value: array
+      - field: scored_candidates
+        op: each_has
+        value: ticker
+      - field: scored_candidates
+        op: each_has
+        value: score
+      - field: scored_candidates
+        op: each_has
+        value: bull_case
+      - field: scored_candidates
+        op: each_has
+        value: bear_case
+    tips:
+      - Score should reflect a weighted combination of financial metrics, sentiment, and risk factors
+      - Bull case: specific upside catalysts, not generic optimism
+      - Bear case: specific downside risks, not generic pessimism
+      - Be explicit about scoring methodology
+
+  - id: portfolio-recommendation
+    description: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
+    depends_on: scoring
+    context_in:
+      scored_candidates: "{scoring.scored_candidates}"
+    required_output:
+      - allocations
+      - total_weight
+      - reasoning
+      - disclaimer
+    validation:
+      - field: allocations
+        op: type
+        value: array
+      - field: allocations
+        op: not_empty
+      - field: allocations
+        op: each_has
+        value: ticker
+      - field: allocations
+        op: each_has
+        value: weight
+      - field: allocations
+        op: each_has
+        value: rationale
+      - field: reasoning
+        op: type
+        value: string
+      - field: reasoning
+        op: min_length
+        value: 50
+      - field: disclaimer
+        op: type
+        value: string
+        message: "Must include investment risk disclaimer"
+    assertions:
+      - field: total_weight
+        op: eq
+        value: 100
+        message: "Allocation weights must sum to exactly 100"
+    tips:
+      - Allocate based on score ranking but consider diversification
+      - Each allocation must have a specific rationale, not just "high score"
+      - Reasoning should explain the overall portfolio strategy
+      - Disclaimer must state this is not financial advice

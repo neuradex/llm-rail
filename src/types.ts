@@ -141,9 +141,18 @@ export interface AuditEntry {
 
 // ── Validation Result ──
 
+export interface ScriptLog {
+  field: string;
+  command: string;
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+}
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+  script_logs?: ScriptLog[];
 }
 
 // ── Hooks ──

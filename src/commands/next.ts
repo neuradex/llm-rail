@@ -98,6 +98,14 @@ export function runNext(id: string, resultJson: string): void {
   if (currentStep.assertions) {
     const mergedData: Record<string, unknown> = { ...state.context };
     const assertResult = runAssertions(currentStep.assertions, mergedData);
+
+    // Log script assertion results to audit log
+    if (assertResult.script_logs) {
+      appendLog(state.workflow_name, state.id, "script_assertion", currentStep.id, {
+        logs: assertResult.script_logs,
+      });
+    }
+
     if (!assertResult.valid) {
       appendLog(state.workflow_name, state.id, "assertion_failed", currentStep.id, { errors: assertResult.errors });
       // Revert step completion

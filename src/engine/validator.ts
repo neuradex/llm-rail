@@ -1,7 +1,11 @@
 import { execFileSync } from "node:child_process";
-import type { StepDef, AssertionRule, AssertionOp, ValidationResult } from "../types.js";
+import type { StepDef, AssertionRule, AssertionOp, ValidationResult, ScriptLog } from "../types.js";
 
 type OpHandler = (value: unknown, expected: unknown, field: string) => string | null;
+
+// Side-channel for script op to push logs during execution.
+// Collected by runAssertions and included in ValidationResult.
+let _scriptLogs: ScriptLog[] = [];
 
 const opHandlers: Record<AssertionOp, OpHandler> = {
   exists: (_value, _expected, _field) => null, // handled by required check
@@ -184,7 +188,6 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
     // The command receives the field value as FIELD_VALUE env var and
     // the full step output as CONTEXT env var (set by caller via runAssertions).
     const cmd = String(expected);
-    const label = `[script:${field}]`;
     try {
       const stdout = execFileSync("sh", ["-c", cmd], {
         encoding: "utf-8",
@@ -195,20 +198,18 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
           FIELD_VALUE: JSON.stringify(value),
         },
       });
-      if (stdout.trim()) {
-        console.error(`${label} stdout:\n${stdout.trimEnd()}`);
-      }
-      console.error(`${label} PASS`);
+      _scriptLogs.push({ field, command: cmd, exit_code: 0, stdout: stdout.trimEnd(), stderr: "" });
     } catch (e: unknown) {
       const err = e as { stdout?: string; stderr?: string; status?: number };
-      if (err.stdout?.trim()) {
-        console.error(`${label} stdout:\n${err.stdout.trimEnd()}`);
-      }
-      if (err.stderr?.trim()) {
-        console.error(`${label} stderr:\n${err.stderr.trimEnd()}`);
-      }
-      const msg = err.stderr?.trim() || `script exited with code ${err.status || 1}`;
-      console.error(`${label} FAIL (exit ${err.status || 1})`);
+      const exitCode = err.status || 1;
+      _scriptLogs.push({
+        field,
+        command: cmd,
+        exit_code: exitCode,
+        stdout: (err.stdout || "").trimEnd(),
+        stderr: (err.stderr || "").trimEnd(),
+      });
+      const msg = err.stderr?.trim() || `script exited with code ${exitCode}`;
       return `Field '${field}': script assertion failed — ${msg}`;
     }
     return null;
@@ -321,6 +322,7 @@ export function runAssertions(
   const prevContext = process.env.CONTEXT;
   if (hasScript) {
     process.env.CONTEXT = JSON.stringify(data);
+    _scriptLogs = [];
   }
 
   try {
@@ -345,5 +347,10 @@ export function runAssertions(
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  const result: ValidationResult = { valid: errors.length === 0, errors };
+  if (_scriptLogs.length > 0) {
+    result.script_logs = [..._scriptLogs];
+    _scriptLogs = [];
+  }
+  return result;
 }

@@ -572,6 +572,27 @@ describe("script assertions", () => {
     assert.ok(!runAssertions(rules, { count: 3 }).valid);
   });
 
+  it("returns script_logs in ValidationResult", () => {
+    const rules = [{ field: "x", op: "script" as const, value: "echo hello" }];
+    const result = runAssertions(rules, { x: 1 });
+    assert.ok(result.valid);
+    assert.ok(result.script_logs);
+    assert.equal(result.script_logs!.length, 1);
+    assert.equal(result.script_logs![0].field, "x");
+    assert.equal(result.script_logs![0].exit_code, 0);
+    assert.equal(result.script_logs![0].stdout, "hello");
+  });
+
+  it("returns script_logs on failure with stderr", () => {
+    const rules = [{ field: "x", op: "script" as const, value: "echo debug; echo 'bad' >&2; exit 1" }];
+    const result = runAssertions(rules, { x: 1 });
+    assert.ok(!result.valid);
+    assert.ok(result.script_logs);
+    assert.equal(result.script_logs![0].exit_code, 1);
+    assert.equal(result.script_logs![0].stdout, "debug");
+    assert.equal(result.script_logs![0].stderr, "bad");
+  });
+
   it("receives CONTEXT env var with full data", () => {
     const rules = [
       {

@@ -1,0 +1,363 @@
+name: optimize
+version: "0.1.0"
+description: "Optimize an existing workflow across 4 measurable metrics: programmatic ratio, execution time, validation failure count, and minimum passing model tier."
+phase: draft
+params:
+  workflow_name:
+    type: string
+    required: true
+    description: Name of the workflow to optimize
+  target_variant:
+    type: string
+    required: false
+    description: "Variant to optimize (omit for base workflow)"
+policy:
+  mode: trail
+steps:
+  # Step 1: Baseline measurement
+  # Run the target workflow with 3 model tiers in parallel, measure 4 metrics.
+  - id: baseline
+    description: Measure baseline metrics across 3 model tiers
+    instruction: |
+      Run the workflow '{{workflow_name}}' three times with different model tiers (Haiku, Sonnet, Opus) and measure these 4 metrics for each run:
+
+      1. **programmatic_ratio**: count of programmatic steps / total steps (from the workflow YAML)
+      2. **execution_time_sec**: total wall-clock time for the full run (seconds)
+      3. **validation_failure_count**: number of step submission rejections during the run
+      4. **min_passing_model_tier**: the lowest-cost model that completes all steps successfully (haiku=1, sonnet=2, opus=3; use 0 if all steps are programmatic)
+
+      Steps:
+      - Read the workflow YAML: `lrail wf {{workflow_name}} show`
+      - Count programmatic vs total steps for programmatic_ratio
+      - Create 3 instances and run each to completion (or note failure):
+        `lrail wf {{workflow_name}} create --param model=haiku`
+        `lrail wf {{workflow_name}} create --param model=sonnet`
+        `lrail wf {{workflow_name}} create --param model=opus`
+      - Record timing and rejection counts from the execution logs
+
+      Submit the baseline metrics. If a model tier fails to complete, set its metrics to null.
+    required_output:
+      - workflow_yaml
+      - total_steps
+      - programmatic_steps
+      - baseline_metrics
+    validation:
+      - field: workflow_yaml
+        op: type
+        value: string
+      - field: workflow_yaml
+        op: not_empty
+      - field: total_steps
+        op: type
+        value: number
+      - field: total_steps
+        op: min
+        value: 1
+      - field: programmatic_steps
+        op: type
+        value: number
+      - field: baseline_metrics
+        op: type
+        value: object
+    tips:
+      - programmatic_ratio = programmatic_steps / total_steps
+      - For execution_time_sec, measure from `start` to final `next` command
+      - validation_failure_count = number of times `next` was rejected
+      - min_passing_model_tier: if haiku completes → 1, else if sonnet → 2, else if opus → 3
+
+  # Step 2: Optimize programmatic ratio
+  # Convert agentic steps to programmatic where possible.
+  - id: optimize-programmatic
+    description: Improve programmatic ratio
+    instruction: |
+      Analyze the workflow YAML and identify agentic steps that could be converted to programmatic steps.
+
+      Current baseline:
+      - Programmatic ratio: {baseline.programmatic_steps} / {baseline.total_steps}
+      - Workflow YAML is in context
+
+      For each agentic step, evaluate:
+      - Can the output be computed deterministically from inputs? → convert to programmatic
+      - Can the step use a structured API instead of free-form search? → convert to programmatic with `actions: run`
+      - Is the step doing simple data transformation? → definitely programmatic
+
+      Produce a modified workflow YAML (as a string) with maximum programmatic steps.
+      Also produce a list of changes you made and why.
+
+      Do NOT compromise correctness — only convert steps where the programmatic version produces equivalent results.
+    depends_on: baseline
+    context_in:
+      workflow_yaml: "{baseline.workflow_yaml}"
+      total_steps: "{baseline.total_steps}"
+      programmatic_steps: "{baseline.programmatic_steps}"
+    required_output:
+      - optimized_yaml
+      - changes
+      - new_programmatic_count
+      - new_total_steps
+    validation:
+      - field: optimized_yaml
+        op: type
+        value: string
+      - field: optimized_yaml
+        op: not_empty
+      - field: changes
+        op: type
+        value: array
+      - field: new_programmatic_count
+        op: type
+        value: number
+      - field: new_total_steps
+        op: type
+        value: number
+    assertions:
+      - field: new_programmatic_count
+        op: script
+        value: |
+          echo $CONTEXT | node -e '
+            const d = JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));
+            const newRatio = d.new_programmatic_count / d.new_total_steps;
+            const oldRatio = d.programmatic_steps / d.total_steps;
+            if (newRatio < oldRatio) {
+              process.stderr.write("programmatic ratio " + newRatio.toFixed(2) + " must be >= baseline " + oldRatio.toFixed(2));
+              process.exit(1);
+            }
+          '
+        message: "Programmatic ratio must not decrease"
+    tips:
+      - Data filtering, sorting, and aggregation are good candidates for programmatic
+      - Steps that require web search or subjective judgment should stay agentic
+      - Use `actions: run` with node/python for computation steps
+
+  # Step 3: Optimize execution time
+  # Reduce unnecessary steps, merge sequential steps, minimize dependencies.
+  - id: optimize-time
+    description: Reduce execution time
+    instruction: |
+      Analyze the workflow YAML and find ways to reduce execution time:
+
+      Current baseline execution times are in context.
+
+      Strategies:
+      1. **Merge sequential steps** that don't need intermediate validation
+      2. **Reduce dependencies** to allow more parallel execution
+      3. **Simplify instructions** to reduce agent processing time
+      4. **Add tips** that help agents complete faster (specific URLs, exact formats)
+      5. **Split large agentic steps** into smaller focused ones only if it enables parallelism
+
+      Produce a modified workflow YAML optimized for speed.
+      Include the list of timing-related changes.
+    depends_on: baseline
+    context_in:
+      workflow_yaml: "{baseline.workflow_yaml}"
+      baseline_metrics: "{baseline.baseline_metrics}"
+    required_output:
+      - optimized_yaml
+      - changes
+      - estimated_improvement
+    validation:
+      - field: optimized_yaml
+        op: type
+        value: string
+      - field: optimized_yaml
+        op: not_empty
+      - field: changes
+        op: type
+        value: array
+      - field: estimated_improvement
+        op: type
+        value: string
+    tips:
+      - Parallel execution of independent steps is the biggest time win
+      - Reducing the number of agentic steps also reduces time (each agentic step has LLM overhead)
+      - Don't merge steps if the intermediate validation catches important errors
+
+  # Step 4: Reduce validation failures
+  # Improve instructions and tips to reduce rejection rate.
+  - id: optimize-validation
+    description: Reduce validation failure count
+    instruction: |
+      Analyze the workflow YAML and improve it to reduce validation failures:
+
+      Current baseline validation failure counts are in context.
+
+      Strategies:
+      1. **Improve instructions** — be more specific about expected output format
+      2. **Add examples** in tips showing exact JSON structure expected
+      3. **Simplify validation rules** — remove overly strict rules that cause false rejections
+      4. **Add format hints** — specify exact field names, types, and constraints in instruction
+      5. **Use context_in** to provide prior step outputs so agents have the data they need
+
+      Produce a modified workflow YAML that minimizes validation rejections.
+      Include the list of changes and which validation failures they address.
+    depends_on: baseline
+    context_in:
+      workflow_yaml: "{baseline.workflow_yaml}"
+      baseline_metrics: "{baseline.baseline_metrics}"
+    required_output:
+      - optimized_yaml
+      - changes
+      - targeted_failures
+    validation:
+      - field: optimized_yaml
+        op: type
+        value: string
+      - field: optimized_yaml
+        op: not_empty
+      - field: changes
+        op: type
+        value: array
+      - field: targeted_failures
+        op: type
+        value: array
+    tips:
+      - Common causes of rejection — missing required fields, wrong type, wrong field names
+      - Adding JSON examples in tips dramatically reduces first-try failures
+      - Don't remove validation rules that catch real errors — focus on making the agent succeed, not lowering the bar
+
+  # Step 5: Lower minimum passing model tier
+  # Make the workflow completable by cheaper models.
+  - id: optimize-model-tier
+    description: Lower minimum passing model tier
+    instruction: |
+      Analyze the workflow YAML and modify it so cheaper models (Haiku/Sonnet) can complete it successfully:
+
+      Current minimum passing model tier is in context (haiku=1, sonnet=2, opus=3).
+
+      Strategies:
+      1. **Simplify complex instructions** — break them into smaller, clearer directives
+      2. **Add more tips** — provide specific guidance that compensates for lower model capability
+      3. **Convert to programmatic** — steps that require high intelligence often can be scripted
+      4. **Provide more context_in** — give the agent all needed data explicitly
+      5. **Reduce reasoning requirements** — if a step needs multi-hop reasoning, provide intermediate data
+
+      Produce a modified workflow YAML that can be completed by the lowest possible model tier.
+      Include the list of changes and your assessment of which model tier should now work.
+    depends_on: baseline
+    context_in:
+      workflow_yaml: "{baseline.workflow_yaml}"
+      baseline_metrics: "{baseline.baseline_metrics}"
+    required_output:
+      - optimized_yaml
+      - changes
+      - target_model_tier
+    validation:
+      - field: optimized_yaml
+        op: type
+        value: string
+      - field: optimized_yaml
+        op: not_empty
+      - field: changes
+        op: type
+        value: array
+      - field: target_model_tier
+        op: type
+        value: number
+      - field: target_model_tier
+        op: one_of
+        value: [0, 1, 2, 3]
+    tips:
+      - Haiku struggles with multi-step reasoning and ambiguous instructions
+      - Sonnet handles most structured tasks well with clear instructions
+      - The goal is not to dumb down the workflow — it's to make it clearer
+
+  # Step 6: Synthesize and verify
+  # Combine all optimization directions into a final variant.
+  # Assert that all 4 metrics improved (or at least didn't worsen).
+  - id: synthesize
+    description: Combine optimizations into final variant
+    instruction: |
+      You have 4 directional optimizations from the previous steps. Combine them into a single optimized workflow YAML.
+
+      Inputs available in context:
+      - optimize-programmatic: improved programmatic ratio
+      - optimize-time: reduced execution time
+      - optimize-validation: fewer validation failures
+      - optimize-model-tier: lower model tier requirement
+
+      Steps:
+      1. Read all 4 optimized YAMLs and their change lists
+      2. Identify complementary changes (apply all)
+      3. Identify conflicting changes (choose the one with highest impact)
+      4. Produce a single merged YAML
+      5. Validate it with `lrail wf {{workflow_name}} validate`
+      6. Run it with `lrail wf {{workflow_name}} create` and execute to completion
+      7. Measure all 4 metrics on the result
+
+      Submit the final variant YAML and measured metrics.
+      All 4 metrics must be equal to or better than the baseline.
+    depends_on:
+      - optimize-programmatic
+      - optimize-time
+      - optimize-validation
+      - optimize-model-tier
+    context_in:
+      baseline_metrics: "{baseline.baseline_metrics}"
+      original_yaml: "{baseline.workflow_yaml}"
+      programmatic_yaml: "{optimize-programmatic.optimized_yaml}"
+      programmatic_changes: "{optimize-programmatic.changes}"
+      time_yaml: "{optimize-time.optimized_yaml}"
+      time_changes: "{optimize-time.changes}"
+      validation_yaml: "{optimize-validation.optimized_yaml}"
+      validation_changes: "{optimize-validation.changes}"
+      model_yaml: "{optimize-model-tier.optimized_yaml}"
+      model_changes: "{optimize-model-tier.changes}"
+    required_output:
+      - final_yaml
+      - final_metrics
+      - changes_applied
+      - metrics_comparison
+    validation:
+      - field: final_yaml
+        op: type
+        value: string
+      - field: final_yaml
+        op: not_empty
+      - field: final_metrics
+        op: type
+        value: object
+      - field: changes_applied
+        op: type
+        value: array
+      - field: metrics_comparison
+        op: type
+        value: object
+    assertions:
+      # All 4 metrics must not worsen compared to baseline
+      - field: final_metrics
+        op: script
+        value: |
+          echo $CONTEXT | node -e '
+            const d = JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));
+            const base = d.baseline_metrics;
+            const final_m = d.final_metrics;
+            const errors = [];
+
+            // 1. Programmatic ratio: higher is better
+            if (final_m.programmatic_ratio < base.programmatic_ratio) {
+              errors.push("programmatic_ratio " + final_m.programmatic_ratio + " < baseline " + base.programmatic_ratio);
+            }
+            // 2. Execution time: lower is better
+            if (final_m.execution_time_sec > base.execution_time_sec) {
+              errors.push("execution_time_sec " + final_m.execution_time_sec + " > baseline " + base.execution_time_sec);
+            }
+            // 3. Validation failures: lower is better
+            if (final_m.validation_failure_count > base.validation_failure_count) {
+              errors.push("validation_failure_count " + final_m.validation_failure_count + " > baseline " + base.validation_failure_count);
+            }
+            // 4. Model tier: lower is better
+            if (final_m.min_passing_model_tier > base.min_passing_model_tier) {
+              errors.push("min_passing_model_tier " + final_m.min_passing_model_tier + " > baseline " + base.min_passing_model_tier);
+            }
+
+            if (errors.length > 0) {
+              process.stderr.write("Metrics regression:\\n" + errors.join("\\n"));
+              process.exit(1);
+            }
+          '
+        message: "All 4 metrics must be equal to or better than baseline"
+    tips:
+      - When changes conflict, prefer the one with the largest metric improvement
+      - Test the merged YAML with validate before running
+      - Run with the lowest model tier first to check if it passes
+      - metrics_comparison should show before/after for each metric

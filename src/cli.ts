@@ -79,7 +79,17 @@ if (target === "docs") {
   }
 
   if (!command) {
-    console.error("Usage: lrail wf <workflow-name> <command>");
+    console.error(`Usage: lrail wf ${workflowName} <command>
+
+Commands:
+  create [--variant <v>] [--param k=v]   Create a new instance
+  validate [--variant <v>]               Validate workflow YAML
+  show [--variant <v>]                   Show workflow YAML
+  variants                               List variants
+  merge <variant> [--backup <name>]      Merge variant into base
+  list [--status <status>]               List instances
+  promote                                Suggest phase promotion
+  policy check --command '<command>'     Dry-run policy check`);
     process.exit(1);
   }
 
@@ -117,7 +127,7 @@ if (target === "docs") {
     case "merge": {
       const mergeVariant = args[3];
       if (!mergeVariant) {
-        console.error("Usage: lrail wf <name> merge <variant> [--backup <name>]");
+        console.error(`Usage: lrail wf ${workflowName} merge <variant> [--backup <name>]`);
         process.exit(1);
       }
       const backupIdx = args.indexOf("--backup");
@@ -146,25 +156,36 @@ if (target === "docs") {
         const cmdIdx = args.indexOf("--command");
         const cmd = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
         if (!cmd) {
-          console.error("Usage: lrail wf <name> policy check --command '<command>'");
+          console.error(`Usage: lrail wf ${workflowName} policy check --command '<command>'`);
           process.exit(1);
         }
         runPolicyCheck(workflowName, cmd);
       } else {
-        console.error("Usage: lrail wf <name> policy check --command '<command>'");
+        console.error(`Usage: lrail wf ${workflowName} policy check --command '<command>'`);
         process.exit(1);
       }
       break;
     }
 
     default:
-      console.error(`Unknown workflow command: ${command}`);
-      usage();
+      console.error(`Unknown command: '${command}'
+
+Usage: lrail wf ${workflowName} <command>
+
+Commands:
+  create [--variant <v>] [--param k=v]   Create a new instance
+  validate [--variant <v>]               Validate workflow YAML
+  show [--variant <v>]                   Show workflow YAML
+  variants                               List variants
+  merge <variant> [--backup <name>]      Merge variant into base
+  list [--status <status>]               List instances
+  promote                                Suggest phase promotion
+  policy check --command '<command>'     Dry-run policy check`);
+      process.exit(1);
   }
 } else {
   // --- Instance commands: lrail <alias|id> <command> ---
   const command = args[1];
-  if (!command) usage();
 
   let id: string;
   try {
@@ -175,6 +196,20 @@ if (target === "docs") {
     usage();
   }
 
+  if (!command) {
+    console.error(`Usage: lrail ${target} <command>
+
+Commands:
+  start                        Begin execution
+  next --result '<json>'       Submit step result
+  status                       Check instance status
+  query [--step <stepId>]      Query instance state
+  reset <step-id>              Reset a step
+  bash '<command>'             Execute through proxy
+  policy generate              Generate policy from trail`);
+    process.exit(1);
+  }
+
   switch (command) {
     case "start":
       runStart(id);
@@ -183,7 +218,7 @@ if (target === "docs") {
     case "next": {
       const resultIdx = args.indexOf("--result");
       if (resultIdx === -1 || !args[resultIdx + 1]) {
-        console.error("Missing --result argument");
+        console.error(`Usage: lrail ${target} next --result '<json>'`);
         process.exit(1);
       }
       runNext(id, args[resultIdx + 1]);
@@ -207,7 +242,7 @@ if (target === "docs") {
     case "reset": {
       const stepId = args[2];
       if (!stepId) {
-        console.error("Missing step-id for reset command");
+        console.error(`Usage: lrail ${target} reset <step-id>`);
         process.exit(1);
       }
       runReset(id, stepId);
@@ -217,7 +252,7 @@ if (target === "docs") {
     case "bash": {
       const bashCmd = args[2];
       if (!bashCmd) {
-        console.error("Missing command for bash");
+        console.error(`Usage: lrail ${target} bash '<command>'`);
         process.exit(1);
       }
       runBash(id, bashCmd);
@@ -229,14 +264,25 @@ if (target === "docs") {
       if (sub === "generate") {
         runPolicyGenerate(id);
       } else {
-        console.error("Usage: lrail <alias|id> policy generate");
+        console.error(`Usage: lrail ${target} policy generate`);
         process.exit(1);
       }
       break;
     }
 
     default:
-      console.error(`Unknown instance command: ${command}`);
-      usage();
+      console.error(`Unknown command: '${command}'
+
+Usage: lrail ${target} <command>
+
+Commands:
+  start                        Begin execution
+  next --result '<json>'       Submit step result
+  status                       Check instance status
+  query [--step <stepId>]      Query instance state
+  reset <step-id>              Reset a step
+  bash '<command>'             Execute through proxy
+  policy generate              Generate policy from trail`);
+      process.exit(1);
   }
 }

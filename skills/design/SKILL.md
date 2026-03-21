@@ -9,6 +9,19 @@ allowed-tools: Read, Glob, Grep, Write, Bash
 
 You are designing an lrail workflow. Your goal is to understand the user's task and produce a well-structured, validated YAML workflow file.
 
+## Process
+
+Follow the design process documented in the framework:
+
+```bash
+lrail docs workflow/design-process
+```
+
+Additionally review:
+- `lrail docs workflow/design-tips` — design principles and anti-patterns
+- `lrail docs concepts/step-types` — agentic vs programmatic, agent selection
+- `lrail docs concepts/validation` — assertion operators
+
 ## Reference Workflow
 
 Here is a reference workflow for style and structure:
@@ -17,40 +30,13 @@ Here is a reference workflow for style and structure:
 !`cat ${CLAUDE_PLUGIN_ROOT}/workflows/code-review.yml`
 ```
 
-## Process
+## Steps
 
-1. **Understand the task**: Read $ARGUMENTS and ask clarifying questions if the goal is ambiguous. Identify the inputs (params), processing steps, and expected outputs.
-
-   If you need to review lrail concepts (step types, validation, policy, phases), run:
-   ```bash
-   lrail docs concepts/<topic>
-   ```
-   Available topics: `step-types`, `validation`, `actions`, `policy`, `phases`
-
-2. **Propose step breakdown**: Before writing YAML, outline the steps:
-   - What each step produces
-   - Which steps should be **programmatic** (deterministic: API calls, file ops, data transforms) vs **agentic** (needs LLM judgment: analysis, review, summarization)
-   - Data flow between steps
-   - Which steps can run in parallel
-
-   Present this to the user and get confirmation before proceeding.
-
-3. **Write the YAML**: Create the workflow file in `workflows/<name>.yml` following these rules:
-   - Each step has ONE clear deliverable
-   - Use `type: programmatic` for steps that don't need LLM judgment — they run faster and cost nothing
-   - Use `type: agentic` (or omit type) for steps that need LLM reasoning
-   - `required_output` only includes fields consumed downstream or as final output
-   - Use `validation` for structural checks (type, length, emptiness)
-   - Use `assertions` for business logic checks (value ranges, allowed values)
-   - Use `context_in` for ALL cross-step data references (no implicit merge)
-   - Write specific, actionable `tips` (tools, APIs, pitfalls)
-   - Use `{{param}}` in descriptions for clarity
-   - Set `depends_on` only for actual data dependencies
-   - Add `policy` if the workflow involves shell commands (start with `mode: trail`)
-
-4. **Validate**: Run `lrail wf <workflow-name> validate` and fix any errors.
-
-5. **Report**: Show the final YAML and validation result to the user.
+1. **Understand the task**: Read $ARGUMENTS. If the goal is ambiguous, state your assumptions and proceed.
+2. **Propose step breakdown**: Outline steps, types, and data flow. Present to user for confirmation.
+3. **Write the YAML**: Save to `workflows/<name>.yml`.
+4. **Validate**: Run `lrail wf <name> validate` and fix any errors.
+5. **Report**: Show the final YAML and validation result.
 
 ## Output Location
 

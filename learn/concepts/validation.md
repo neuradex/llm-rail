@@ -53,6 +53,7 @@ assertions:
 | `one_of` | Value in list | array |
 | `each_has` | Every array item has field | field name |
 | `verify_source` | Fetch URL, check per-field snippets exist | `{ url_field, field_snippets }` |
+| `script` | Run shell command, exit 0 = pass | shell command string |
 
 ### verify_source — anti-fabrication guard
 
@@ -82,6 +83,31 @@ Verification order:
 2. **URL fetch** — CLI fetches the URL once and checks all snippets exist in the page body
 
 **Note**: Adds network latency to validation (one HTTP request per array item). Use only on steps where data integrity is critical.
+
+### script — custom validation via shell
+
+Run arbitrary shell commands as assertion gates. The command receives:
+- `FIELD_VALUE` env var: JSON value of the field being validated
+- `CONTEXT` env var: full step output data as JSON (assertions only)
+
+Exit code 0 = pass, non-zero = fail. stderr is used as the error message.
+
+```yaml
+assertions:
+  - field: ratio
+    op: script
+    value: |
+      echo $CONTEXT | python3 -c "
+        import sys, json
+        d = json.load(sys.stdin)
+        if d['ratio'] <= d['baseline_ratio']:
+          print('ratio must improve over baseline', file=sys.stderr)
+          sys.exit(1)
+      "
+    message: "Optimization must improve programmatic ratio"
+```
+
+Use `script` for comparison logic that can't be expressed with built-in operators (e.g., comparing against baseline metrics from a previous step).
 
 ### When to use which
 

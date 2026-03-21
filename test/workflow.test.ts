@@ -1155,3 +1155,55 @@ describe("mixed step types", () => {
     assert.equal(state.status, "error");
   });
 });
+
+// ── accumulate validation ──
+
+describe("accumulate config validation", () => {
+  it("accepts valid accumulate config", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        {
+          id: "s1",
+          instruction: "Collect items",
+          required_output: ["items"],
+          accumulate: { items: { key: "name" } },
+        },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
+  });
+
+  it("rejects accumulate on programmatic step", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        {
+          id: "s1",
+          type: "programmatic",
+          actions: [{ run: "echo '{}'" }],
+          accumulate: { items: { key: "name" } },
+        },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("cannot use accumulate")));
+  });
+
+  it("rejects accumulate field without key", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        {
+          id: "s1",
+          instruction: "Collect",
+          required_output: ["items"],
+          accumulate: { items: { key: "" } },
+        },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("must have a 'key'")));
+  });
+});

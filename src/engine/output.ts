@@ -41,6 +41,21 @@ export function formatStepStart(
     }
   }
 
+  // Show pool status for accumulate steps
+  if (step.accumulate) {
+    const pool = state.steps[step.id]?.output;
+    if (pool) {
+      lines.push("");
+      lines.push("Pool (accumulated so far):");
+      for (const [field, config] of Object.entries(step.accumulate)) {
+        const arr = Array.isArray(pool[field]) ? pool[field] as unknown[] : [];
+        lines.push(`  ${field}: ${arr.length} items (dedupe key: ${config.key})`);
+      }
+    }
+    lines.push("");
+    lines.push("MODE: accumulate — submit a batch, it will be merged into the pool. Repeat until validation passes.");
+  }
+
   lines.push(
     "",
     `>>> NEXT ACTION: ${instruction}`,
@@ -70,19 +85,25 @@ export function formatRejection(
   const fields = (step.required_output || []).join(", ");
   const exampleResult = buildExampleResult(step);
 
+  const isAccumulate = !!step.accumulate;
+  const header = isAccumulate ? "NOT YET COMPLETE — keep submitting batches" : "SUBMISSION REJECTED";
+  const action = isAccumulate ? "CONTINUE" : "RETRY";
+
   const lines: string[] = [
     SEPARATOR,
-    "SUBMISSION REJECTED",
+    header,
     "",
     "Errors:",
     ...errors.map((e) => `  - ${e}`),
     "",
     `Required output fields: ${fields}`,
     "",
-    `>>> RETRY: ${step.instruction || step.description}`,
+    `>>> ${action}: ${step.instruction || step.description}`,
     `    lrail ${state.alias || state.id} next --result '${exampleResult}'`,
     "",
-    "!!! WARNING: Submit ALL required fields or submission will be rejected.",
+    isAccumulate
+      ? "Submit your next batch. It will be merged into the pool with deduplication."
+      : "!!! WARNING: Submit ALL required fields or submission will be rejected.",
     SEPARATOR,
   ];
   return lines.join("\n");

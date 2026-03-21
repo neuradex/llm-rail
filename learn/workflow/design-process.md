@@ -20,6 +20,7 @@ Before writing YAML, outline each step:
 - **Programmatic** (deterministic: API calls, file ops, data transforms) vs **agentic** (needs LLM judgment: analysis, review, summarization)
 - Data flow — which step's output does each step consume? (context_in)
 - Parallelism — which steps are independent? (depends_on)
+- **Scale sensitivity** — if a param controls volume (e.g., `min_companies`), design the step to handle the full range. Use `accumulate` for large collections instead of single-shot submission.
 
 See `lrail docs workflow/design-tips` for design principles and anti-patterns.
 
@@ -51,6 +52,9 @@ steps:
     context_in:
       local_name: "{stepId.field}"
     tips: [<actionable instructions>]
+    accumulate:                            # for incremental collection
+      <field>:
+        key: <dedupe field>
     actions:                               # required for programmatic
       - run: <shell command>
         extract:

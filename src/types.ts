@@ -65,6 +65,10 @@ export interface ParamDef {
   validation?: AssertionRule[];
 }
 
+export interface AccumulateFieldConfig {
+  key: string;
+}
+
 export interface StepDef {
   id: string;
   type?: "programmatic" | "agentic";
@@ -78,6 +82,7 @@ export interface StepDef {
   context_in?: Record<string, string>;
   meta?: Record<string, unknown>;
   actions?: ActionDef[];
+  accumulate?: Record<string, AccumulateFieldConfig>;
 }
 
 export interface WorkflowDef {

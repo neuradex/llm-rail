@@ -36,7 +36,7 @@ function usage(): never {
   lrail <alias|id> status                             Check instance status
   lrail <alias|id> query [--step <stepId>]            Query instance state
   lrail <alias|id> reset <step-id>                    Reset a step
-  lrail <alias|id> log [step-id]                      Show audit log
+  lrail <alias|id> log [step-id] [-f]                  Show audit log (-f to follow)
   lrail <alias|id> bash '<command>'                   Execute through proxy
   lrail <alias|id> policy generate                    Generate policy from trail`);
   process.exit(1);
@@ -239,7 +239,7 @@ Commands:
   status                       Check instance status
   query [--step <stepId>]      Query instance state
   reset <step-id>              Reset a step
-  log [step-id]                Show audit log
+  log [step-id] [-f]           Show audit log (-f to follow)
   bash '<command>'             Execute through proxy
   policy generate              Generate policy from trail`);
     process.exit(1);
@@ -295,8 +295,9 @@ Commands:
     }
 
     case "log": {
-      const stepId = args[2]; // optional step filter
-      runLog(id, stepId);
+      const followFlag = args.includes("-f") || args.includes("--follow");
+      const stepId = args.find((a, i) => i >= 2 && a !== "-f" && a !== "--follow");
+      runLog(id, stepId, followFlag);
       break;
     }
 
@@ -322,7 +323,7 @@ Commands:
   status                       Check instance status
   query [--step <stepId>]      Query instance state
   reset <step-id>              Reset a step
-  log [step-id]                Show audit log
+  log [step-id] [-f]           Show audit log (-f to follow)
   bash '<command>'             Execute through proxy
   policy generate              Generate policy from trail`);
       process.exit(1);

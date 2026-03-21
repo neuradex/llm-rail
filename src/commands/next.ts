@@ -8,7 +8,7 @@ import { collectStepOutputs } from "../engine/context.js";
 import { executeActions } from "../engine/actions.js";
 import { advanceThrough } from "../engine/runner.js";
 import { nowISO } from "../util.js";
-import type { WorkflowDef, InstanceState } from "../types.js";
+import type { WorkflowDef, InstanceState, AccumulateFieldConfig } from "../types.js";
 
 export function runNext(id: string, resultJson: string): void {
   const state = loadInstance(id);
@@ -35,10 +35,26 @@ export function runNext(id: string, resultJson: string): void {
     process.exit(1);
   }
 
+  // Accumulate mode: merge new output into existing pool
+  if (currentStep.accumulate) {
+    const existing = state.steps[currentStep.id].output || {};
+    output = mergeAccumulate(existing, output, currentStep.accumulate);
+  }
+
   // Validate step output (validation rules)
   const result = validateStepOutput(currentStep, output);
 
   if (!result.valid) {
+    // In accumulate mode: save progress, show pool status, and stay in step
+    if (currentStep.accumulate) {
+      state.steps[currentStep.id].output = output;
+      saveInstance(state);
+      const poolStatus = formatPoolStatus(output, currentStep.accumulate);
+      appendLog(state.workflow_name, state.id, "step_rejected", currentStep.id, { errors: result.errors, pool: poolStatus });
+      console.log(formatRejection(state, currentStep, result.errors));
+      console.log(`\nPool status: ${poolStatus}`);
+      process.exit(1);
+    }
     appendLog(state.workflow_name, state.id, "step_rejected", currentStep.id, { errors: result.errors });
     fireHook(
       makeHookPayload("step:rejected", state.id, state.workflow_name, currentStep.id, {
@@ -157,4 +173,56 @@ export function runNext(id: string, resultJson: string): void {
     console.error(message);
     process.exit(1);
   }
+}
+
+function mergeAccumulate(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+  config: Record<string, AccumulateFieldConfig>,
+): Record<string, unknown> {
+  const merged = { ...existing };
+
+  for (const [field, fieldConfig] of Object.entries(config)) {
+    const existingArr = Array.isArray(merged[field]) ? (merged[field] as Record<string, unknown>[]) : [];
+    const incomingArr = Array.isArray(incoming[field]) ? (incoming[field] as Record<string, unknown>[]) : [];
+
+    // Build set of existing keys for dedup
+    const seen = new Set<unknown>();
+    for (const item of existingArr) {
+      seen.add(item[fieldConfig.key]);
+    }
+
+    // Append only new items
+    const deduped = [...existingArr];
+    for (const item of incomingArr) {
+      const keyVal = item[fieldConfig.key];
+      if (!seen.has(keyVal)) {
+        seen.add(keyVal);
+        deduped.push(item);
+      }
+    }
+
+    merged[field] = deduped;
+  }
+
+  // Overwrite non-accumulate fields
+  for (const [field, value] of Object.entries(incoming)) {
+    if (!(field in config)) {
+      merged[field] = value;
+    }
+  }
+
+  return merged;
+}
+
+function formatPoolStatus(
+  output: Record<string, unknown>,
+  config: Record<string, AccumulateFieldConfig>,
+): string {
+  const parts: string[] = [];
+  for (const field of Object.keys(config)) {
+    const arr = Array.isArray(output[field]) ? output[field] : [];
+    parts.push(`${field}: ${(arr as unknown[]).length} items`);
+  }
+  return parts.join(", ");
 }

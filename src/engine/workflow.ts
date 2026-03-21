@@ -60,6 +60,18 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
 
     const stepType = step.type || "agentic";
 
+    // Validate accumulate config
+    if (step.accumulate) {
+      if (stepType === "programmatic") {
+        errors.push(`Programmatic step '${step.id}' cannot use accumulate`);
+      }
+      for (const [field, config] of Object.entries(step.accumulate)) {
+        if (!config.key) {
+          errors.push(`Step '${step.id}' accumulate field '${field}' must have a 'key' for deduplication`);
+        }
+      }
+    }
+
     if (stepType === "programmatic") {
       // programmatic: actions required, description/required_output optional
       if (!Array.isArray(step.actions) || step.actions.length === 0) {

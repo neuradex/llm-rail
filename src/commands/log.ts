@@ -4,36 +4,83 @@ import { loadInstance } from "../engine/state.js";
 import { instanceDir } from "../audit/logger.js";
 import type { AuditEntry } from "../types.js";
 
-export function runLog(instanceId: string, stepFilter?: string): void {
+export function runLog(instanceId: string, stepFilter?: string, follow?: boolean): void {
   const state = loadInstance(instanceId);
   const dir = instanceDir(state.workflow_name, instanceId);
   const logPath = path.resolve(dir, "audit.jsonl");
 
   if (!fs.existsSync(logPath)) {
     console.log("No audit log found for this instance.");
-    return;
+    if (!follow) return;
+    // In follow mode, wait for the file to appear
   }
 
-  const lines = fs.readFileSync(logPath, "utf-8").trim().split("\n");
-  const entries: AuditEntry[] = lines.map((l) => JSON.parse(l));
-
-  const filtered = stepFilter
-    ? entries.filter((e) => e.step_id === stepFilter || !e.step_id)
-    : entries;
-
-  if (filtered.length === 0) {
-    console.log("No log entries found.");
-    return;
+  // Print existing entries
+  let printedLines = 0;
+  if (fs.existsSync(logPath)) {
+    const content = fs.readFileSync(logPath, "utf-8").trim();
+    if (content) {
+      const lines = content.split("\n");
+      for (const line of lines) {
+        const entry: AuditEntry = JSON.parse(line);
+        if (stepFilter && entry.step_id !== stepFilter && entry.step_id) continue;
+        printEntry(entry);
+      }
+      printedLines = lines.length;
+    }
   }
 
-  for (const entry of filtered) {
-    const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "");
-    const step = entry.step_id ? ` [${entry.step_id}]` : "";
-    const icon = eventIcon(entry.event);
-    const detail = formatDetail(entry);
+  if (!follow) return;
 
-    console.log(`${time}  ${icon} ${entry.event}${step}${detail}`);
-  }
+  // Follow mode: watch for new lines
+  let lastSize = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
+
+  const watcher = fs.watchFile(logPath, { interval: 500 }, () => {
+    if (!fs.existsSync(logPath)) return;
+    const stat = fs.statSync(logPath);
+    if (stat.size <= lastSize) return;
+
+    // Read only the new bytes
+    const fd = fs.openSync(logPath, "r");
+    const buf = Buffer.alloc(stat.size - lastSize);
+    fs.readSync(fd, buf, 0, buf.length, lastSize);
+    fs.closeSync(fd);
+    lastSize = stat.size;
+
+    const newContent = buf.toString("utf-8").trim();
+    if (!newContent) return;
+
+    for (const line of newContent.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const entry: AuditEntry = JSON.parse(line);
+        if (stepFilter && entry.step_id !== stepFilter && entry.step_id) continue;
+        printEntry(entry);
+
+        // Stop following when workflow completes
+        if (entry.event === "workflow_completed" || entry.event === "workflow_error") {
+          fs.unwatchFile(logPath);
+          process.exit(0);
+        }
+      } catch {
+        // skip malformed lines
+      }
+    }
+  });
+
+  // Handle Ctrl+C
+  process.on("SIGINT", () => {
+    fs.unwatchFile(logPath);
+    process.exit(0);
+  });
+}
+
+function printEntry(entry: AuditEntry): void {
+  const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "");
+  const step = entry.step_id ? ` [${entry.step_id}]` : "";
+  const icon = eventIcon(entry.event);
+  const detail = formatDetail(entry);
+  console.log(`${time}  ${icon} ${entry.event}${step}${detail}`);
 }
 
 function eventIcon(event: string): string {

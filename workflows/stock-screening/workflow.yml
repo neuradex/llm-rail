@@ -22,7 +22,8 @@ policy:
   mode: trail
 steps:
   - id: collect-companies
-    description: "Search for {{company_count}} {{sector}}-related listed companies in the {{market}} market. Collect company name, ticker symbol, and exchange for each."
+    description: Collect listed companies
+    instruction: "Search for {{company_count}} {{sector}}-related listed companies in the {{market}} market. Collect company name, ticker symbol, and exchange for each."
     required_output:
       - companies
     validation:
@@ -45,7 +46,8 @@ steps:
       - Ensure ticker symbols are in the correct format for the exchange (e.g., 6723.T for Tokyo)
 
   - id: collect-financials
-    description: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
+    description: Collect financial metrics
+    instruction: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
     depends_on: collect-companies
     context_in:
       companies: "{collect-companies.companies}"
@@ -147,7 +149,8 @@ steps:
           candidates_count: candidates_count
 
   - id: news-analysis
-    description: "For each candidate (or nearest-miss if no candidates passed screening), collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
+    description: Analyze recent news and sentiment
+    instruction: "For each candidate (or nearest-miss if no candidates passed screening), collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
     depends_on: screen-candidates
     context_in:
       candidates: "{screen-candidates.candidates}"
@@ -176,7 +179,8 @@ steps:
       - Risk factors should be specific (e.g., "customer concentration — 60% revenue from single client") not generic
 
   - id: comparison-matrix
-    description: "Build a competitive comparison matrix with all candidates on uniform dimensions."
+    description: Build comparison matrix
+    instruction: "Build a competitive comparison matrix with all candidates on uniform dimensions."
     depends_on:
       - screen-candidates
       - news-analysis
@@ -208,7 +212,8 @@ steps:
       - Normalize numeric dimensions to comparable scales if needed
 
   - id: scoring
-    description: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
+    description: Score candidates
+    instruction: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
     depends_on: comparison-matrix
     context_in:
       matrix: "{comparison-matrix.matrix}"
@@ -238,7 +243,8 @@ steps:
       - Be explicit about scoring methodology
 
   - id: portfolio-recommendation
-    description: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
+    description: Portfolio recommendation
+    instruction: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
     depends_on: scoring
     context_in:
       scored_candidates: "{scoring.scored_candidates}"

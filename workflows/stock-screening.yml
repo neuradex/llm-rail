@@ -1,6 +1,7 @@
 name: stock-screening
-version: "0.1.0"
+version: "0.2.0"
 description: Japanese semiconductor stock screening & investment analysis report
+phase: dev
 params:
   market:
     type: string
@@ -21,7 +22,8 @@ policy:
   mode: trail
 steps:
   - id: collect-companies
-    description: "Search for {{company_count}} {{sector}}-related listed companies in the {{market}} market. Collect company name, ticker symbol, and exchange for each."
+    description: Collect listed companies
+    instruction: "Search for {{company_count}} {{sector}}-related listed companies in the {{market}} market. Collect company name, ticker symbol, and exchange for each."
     required_output:
       - companies
     validation:
@@ -44,7 +46,8 @@ steps:
       - Ensure ticker symbols are in the correct format for the exchange (e.g., 6723.T for Tokyo)
 
   - id: collect-financials
-    description: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
+    description: Collect financial metrics
+    instruction: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
     depends_on: collect-companies
     context_in:
       companies: "{collect-companies.companies}"
@@ -55,6 +58,10 @@ steps:
         op: type
         value: array
       - field: financials
+        op: min_length
+        value: 15
+        message: "Must collect financials for at least 15 companies"
+      - field: financials
         op: each_has
         value: ticker
       - field: financials
@@ -63,54 +70,92 @@ steps:
       - field: financials
         op: each_has
         value: roe
+      - field: financials
+        op: each_has
+        value: source_url
+      - field: financials
+        op: each_has
+        value: per_snippet
+      - field: financials
+        op: each_has
+        value: roe_snippet
+      - field: financials
+        op: verify_source
+        value:
+          url_field: source_url
+          field_snippets:
+            per: per_snippet
+            roe: roe_snippet
+        message: "Financial data source could not be verified — snippets must contain the claimed values and be found at the provided URL"
     tips:
-      - Use WebSearch to find financial data from Yahoo Finance, Google Finance, or similar sources
+      - Use WebSearch to look up each ticker on StockAnalysis.com (e.g., stockanalysis.com/quote/tyo/6723/)
+      - Yahoo Finance (finance.yahoo.com) is an alternative source
       - PER (Price-to-Earnings Ratio) should be trailing twelve months
       - ROE should be in percentage form (e.g., 15 means 15%)
       - If a metric is unavailable, set it to null rather than guessing
+      - NEVER fabricate financial data — every number must come from a verifiable source
+      - You MUST include source_url, per_snippet, and roe_snippet for each company
+      - per_snippet: verbatim text excerpt from the source page containing the PER value
+      - roe_snippet: verbatim text excerpt from the source page containing the ROE value
+      - Each snippet can be from a different section of the same page
 
   - id: screen-candidates
+    type: programmatic
     description: "Apply quantitative screening: PER ≤ 15 AND ROE ≥ 10%. Separate into candidates and filtered_out."
     depends_on: collect-financials
     context_in:
       financials: "{collect-financials.financials}"
-    required_output:
-      - candidates
-      - filtered_out
-      - criteria
-    validation:
-      - field: candidates
-        op: type
-        value: array
-      - field: candidates
-        op: not_empty
-        message: "At least one candidate must pass screening"
-      - field: filtered_out
-        op: type
-        value: array
-      - field: criteria
-        op: type
-        value: object
-    assertions:
-      - field: candidates
-        op: each_has
-        value: ticker
-      - field: candidates
-        op: each_has
-        value: per
-      - field: candidates
-        op: each_has
-        value: roe
-    tips:
-      - Apply filters strictly — do not round or approximate
-      - Companies with null PER or ROE should go to filtered_out
-      - Include the filter criteria used in the criteria field
+    actions:
+      - run: |
+          node -e '
+            const data = JSON.parse(process.env.CONTEXT);
+            const financials = data.financials;
+            const criteria = { per_max: 15, roe_min: 10 };
+            const candidates = [];
+            const filtered_out = [];
+            for (const f of financials) {
+              const per = typeof f.per === "string" ? parseFloat(f.per) : f.per;
+              const roe = typeof f.roe === "string" ? parseFloat(f.roe) : f.roe;
+              if (per != null && roe != null && per > 0 && per <= criteria.per_max && roe >= criteria.roe_min) {
+                candidates.push({ ...f, per, roe });
+              } else {
+                const reasons = [];
+                if (per == null || per < 0) reasons.push("PER is null or negative (loss-making)");
+                else if (per > criteria.per_max) reasons.push("PER " + per + " > " + criteria.per_max);
+                if (roe == null) reasons.push("ROE is null");
+                else if (roe < criteria.roe_min) reasons.push("ROE " + roe + "% < " + criteria.roe_min + "%");
+                filtered_out.push({ ...f, per, roe, reason: reasons.join(", ") });
+              }
+            }
+            // If no candidates pass, include nearest-miss companies sorted by distance to criteria
+            let nearest_miss = [];
+            if (candidates.length === 0) {
+              nearest_miss = filtered_out
+                .filter(f => f.per != null && f.per > 0 && f.roe != null)
+                .map(f => ({
+                  ...f,
+                  distance: Math.max(0, f.per - criteria.per_max) + Math.max(0, criteria.roe_min - f.roe)
+                }))
+                .sort((a, b) => a.distance - b.distance)
+                .slice(0, 5);
+            }
+            console.log(JSON.stringify({ candidates, filtered_out, nearest_miss, criteria, candidates_count: candidates.length }));
+          '
+        extract:
+          candidates: candidates
+          filtered_out: filtered_out
+          nearest_miss: nearest_miss
+          criteria: criteria
+          candidates_count: candidates_count
 
   - id: news-analysis
-    description: "For each candidate, collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
+    description: Analyze recent news and sentiment
+    instruction: "For each candidate (or nearest-miss if no candidates passed screening), collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
     depends_on: screen-candidates
     context_in:
       candidates: "{screen-candidates.candidates}"
+      nearest_miss: "{screen-candidates.nearest_miss}"
+      candidates_count: "{screen-candidates.candidates_count}"
     required_output:
       - analyses
     validation:
@@ -127,18 +172,22 @@ steps:
         op: each_has
         value: sentiment
     tips:
-      - Use WebSearch to find recent news for each candidate company
+      - If candidates_count is 0, analyze the nearest_miss companies instead
+      - Use WebSearch to find recent news for each company
       - Focus on news from the last 3 months
       - Sentiment must be one of positive, neutral, negative
       - Risk factors should be specific (e.g., "customer concentration — 60% revenue from single client") not generic
 
   - id: comparison-matrix
-    description: "Build a competitive comparison matrix with all candidates on uniform dimensions."
+    description: Build comparison matrix
+    instruction: "Build a competitive comparison matrix with all candidates on uniform dimensions."
     depends_on:
       - screen-candidates
       - news-analysis
     context_in:
       candidates: "{screen-candidates.candidates}"
+      nearest_miss: "{screen-candidates.nearest_miss}"
+      candidates_count: "{screen-candidates.candidates_count}"
       analyses: "{news-analysis.analyses}"
     required_output:
       - matrix
@@ -157,12 +206,14 @@ steps:
         value: 3
         message: "Compare on at least 3 dimensions"
     tips:
+      - If candidates_count is 0, use nearest_miss companies for the matrix
       - Dimensions should include both quantitative (PER, ROE, market_cap) and qualitative (sentiment, risk level) factors
       - Ensure every candidate appears in the matrix with values for all dimensions
       - Normalize numeric dimensions to comparable scales if needed
 
   - id: scoring
-    description: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
+    description: Score candidates
+    instruction: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
     depends_on: comparison-matrix
     context_in:
       matrix: "{comparison-matrix.matrix}"
@@ -192,10 +243,12 @@ steps:
       - Be explicit about scoring methodology
 
   - id: portfolio-recommendation
-    description: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
+    description: Portfolio recommendation
+    instruction: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
     depends_on: scoring
     context_in:
       scored_candidates: "{scoring.scored_candidates}"
+      candidates_count: "{screen-candidates.candidates_count}"
     required_output:
       - allocations
       - total_weight
@@ -232,6 +285,7 @@ steps:
         value: 100
         message: "Allocation weights must sum to exactly 100"
     tips:
+      - If candidates_count is 0, clearly state that no companies met the screening criteria and these are nearest-miss recommendations
       - Allocate based on score ranking but consider diversification
       - Each allocation must have a specific rationale, not just "high score"
       - Reasoning should explain the overall portfolio strategy

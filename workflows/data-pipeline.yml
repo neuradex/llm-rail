@@ -13,7 +13,8 @@ params:
     description: 出力フォーマット
 steps:
   - id: fetch
-    description: "{{source}} からデータを取得"
+    description: データ取得
+    instruction: "{{source}} からデータを取得"
     required_output:
       - raw_data
       - record_count
@@ -36,6 +37,7 @@ steps:
 
   - id: transform
     description: データ変換・クレンジング
+    instruction: データ変換・クレンジング
     depends_on: fetch
     context_in:
       data: "{fetch.raw_data}"
@@ -61,7 +63,8 @@ steps:
         message: ドロップされたレコードが多すぎます
 
   - id: report
-    description: "{{format}} 形式でレポート生成"
+    description: レポート生成
+    instruction: "{{format}} 形式でレポート生成"
     depends_on: transform
     context_in:
       data: "{transform.transformed_data}"

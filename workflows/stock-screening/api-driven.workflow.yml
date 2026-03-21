@@ -23,7 +23,7 @@ steps:
         extract:
           companies: companies
   - id: collect-financials
-    description: "Fetch financials from {{api_endpoint}} for each company"
+    instruction: "Fetch financials from {{api_endpoint}} for each company"
     tips:
       - Use the provided API endpoint instead of web search
       - Rate limit is 5 requests per minute

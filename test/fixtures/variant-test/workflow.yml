@@ -1,0 +1,47 @@
+name: variant-test
+version: "1.0"
+description: Base workflow for variant testing
+phase: dev
+params:
+  target:
+    type: string
+    required: true
+  count:
+    type: number
+    default: 10
+context:
+  env: production
+steps:
+  - id: collect
+    description: Collect data for {{target}}
+    required_output:
+      - items
+    validation:
+      - field: items
+        op: type
+        value: array
+      - field: items
+        op: min_length
+        value: 1
+    tips:
+      - Use WebSearch for data collection
+      - Check multiple sources
+
+  - id: analyze
+    description: Analyze collected data
+    depends_on: collect
+    required_output:
+      - result
+      - score
+    validation:
+      - field: score
+        op: between
+        value: [0, 100]
+
+  - id: report
+    description: Generate final report
+    depends_on: analyze
+    required_output:
+      - summary
+policy:
+  mode: trail

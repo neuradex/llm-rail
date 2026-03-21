@@ -3,15 +3,19 @@ import * as path from "node:path";
 import type { InstanceState, WorkflowDef } from "../types.js";
 import { generateId, nowISO, saveYaml, loadYaml, ensureDir } from "../util.js";
 import { instanceDir } from "../audit/logger.js";
+import { generateAlias, collectExistingAliases, resolveAlias } from "./alias.js";
 
 const STATE_DIR = ".llm-rail";
 
 export function createInstance(
   def: WorkflowDef,
   params?: Record<string, unknown>,
+  variant?: string,
 ): InstanceState {
   const id = generateId();
   const now = nowISO();
+  const existingAliases = collectExistingAliases(path.resolve(STATE_DIR));
+  const alias = generateAlias(existingAliases);
 
   const steps: InstanceState["steps"] = {};
   for (const step of def.steps) {
@@ -20,7 +24,9 @@ export function createInstance(
 
   const state: InstanceState = {
     id,
+    alias,
     workflow_name: def.name,
+    ...(variant && { variant }),
     status: "created",
     created_at: now,
     updated_at: now,
@@ -33,15 +39,34 @@ export function createInstance(
   const dir = instanceDir(def.name, id);
   ensureDir(dir);
   saveYaml(path.resolve(dir, "state.yaml"), state);
+  fs.writeFileSync(path.resolve(dir, "alias"), alias, "utf-8");
   return state;
 }
 
-export function loadInstance(id: string): InstanceState {
-  // Search across all workflow directories for the instance
+export function resolveInstanceId(idOrAlias: string): string {
   const baseDir = path.resolve(STATE_DIR);
-  if (!fs.existsSync(baseDir)) {
-    throw new Error(`Instance not found: ${id}`);
+
+  // Try direct ID first
+  if (fs.existsSync(baseDir)) {
+    for (const workflowDir of fs.readdirSync(baseDir)) {
+      const dirPath = path.resolve(baseDir, workflowDir);
+      if (!fs.statSync(dirPath).isDirectory()) continue;
+      if (fs.existsSync(path.resolve(dirPath, idOrAlias, "state.yaml"))) {
+        return idOrAlias;
+      }
+    }
   }
+
+  // Try alias resolution
+  const resolved = resolveAlias(baseDir, idOrAlias);
+  if (resolved) return resolved;
+
+  throw new Error(`Instance not found: ${idOrAlias}`);
+}
+
+export function loadInstance(idOrAlias: string): InstanceState {
+  const id = resolveInstanceId(idOrAlias);
+  const baseDir = path.resolve(STATE_DIR);
 
   for (const workflowDir of fs.readdirSync(baseDir)) {
     const dirPath = path.resolve(baseDir, workflowDir);
@@ -53,7 +78,7 @@ export function loadInstance(id: string): InstanceState {
     }
   }
 
-  throw new Error(`Instance not found: ${id}`);
+  throw new Error(`Instance not found: ${idOrAlias}`);
 }
 
 export function saveInstance(state: InstanceState): void {

@@ -4,8 +4,8 @@ import { appendLog } from "../audit/logger.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
 import type { ParamDef } from "../types.js";
 
-export function runCreate(workflowName: string, rawParams?: string[]): void {
-  const def = loadWorkflow(workflowName);
+export function runCreate(workflowName: string, rawParams?: string[], variant?: string): void {
+  const def = loadWorkflow(workflowName, variant);
 
   const errors = validateWorkflowDef(def);
   if (errors.length > 0) {
@@ -17,15 +17,16 @@ export function runCreate(workflowName: string, rawParams?: string[]): void {
   // Parse and validate params
   const params = parseParams(rawParams || [], def.params);
 
-  const state = createInstance(def, params);
-  appendLog(def.name, state.id, "created", undefined, { workflow_name: def.name, params });
+  const state = createInstance(def, params, variant);
+  appendLog(def.name, state.id, "created", undefined, { workflow_name: def.name, params, variant });
 
   // Fire hook
   fireHook(makeHookPayload("workflow:created", state.id, def.name));
 
   // Output
-  const lines: string[] = [`Instance created: ${state.id}`];
+  const lines: string[] = [`Instance created: ${state.alias} (${state.id})`];
   lines.push(`Workflow: ${def.name}`);
+  if (variant) lines.push(`Variant: ${variant}`);
   if (Object.keys(params).length > 0) {
     const paramStr = Object.entries(params)
       .map(([k, v]) => `${k}=${v}`)

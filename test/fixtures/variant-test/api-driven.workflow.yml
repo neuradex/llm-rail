@@ -1,0 +1,32 @@
+extends: base
+variant: api-driven
+description: "API-driven variant. Uses direct API calls instead of web search."
+params:
+  api_endpoint:
+    type: string
+    required: true
+  count:
+    type: number
+    default: 20
+context:
+  env: staging
+  api_version: v2
+steps:
+  - id: collect
+    type: programmatic
+    actions:
+      - run: "curl -s {{api_endpoint}}/items"
+        extract:
+          items: items
+    validation:
+      - field: items
+        op: type
+        value: array
+      - field: items
+        op: min_length
+        value: 5
+  - id: extra-step
+    description: Extra processing step
+    depends_on: analyze
+    required_output:
+      - extra_data

@@ -2,13 +2,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { WorkflowDef, StepDef } from "../types.js";
 import { loadYaml } from "../util.js";
+import { resolveWorkflowPath, loadVariant, mergeVariant } from "./variant.js";
 
-export function loadWorkflow(name: string): WorkflowDef {
-  const filePath = path.resolve("workflows", `${name}.yml`);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Workflow file not found: ${filePath}`);
+export function loadWorkflow(name: string, variant?: string): WorkflowDef {
+  const { basePath } = resolveWorkflowPath(name);
+  const base = loadYaml<WorkflowDef>(basePath);
+
+  if (variant) {
+    const variantDef = loadVariant(name, variant);
+    return mergeVariant(base, variantDef);
   }
-  return loadYaml<WorkflowDef>(filePath);
+
+  return base;
 }
 
 /** Normalize depends_on to always be an array */
@@ -17,10 +22,26 @@ export function normalizeDeps(dep?: string | string[]): string[] {
   return Array.isArray(dep) ? dep : [dep];
 }
 
+const RESERVED_NAMES = new Set([
+  "list", "learn", "help", "version",
+]);
+
 export function validateWorkflowDef(def: WorkflowDef): string[] {
   const errors: string[] = [];
 
   if (!def.name) errors.push("Workflow must have a name");
+  if (def.name && RESERVED_NAMES.has(def.name)) {
+    errors.push(`Workflow name '${def.name}' is reserved and cannot be used`);
+  }
+  if (def.name && /^\d{4}-\d{6}$/.test(def.name)) {
+    errors.push(`Workflow name '${def.name}' looks like an instance ID and cannot be used`);
+  }
+
+  // Phase validation
+  const phase = def.phase || "draft";
+  if (def.phase && !["draft", "dev", "stable"].includes(def.phase)) {
+    errors.push(`Invalid phase '${def.phase}'. Must be 'draft', 'verified', or 'locked'`);
+  }
   if (!Array.isArray(def.steps) || def.steps.length === 0) {
     errors.push("Workflow must have at least one step");
     return errors;
@@ -98,6 +119,13 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
       if (!["string", "number", "boolean"].includes(paramDef.type)) {
         errors.push(`Param '${name}' has invalid type '${paramDef.type}'`);
       }
+    }
+  }
+
+  // Phase-specific constraints
+  if (phase === "stable") {
+    if (!def.policy || def.policy.mode !== "enforce") {
+      errors.push(`Stable workflow must have policy mode 'enforce'`);
     }
   }
 

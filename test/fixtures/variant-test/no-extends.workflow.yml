@@ -1,0 +1,7 @@
+variant: broken
+description: This variant is missing extends field
+steps:
+  - id: collect
+    description: Override
+    required_output:
+      - items

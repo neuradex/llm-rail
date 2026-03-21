@@ -1,0 +1,29 @@
+extends: base
+variant: api-driven
+description: "StockAnalysis API指定。Haiku可、rate limit 5req/min"
+params:
+  api_endpoint:
+    type: string
+    required: true
+    description: StockAnalysis API endpoint URL
+steps:
+  - id: collect-companies
+    type: programmatic
+    actions:
+      - run: |
+          node -e '
+            const endpoint = process.env.CONTEXT ? JSON.parse(process.env.CONTEXT).api_endpoint : "https://api.example.com";
+            console.log(JSON.stringify({
+              companies: [
+                { ticker: "6723.T", company_name: "Renesas Electronics", exchange: "TSE" },
+                { ticker: "6857.T", company_name: "Advantest", exchange: "TSE" }
+              ]
+            }));
+          '
+        extract:
+          companies: companies
+  - id: collect-financials
+    description: "Fetch financials from {{api_endpoint}} for each company"
+    tips:
+      - Use the provided API endpoint instead of web search
+      - Rate limit is 5 requests per minute

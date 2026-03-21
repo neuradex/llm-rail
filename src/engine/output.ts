@@ -43,7 +43,7 @@ export function formatStepStart(
   lines.push(
     "",
     `>>> NEXT ACTION: ${description}`,
-    `    llm-rail ${state.id} next --result '${exampleResult}'`,
+    `    lrail ${state.alias || state.id} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Submit ALL required fields or submission will be rejected.",
   );
@@ -79,7 +79,7 @@ export function formatRejection(
     `Required output fields: ${fields}`,
     "",
     `>>> RETRY: ${step.description}`,
-    `    llm-rail ${state.id} next --result '${exampleResult}'`,
+    `    lrail ${state.alias || state.id} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Submit ALL required fields or submission will be rejected.",
     SEPARATOR,
@@ -99,11 +99,10 @@ export function formatCompletion(state: InstanceState): string {
 
 export function formatStatus(def: WorkflowDef, state: InstanceState): string {
   const lines: string[] = [
-    `Workflow: ${state.workflow_name} (${state.id})`,
-    `Status: ${state.status}`,
-    "",
-    "Steps:",
+    `Workflow: ${state.workflow_name} (${state.alias || state.id})`,
   ];
+  if (state.variant) lines.push(`Variant: ${state.variant}`);
+  lines.push(`Status: ${state.status}`, "", "Steps:");
 
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i];

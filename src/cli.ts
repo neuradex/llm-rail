@@ -4,85 +4,176 @@ import { runNext } from "./commands/next.js";
 import { runStatus } from "./commands/status.js";
 import { runQuery } from "./commands/query.js";
 import { runReset } from "./commands/reset.js";
-import { runList } from "./commands/list.js";
+import { runList, runListWorkflows } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck } from "./commands/policy.js";
+import { runPromote } from "./commands/promote.js";
+import { runDocs } from "./commands/docs.js";
+import { runShow } from "./commands/show.js";
+import { runVariants } from "./commands/variants.js";
+import { runMerge } from "./commands/merge.js";
+import { resolveInstanceId } from "./engine/state.js";
 
 const args = process.argv.slice(2);
 
 function usage(): never {
   console.error(`Usage:
-  llm-rail create <workflow-name> [--param k=v ...]
-  llm-rail <id> start
-  llm-rail <id> next --result '<json>'
-  llm-rail <id> status
-  llm-rail <id> query [--step <stepId>]
-  llm-rail <id> reset <step-id>
-  llm-rail <id> bash '<command>'
-  llm-rail list [--status <status>]
-  llm-rail validate <workflow-name>
-  llm-rail policy generate <id> --workflow <name>
-  llm-rail policy check <workflow-name> --command '<command>'`);
+  lrail docs [topic]                                  Browse documentation
+  lrail wf list                                       List all workflows
+  lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
+  lrail wf <name> validate [--variant <v>]            Validate workflow YAML
+  lrail wf <name> show [--variant <v>]                Show workflow YAML
+  lrail wf <name> variants                            List variants
+  lrail wf <name> merge <variant> [--backup <name>]   Merge variant into base
+  lrail wf <name> list [--status <status>]             List instances
+  lrail wf <name> promote                             Suggest phase promotion
+  lrail wf <name> policy check --command '<command>'  Dry-run policy check
+  lrail <alias|id> start                              Begin execution
+  lrail <alias|id> next --result '<json>'             Submit step result
+  lrail <alias|id> status                             Check instance status
+  lrail <alias|id> query [--step <stepId>]            Query instance state
+  lrail <alias|id> reset <step-id>                    Reset a step
+  lrail <alias|id> bash '<command>'                   Execute through proxy
+  lrail <alias|id> policy generate                    Generate policy from trail`);
   process.exit(1);
 }
 
-if (args.length < 1) usage();
+function banner(): void {
+  const v = process.env.npm_package_version || "0.1.0";
+  console.log(`
+  ───── LLM Rail ─────
+   Track & Guardrail  v${v}
 
-const first = args[0];
+  lrail docs [topic]           Browse documentation
+  lrail wf list                List workflows
+  lrail wf <name> create       Create a new instance
+  lrail wf <name> variants     List variants
+  lrail <alias> start          Begin execution
 
-if (first === "create") {
+  Run 'lrail docs' to get started.
+`);
+}
+
+if (args.length < 1) {
+  banner();
+  process.exit(0);
+}
+
+const target = args[0];
+
+// --- Global commands ---
+if (target === "docs") {
+  runDocs(args.slice(1).join("/"));
+} else if (target === "help" || target === "--help") {
+  usage();
+} else if (target === "wf") {
+  // --- Workflow commands: lrail wf <name> <command> ---
   const workflowName = args[1];
-  if (!workflowName) usage();
-  // Parse --param flags
-  const params: string[] = [];
-  for (let i = 2; i < args.length; i++) {
-    if (args[i] === "--param" && args[i + 1]) {
-      params.push(args[i + 1]);
-      i++;
-    }
+  const command = args[2];
+
+  // lrail wf / lrail wf list — list all workflows
+  if (!workflowName || (workflowName === "list" && !command)) {
+    runListWorkflows();
+    process.exit(0);
   }
-  runCreate(workflowName, params);
-} else if (first === "list") {
-  let statusFilter: string | undefined;
-  const statusIdx = args.indexOf("--status");
-  if (statusIdx !== -1 && args[statusIdx + 1]) {
-    statusFilter = args[statusIdx + 1];
+
+  if (!command) {
+    console.error("Usage: lrail wf <workflow-name> <command>");
+    process.exit(1);
   }
-  runList(statusFilter);
-} else if (first === "validate") {
-  const workflowName = args[1];
-  if (!workflowName) usage();
-  runValidate(workflowName);
-} else if (first === "policy") {
-  const subcommand = args[1];
-  if (subcommand === "generate") {
-    const instanceId = args[2];
-    const wfIdx = args.indexOf("--workflow");
-    const workflowName = wfIdx !== -1 ? args[wfIdx + 1] : undefined;
-    if (!instanceId || !workflowName) {
-      console.error("Usage: llm-rail policy generate <id> --workflow <name>");
-      process.exit(1);
+
+  // Parse --variant flag (shared across subcommands)
+  const variantIdx = args.indexOf("--variant");
+  const variantFlag = variantIdx !== -1 ? args[variantIdx + 1] : undefined;
+
+  switch (command) {
+    case "create": {
+      const params: string[] = [];
+      for (let i = 3; i < args.length; i++) {
+        if (args[i] === "--param" && args[i + 1]) {
+          params.push(args[i + 1]);
+          i++;
+        } else if (args[i] === "--variant") {
+          i++; // skip value, already parsed
+        }
+      }
+      runCreate(workflowName, params, variantFlag);
+      break;
     }
-    runPolicyGenerate(instanceId, workflowName);
-  } else if (subcommand === "check") {
-    const workflowName = args[2];
-    const cmdIdx = args.indexOf("--command");
-    const command = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
-    if (!workflowName || !command) {
-      console.error("Usage: llm-rail policy check <workflow-name> --command '<command>'");
-      process.exit(1);
+
+    case "validate":
+      runValidate(workflowName, variantFlag);
+      break;
+
+    case "show":
+      runShow(workflowName, variantFlag);
+      break;
+
+    case "variants":
+      runVariants(workflowName);
+      break;
+
+    case "merge": {
+      const mergeVariant = args[3];
+      if (!mergeVariant) {
+        console.error("Usage: lrail wf <name> merge <variant> [--backup <name>]");
+        process.exit(1);
+      }
+      const backupIdx = args.indexOf("--backup");
+      const backupName = backupIdx !== -1 ? args[backupIdx + 1] : undefined;
+      runMerge(workflowName, mergeVariant, backupName);
+      break;
     }
-    runPolicyCheck(workflowName, command);
-  } else {
-    usage();
+
+    case "promote":
+      runPromote(workflowName);
+      break;
+
+    case "list": {
+      let statusFilter: string | undefined;
+      const statusIdx = args.indexOf("--status");
+      if (statusIdx !== -1 && args[statusIdx + 1]) {
+        statusFilter = args[statusIdx + 1];
+      }
+      runList(workflowName, statusFilter);
+      break;
+    }
+
+    case "policy": {
+      const sub = args[3];
+      if (sub === "check") {
+        const cmdIdx = args.indexOf("--command");
+        const cmd = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
+        if (!cmd) {
+          console.error("Usage: lrail wf <name> policy check --command '<command>'");
+          process.exit(1);
+        }
+        runPolicyCheck(workflowName, cmd);
+      } else {
+        console.error("Usage: lrail wf <name> policy check --command '<command>'");
+        process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown workflow command: ${command}`);
+      usage();
   }
 } else {
-  // first arg is instance ID
-  const id = first;
+  // --- Instance commands: lrail <alias|id> <command> ---
   const command = args[1];
-
   if (!command) usage();
+
+  let id: string;
+  try {
+    id = resolveInstanceId(target);
+  } catch {
+    console.error(`Unknown command or instance: '${target}'`);
+    console.error("Use 'lrail wf <name> create' to create a new instance.");
+    usage();
+  }
 
   switch (command) {
     case "start":
@@ -133,8 +224,19 @@ if (first === "create") {
       break;
     }
 
+    case "policy": {
+      const sub = args[2];
+      if (sub === "generate") {
+        runPolicyGenerate(id);
+      } else {
+        console.error("Usage: lrail <alias|id> policy generate");
+        process.exit(1);
+      }
+      break;
+    }
+
     default:
-      console.error(`Unknown command: ${command}`);
+      console.error(`Unknown instance command: ${command}`);
       usage();
   }
 }

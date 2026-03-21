@@ -20,7 +20,8 @@ export type AssertionOp =
   | "not_contains"
   | "matches"
   | "one_of"
-  | "each_has";
+  | "each_has"
+  | "verify_source";
 
 export interface AssertionRule {
   field: string;
@@ -48,6 +49,10 @@ export interface PolicyDef {
   mode: "trail" | "enforce";
   rules?: PolicyRule[];
 }
+
+// ── Workflow Phase ──
+
+export type WorkflowPhase = "draft" | "dev" | "stable";
 
 // ── Workflow Definition (YAML) ──
 
@@ -77,9 +82,23 @@ export interface WorkflowDef {
   name: string;
   version?: string;
   description?: string;
+  phase?: WorkflowPhase;
   params?: Record<string, ParamDef>;
   context?: Record<string, unknown>;
   steps: StepDef[];
+  policy?: PolicyDef;
+}
+
+// ── Variant Definition ──
+
+export interface VariantDef {
+  extends: "base";
+  variant: string;
+  description?: string;
+  phase?: WorkflowPhase;
+  params?: Record<string, ParamDef>;
+  context?: Record<string, unknown>;
+  steps?: Partial<StepDef>[];
   policy?: PolicyDef;
 }
 
@@ -96,7 +115,9 @@ export interface StepState {
 
 export interface InstanceState {
   id: string;
+  alias?: string;
   workflow_name: string;
+  variant?: string;
   status: InstanceStatus;
   created_at: string;
   updated_at: string;

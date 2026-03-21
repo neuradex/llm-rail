@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import type { StepDef, AssertionRule, AssertionOp, ValidationResult } from "../types.js";
 
 type OpHandler = (value: unknown, expected: unknown, field: string) => string | null;
@@ -173,6 +174,67 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
       const item = value[i];
       if (typeof item !== "object" || item === null || !(key in item)) {
         return `Field '${field}[${i}]' must have key '${key}'`;
+      }
+    }
+    return null;
+  },
+
+  verify_source: (value, expected, field) => {
+    if (!Array.isArray(value) || typeof expected !== "object" || expected === null) return null;
+    const { url_field, field_snippets } = expected as {
+      url_field: string;
+      field_snippets: Record<string, string>;
+    };
+    if (!url_field || !field_snippets || typeof field_snippets !== "object") {
+      return `Field '${field}': verify_source requires url_field and field_snippets`;
+    }
+
+    for (let i = 0; i < value.length; i++) {
+      const item = value[i] as Record<string, unknown>;
+      if (typeof item !== "object" || item === null) continue;
+
+      const url = item[url_field];
+      if (typeof url !== "string" || !url) {
+        return `Field '${field}[${i}]' missing '${url_field}' for source verification`;
+      }
+
+      // Collect snippets to verify, checking each contains its data value
+      const snippetsToVerify: string[] = [];
+      for (const [dataField, snippetField] of Object.entries(field_snippets)) {
+        const dataVal = item[dataField];
+        if (dataVal === null || dataVal === undefined) continue; // skip null fields
+
+        const snippet = item[snippetField];
+        if (typeof snippet !== "string" || !snippet) {
+          return `Field '${field}[${i}]' missing '${snippetField}' for source verification of '${dataField}'`;
+        }
+
+        const valStr = String(dataVal);
+        if (!snippet.includes(valStr)) {
+          return `Field '${field}[${i}]': ${snippetField} does not contain ${dataField}=${valStr} — snippet must include the actual data value`;
+        }
+
+        snippetsToVerify.push(snippet);
+      }
+
+      // Fetch the URL once and check all snippets exist on the page
+      if (snippetsToVerify.length > 0) {
+        let body: string;
+        try {
+          body = execFileSync("curl", ["-sL", "--max-time", "10", url], {
+            encoding: "utf-8",
+            timeout: 15_000,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+        } catch {
+          return `Field '${field}[${i}]': failed to fetch ${url} for source verification`;
+        }
+
+        for (const snippet of snippetsToVerify) {
+          if (!body.includes(snippet)) {
+            return `Field '${field}[${i}]': snippet "${snippet.slice(0, 60)}..." not found at ${url} — data may be fabricated`;
+          }
+        }
       }
     }
     return null;

@@ -82,7 +82,7 @@ if (target === "docs") {
   if (!command) {
     console.error(`Usage: lrail wf ${workflowName} <command>
 
-Commands:
+Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>]               Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
@@ -90,7 +90,16 @@ Commands:
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
   promote                                Suggest phase promotion
-  policy check --command '<command>'     Dry-run policy check`);
+  policy check --command '<command>'     Dry-run policy check
+
+Instance commands (after 'create'):
+  lrail <alias> start                    Begin execution
+  lrail <alias> next --result '<json>'   Submit step result
+  lrail <alias> status                   Check instance status
+  lrail <alias> query [--step <stepId>]  Query instance state
+  lrail <alias> reset <step-id>          Reset a step
+  lrail <alias> bash '<command>'         Execute through proxy
+  lrail <alias> policy generate          Generate policy from trail`);
     process.exit(1);
   }
 
@@ -173,7 +182,7 @@ Commands:
 
 Usage: lrail wf ${workflowName} <command>
 
-Commands:
+Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>]               Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
@@ -181,7 +190,16 @@ Commands:
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
   promote                                Suggest phase promotion
-  policy check --command '<command>'     Dry-run policy check`);
+  policy check --command '<command>'     Dry-run policy check
+
+Instance commands (after 'create'):
+  lrail <alias> start                    Begin execution
+  lrail <alias> next --result '<json>'   Submit step result
+  lrail <alias> status                   Check instance status
+  lrail <alias> query [--step <stepId>]  Query instance state
+  lrail <alias> reset <step-id>          Reset a step
+  lrail <alias> bash '<command>'         Execute through proxy
+  lrail <alias> policy generate          Generate policy from trail`);
       process.exit(1);
   }
 } else {
@@ -207,7 +225,7 @@ Commands:
 
 Usage: lrail wf ${target} <command>
 
-Commands:
+Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>]               Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
@@ -215,7 +233,16 @@ Commands:
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
   promote                                Suggest phase promotion
-  policy check --command '<command>'     Dry-run policy check`);
+  policy check --command '<command>'     Dry-run policy check
+
+Instance commands (after 'create'):
+  lrail <alias> start                    Begin execution
+  lrail <alias> next --result '<json>'   Submit step result
+  lrail <alias> status                   Check instance status
+  lrail <alias> query [--step <stepId>]  Query instance state
+  lrail <alias> reset <step-id>          Reset a step
+  lrail <alias> bash '<command>'         Execute through proxy
+  lrail <alias> policy generate          Generate policy from trail`);
         process.exit(1);
       }
       console.error(`'${target}' is a workflow. Did you mean: lrail wf ${target} ${wfCommand}`);

@@ -179,6 +179,29 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
     return null;
   },
 
+  script: (value, expected, field) => {
+    // `value` is the field value, `expected` is the shell command to run.
+    // The command receives the field value as FIELD_VALUE env var and
+    // the full step output as CONTEXT env var (set by caller via runAssertions).
+    const cmd = String(expected);
+    try {
+      execFileSync("sh", ["-c", cmd], {
+        encoding: "utf-8",
+        timeout: 30_000,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          FIELD_VALUE: JSON.stringify(value),
+        },
+      });
+    } catch (e: unknown) {
+      const err = e as { stderr?: string; status?: number };
+      const msg = err.stderr?.trim() || `script exited with code ${err.status || 1}`;
+      return `Field '${field}': script assertion failed — ${msg}`;
+    }
+    return null;
+  },
+
   verify_source: (value, expected, field) => {
     if (!Array.isArray(value) || typeof expected !== "object" || expected === null) return null;
     const { url_field, field_snippets } = expected as {
@@ -281,19 +304,33 @@ export function runAssertions(
 ): ValidationResult {
   const errors: string[] = [];
 
-  for (const rule of rules) {
-    const value = data[rule.field];
-    if (value === undefined || value === null) {
-      if (rule.op === "exists" || rule.op === "not_empty") {
-        const msg = rule.message
-          ? `Field '${rule.field}': ${rule.message}`
-          : `Field '${rule.field}' ${rule.op === "exists" ? "must exist" : "must not be empty"}`;
-        errors.push(msg);
+  // Set CONTEXT env var for script assertions
+  const hasScript = rules.some((r) => r.op === "script");
+  const prevContext = process.env.CONTEXT;
+  if (hasScript) {
+    process.env.CONTEXT = JSON.stringify(data);
+  }
+
+  try {
+    for (const rule of rules) {
+      const value = data[rule.field];
+      if (value === undefined || value === null) {
+        if (rule.op === "exists" || rule.op === "not_empty") {
+          const msg = rule.message
+            ? `Field '${rule.field}': ${rule.message}`
+            : `Field '${rule.field}' ${rule.op === "exists" ? "must exist" : "must not be empty"}`;
+          errors.push(msg);
+        }
+        continue;
       }
-      continue;
+      const err = applyRule(rule, value);
+      if (err) errors.push(err);
     }
-    const err = applyRule(rule, value);
-    if (err) errors.push(err);
+  } finally {
+    if (hasScript) {
+      if (prevContext !== undefined) process.env.CONTEXT = prevContext;
+      else delete process.env.CONTEXT;
+    }
   }
 
   return { valid: errors.length === 0, errors };

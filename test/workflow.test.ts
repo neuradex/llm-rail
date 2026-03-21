@@ -549,6 +549,42 @@ describe("assertion ops", () => {
   });
 });
 
+// ── Script assertions ──
+
+describe("script assertions", () => {
+  it("passes when script exits 0", () => {
+    const rules = [{ field: "score", op: "script" as const, value: "exit 0" }];
+    assert.ok(runAssertions(rules, { score: 42 }).valid);
+  });
+
+  it("fails when script exits non-zero", () => {
+    const rules = [{ field: "score", op: "script" as const, value: "echo 'too low' >&2; exit 1" }];
+    const result = runAssertions(rules, { score: 42 });
+    assert.ok(!result.valid);
+    assert.ok(result.errors[0].includes("too low"));
+  });
+
+  it("receives FIELD_VALUE env var", () => {
+    const rules = [
+      { field: "count", op: "script" as const, value: "test $(echo $FIELD_VALUE) -gt 5" },
+    ];
+    assert.ok(runAssertions(rules, { count: 10 }).valid);
+    assert.ok(!runAssertions(rules, { count: 3 }).valid);
+  });
+
+  it("receives CONTEXT env var with full data", () => {
+    const rules = [
+      {
+        field: "ratio",
+        op: "script" as const,
+        value: "echo $CONTEXT | python3 -c \"import sys,json; d=json.load(sys.stdin); sys.exit(0 if d['ratio']>d['baseline_ratio'] else 1)\"",
+      },
+    ];
+    assert.ok(runAssertions(rules, { ratio: 0.8, baseline_ratio: 0.5 }).valid);
+    assert.ok(!runAssertions(rules, { ratio: 0.3, baseline_ratio: 0.5 }).valid);
+  });
+});
+
 // ── Context resolution ──
 
 describe("context resolution", () => {

@@ -21,7 +21,8 @@ export type AssertionOp =
   | "matches"
   | "one_of"
   | "each_has"
-  | "verify_source";
+  | "verify_source"
+  | "script";
 
 export interface AssertionRule {
   field: string;

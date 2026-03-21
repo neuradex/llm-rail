@@ -93,7 +93,7 @@ export function formatCompletion(state: InstanceState): string {
     SEPARATOR,
     `Workflow '${state.workflow_name}' completed.`,
     "",
-    "Task complete. Report to parent agent.",
+    "ALL STEPS DONE. STOP HERE — do not run any more commands.",
     SEPARATOR,
   ].join("\n");
 }

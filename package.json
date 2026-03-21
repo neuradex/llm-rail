@@ -5,7 +5,7 @@
   "type": "module",
   "keywords": ["claude-code-plugin", "llm", "workflow", "agent"],
   "bin": {
-    "llm-rail": "./bin/llm-rail.js"
+    "lrail": "./bin/llm-rail.js"
   },
   "files": [
     "dist/",

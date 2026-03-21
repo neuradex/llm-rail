@@ -72,9 +72,9 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
         }
       }
     } else {
-      // agentic: description + required_output required
-      if (!step.description) {
-        errors.push(`Step '${step.id}' must have a description`);
+      // agentic: instruction + required_output required, description optional
+      if (!step.instruction) {
+        errors.push(`Step '${step.id}' must have an instruction`);
       }
       if (!Array.isArray(step.required_output) || step.required_output.length === 0) {
         errors.push(`Step '${step.id}' must have at least one required_output`);

@@ -14,7 +14,7 @@ export function runNext(id: string, resultJson: string): void {
   const state = loadInstance(id);
 
   if (state.status !== "in_progress") {
-    console.error(`Workflow is not in progress (status: ${state.status}). Run 'llm-rail ${id} start' first.`);
+    console.error(`Workflow is not in progress (status: ${state.status}). Run 'lrail ${id} start' first.`);
     process.exit(1);
   }
 

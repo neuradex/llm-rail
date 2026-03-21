@@ -29,11 +29,13 @@ export function executeAction(
 ): ActionResult {
   const resolved = resolveActionCommand(action.run, context);
 
+  const contextJson = JSON.stringify(context);
   const stdout = execFileSync("sh", ["-c", resolved], {
-    input: JSON.stringify(context),
+    input: contextJson,
     encoding: "utf-8",
     timeout: 30_000,
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, CONTEXT: contextJson },
   });
 
   const extracted: Record<string, unknown> = {};

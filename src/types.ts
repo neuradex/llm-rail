@@ -68,6 +68,7 @@ export interface StepDef {
   id: string;
   type?: "programmatic" | "agentic";
   description?: string;
+  instruction?: string;
   depends_on?: string | string[];
   required_output?: string[];
   validation?: AssertionRule[];

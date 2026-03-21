@@ -4,6 +4,7 @@ import { executeActions } from "./actions.js";
 import { appendLog } from "../audit/logger.js";
 import { saveInstance } from "./state.js";
 import { nowISO } from "../util.js";
+import { buildStepContext, collectStepOutputs } from "./context.js";
 
 /**
  * Advance through consecutive programmatic steps starting from the current position.
@@ -35,7 +36,11 @@ export function advanceThrough(
 
     // Programmatic step: execute actions and auto-complete
     try {
-      const extracted = executeActions(step.actions || [], { ...state.context });
+      // Resolve context_in for programmatic steps
+      const stepOutputs = collectStepOutputs(state.steps);
+      const stepContext = buildStepContext(step, state.params || {}, stepOutputs);
+      const fullContext = { ...state.context, ...stepContext };
+      const extracted = executeActions(step.actions || [], fullContext);
 
       state.steps[step.id].status = "completed";
       state.steps[step.id].output = extracted;

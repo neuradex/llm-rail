@@ -17,7 +17,7 @@ export function resolveTemplate(
   });
 
   // {stepId.field}
-  result = result.replace(/\{(\w+)\.(\w+)\}/g, (_match, stepId: string, field: string) => {
+  result = result.replace(/\{([\w-]+)\.([\w-]+)\}/g, (_match, stepId: string, field: string) => {
     const output = stepOutputs[stepId];
     if (!output) return `{${stepId}.${field}}`;
     const val = output[field];
@@ -42,7 +42,7 @@ export function buildStepContext(
   const ctx: Record<string, unknown> = {};
   for (const [key, tmpl] of Object.entries(stepDef.context_in)) {
     // Try direct resolution for {stepId.field} → actual value (not stringified)
-    const directMatch = tmpl.match(/^\{(\w+)\.(\w+)\}$/);
+    const directMatch = tmpl.match(/^\{([\w-]+)\.([\w-]+)\}$/);
     if (directMatch) {
       const [, stepId, field] = directMatch;
       const output = stepOutputs[stepId];
@@ -78,6 +78,17 @@ export function resolveDescription(
   stepOutputs: Record<string, Record<string, unknown>>,
 ): string {
   return resolveTemplate(description, params, stepOutputs);
+}
+
+/**
+ * Resolve instruction template for agent directive.
+ */
+export function resolveInstruction(
+  instruction: string,
+  params: Record<string, unknown>,
+  stepOutputs: Record<string, Record<string, unknown>>,
+): string {
+  return resolveTemplate(instruction, params, stepOutputs);
 }
 
 /**

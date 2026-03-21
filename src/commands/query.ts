@@ -1,6 +1,6 @@
 import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
-import { resolveDescription, buildStepContext, collectStepOutputs } from "../engine/context.js";
+import { resolveDescription, resolveInstruction, buildStepContext, collectStepOutputs } from "../engine/context.js";
 
 export function runQuery(id: string, stepId?: string): void {
   const state = loadInstance(id);
@@ -24,7 +24,8 @@ export function runQuery(id: string, stepId?: string): void {
   const params = state.params || {};
   const stepOutputs = collectStepOutputs(state.steps);
 
-  const description = resolveDescription(step.description, params, stepOutputs);
+  const description = resolveDescription(step.description || step.id, params, stepOutputs);
+  const instruction = step.instruction ? resolveInstruction(step.instruction, params, stepOutputs) : undefined;
   const context = buildStepContext(step, params, stepOutputs);
 
   // Also include params in context if no explicit context_in
@@ -46,12 +47,13 @@ export function runQuery(id: string, stepId?: string): void {
       index: stepIndex + 1,
       total: def.steps.length,
       description,
+      ...(instruction && { instruction }),
       status: stepState.status,
     },
     context,
     expected_output: step.required_output,
     ...(step.tips && step.tips.length > 0 && { tips: step.tips }),
-    submit_command: `llm-rail ${state.id} next --result '${JSON.stringify(exampleResult)}'`,
+    submit_command: `lrail ${state.id} next --result '${JSON.stringify(exampleResult)}'`,
   };
 
   console.log(JSON.stringify(queryResult, null, 2));

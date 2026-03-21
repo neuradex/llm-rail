@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
-import { evaluatePolicy, matchGlob } from "../engine/policy.js";
+import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
 
 interface PolicyLogEntry {
@@ -14,8 +15,9 @@ interface PolicyLogEntry {
 /**
  * Read policy.jsonl and generate a minimal allow-list from observed commands.
  */
-export function runPolicyGenerate(instanceId: string, workflowName: string): void {
-  const dir = instanceDir(workflowName, instanceId);
+export function runPolicyGenerate(instanceId: string): void {
+  const state = loadInstance(instanceId);
+  const dir = instanceDir(state.workflow_name, instanceId);
   const logPath = path.resolve(dir, "policy.jsonl");
 
   if (!fs.existsSync(logPath)) {
@@ -51,7 +53,7 @@ export function runPolicyGenerate(instanceId: string, workflowName: string): voi
   console.log("    - effect: allow");
   console.log("      commands:");
   for (const cmd of commands) {
-    console.log(`        - \"${cmd}\"`);
+    console.log(`        - "${cmd}"`);
   }
 }
 

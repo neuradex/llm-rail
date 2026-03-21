@@ -1,6 +1,6 @@
 import type { StepDef, WorkflowDef, InstanceState } from "../types.js";
 import { pickTips } from "./tip-pool.js";
-import { resolveDescription, buildStepContext, collectStepOutputs } from "./context.js";
+import { resolveDescription, resolveInstruction, buildStepContext, collectStepOutputs } from "./context.js";
 
 const SEPARATOR = "────────────────────────────────────────";
 
@@ -18,11 +18,12 @@ export function formatStepStart(
 
   const params = state.params || {};
   const stepOutputs = collectStepOutputs(state.steps);
-  const description = resolveDescription(step.description || step.id, params, stepOutputs);
+  const headerLabel = resolveDescription(step.description || step.id, params, stepOutputs);
+  const instruction = resolveInstruction(step.instruction || step.description || step.id, params, stepOutputs);
 
   const lines: string[] = [
     SEPARATOR,
-    `Step ${stepNum}/${total}: ${description}`,
+    `Step ${stepNum}/${total}: ${headerLabel}`,
     "",
     `Required output fields: ${fields}`,
   ];
@@ -42,7 +43,7 @@ export function formatStepStart(
 
   lines.push(
     "",
-    `>>> NEXT ACTION: ${description}`,
+    `>>> NEXT ACTION: ${instruction}`,
     `    lrail ${state.alias || state.id} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Submit ALL required fields or submission will be rejected.",
@@ -78,7 +79,7 @@ export function formatRejection(
     "",
     `Required output fields: ${fields}`,
     "",
-    `>>> RETRY: ${step.description}`,
+    `>>> RETRY: ${step.instruction || step.description}`,
     `    lrail ${state.alias || state.id} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Submit ALL required fields or submission will be rejected.",

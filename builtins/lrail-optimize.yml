@@ -1,4 +1,4 @@
-name: optimize
+name: lrail-optimize
 version: "0.1.0"
 description: "Optimize an existing workflow across 4 measurable metrics: programmatic ratio, execution time, validation failure count, and minimum passing model tier."
 phase: draft

@@ -1,4 +1,4 @@
-name: build
+name: lrail-build
 version: "0.1.0"
 description: "Build a working lrail workflow from requirements — design, generate YAML, and verify by test run."
 phase: draft

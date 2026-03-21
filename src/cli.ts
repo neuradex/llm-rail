@@ -14,7 +14,6 @@ import { runShow } from "./commands/show.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { resolveInstanceId } from "./engine/state.js";
-import { resolveWorkflowPath } from "./engine/variant.js";
 
 const args = process.argv.slice(2);
 
@@ -210,45 +209,6 @@ Instance commands (after 'create'):
   try {
     id = resolveInstanceId(target);
   } catch {
-    // Not an instance — check if it's a workflow name
-    let isWorkflow = false;
-    try {
-      resolveWorkflowPath(target);
-      isWorkflow = true;
-    } catch { /* not a workflow either */ }
-
-    if (isWorkflow) {
-      // Treat as `lrail wf <name> [command]` shorthand
-      const wfCommand = command;
-      if (!wfCommand) {
-        console.error(`'${target}' is a workflow, not an instance.
-
-Usage: lrail wf ${target} <command>
-
-Workflow commands:
-  create [--variant <v>] [--param k=v]   Create a new instance
-  validate [--variant <v>]               Validate workflow YAML
-  show [--variant <v>]                   Show workflow YAML
-  variants                               List variants
-  merge <variant> [--backup <name>]      Merge variant into base
-  list [--status <status>]               List instances
-  promote                                Suggest phase promotion
-  policy check --command '<command>'     Dry-run policy check
-
-Instance commands (after 'create'):
-  lrail <alias> start                    Begin execution
-  lrail <alias> next --result '<json>'   Submit step result
-  lrail <alias> status                   Check instance status
-  lrail <alias> query [--step <stepId>]  Query instance state
-  lrail <alias> reset <step-id>          Reset a step
-  lrail <alias> bash '<command>'         Execute through proxy
-  lrail <alias> policy generate          Generate policy from trail`);
-        process.exit(1);
-      }
-      console.error(`'${target}' is a workflow. Did you mean: lrail wf ${target} ${wfCommand}`);
-      process.exit(1);
-    }
-
     console.error(`Unknown command or instance: '${target}'`);
     console.error("Use 'lrail wf <name> create' to create a new instance.");
     usage();

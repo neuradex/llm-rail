@@ -86,6 +86,35 @@ export function runListWorkflows(): void {
 }
 
 /**
+ * List all instances across all workflows.
+ */
+export function runListInstances(statusFilter?: string): void {
+  let instances = listInstances();
+
+  if (statusFilter) {
+    instances = instances.filter((i) => i.status === statusFilter);
+  }
+
+  if (instances.length === 0) {
+    console.log("No instances found.");
+    return;
+  }
+
+  // Sort by created_at descending
+  instances.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  for (const inst of instances) {
+    const stepCount = Object.keys(inst.steps).length;
+    const completedCount = Object.values(inst.steps).filter((s) => s.status === "completed").length;
+    const label = inst.alias ? `${inst.alias} (${inst.id})` : inst.id;
+    const variant = inst.variant ? ` [${inst.variant}]` : "";
+    console.log(
+      `${label}  ${inst.workflow_name}${variant}  ${inst.status}  (${completedCount}/${stepCount} steps)`,
+    );
+  }
+}
+
+/**
  * List instances for a specific workflow.
  */
 export function runList(workflowName: string, statusFilter?: string): void {

@@ -5,11 +5,12 @@ description: Step-by-step process for designing and writing lrail workflows
 
 ## Workflow Design Process
 
-### Phase 1: Understand the task
+### Phase 1: Understand requirements
 
-Identify from the requirements:
+Run `lrail docs workflow/requirements-analysis` and follow the procedure. This produces validated, user-confirmed requirements.
+
+From the confirmed requirements, identify:
 - **Inputs** — what params does the workflow need?
-- **Steps** — what discrete operations produce the final result?
 - **Outputs** — what is the final deliverable?
 
 ### Phase 2: Propose step breakdown

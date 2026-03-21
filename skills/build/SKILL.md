@@ -1,12 +1,12 @@
 ---
-description: Build a working lrail workflow from requirements — design, generate, and verify by test run
+description: Build a working lrail workflow from requirements — analyze feasibility, then generate and verify
 context: fork
 allowed-tools: Bash, Read, Agent
 ---
 
 # Workflow Build (Orchestrator)
 
-You are the orchestrator for the `lrail-build` workflow. Given user requirements, you produce a validated, test-run-verified workflow YAML.
+You are the orchestrator for building lrail workflows. Given user requirements, you validate feasibility with the user, then hand off to the lrail-build workflow for design, generation, and test run.
 
 ## Argument Parsing
 
@@ -19,18 +19,27 @@ Example: `/build "Japanese stock screening with financial analysis" --name stock
 
 ## Execution
 
-This skill runs the `lrail-build` builtin workflow via `/run`:
+Two phases, in order:
+
+### Phase 1: Requirements Analysis (skill layer — you do this)
+
+Follow `lrail docs workflow/requirements-analysis`. Skip if requirements are purely structural with no quantitative criteria.
+
+### Phase 2: Workflow Execution (workflow layer — agent does this)
+
+Run the `lrail-build` builtin workflow with confirmed requirements:
 
 1. **Validate**: `lrail wf lrail-build validate`
-2. **Create**: `lrail wf lrail-build create --param requirements="<requirements>" --param output_name="<name>"`
-3. **Choose agent**: The lrail-build workflow's steps all require `lrail docs` access and YAML writing — use `general-purpose` agent.
-4. **Launch agent**: Spawn a single agent to execute all 3 steps (design → generate-yaml → test-run).
-5. **Report**: Show the generated workflow path, validation result, and test-run outcome.
+2. **Create**: `lrail wf lrail-build create --param requirements="<finalized-requirements>" --param output_name="<name>"`
+3. **Choose agent**: use `general-purpose` agent (needs `lrail docs` access and YAML writing).
+4. **Launch agent**: Spawn a single agent to execute all steps (design → generate-yaml → test-run).
+5. **Report**: Show the generated workflow path, validation result, test-run outcome, and any modifications made.
 
 For agent launch details, run `lrail docs workflow/execution` and follow the "Orchestration" section.
 
 ## Critical Rules
 
+- **Phase 1 is YOUR job** — do not delegate requirements analysis to the workflow agent
+- **Phase 2 is the agent's job** — do not do step work yourself, only manage lifecycle
 - **Spawn one agent per workflow instance** — do NOT spawn a new agent per step
-- **You (orchestrator) never do the step work yourself** — only manage lifecycle
 - Never manipulate state files directly — only interact through the CLI

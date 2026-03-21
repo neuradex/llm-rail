@@ -4,12 +4,13 @@ import { runNext } from "./commands/next.js";
 import { runStatus } from "./commands/status.js";
 import { runQuery } from "./commands/query.js";
 import { runReset } from "./commands/reset.js";
-import { runList, runListWorkflows } from "./commands/list.js";
+import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
+import { runLog } from "./commands/log.js";
 import { runShow } from "./commands/show.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
@@ -21,6 +22,7 @@ function usage(): never {
   console.error(`Usage:
   lrail docs [topic]                                  Browse documentation
   lrail wf list                                       List all workflows
+  lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
   lrail wf <name> validate [--variant <v>]            Validate workflow YAML
   lrail wf <name> show [--variant <v>]                Show workflow YAML
@@ -34,6 +36,7 @@ function usage(): never {
   lrail <alias|id> status                             Check instance status
   lrail <alias|id> query [--step <stepId>]            Query instance state
   lrail <alias|id> reset <step-id>                    Reset a step
+  lrail <alias|id> log [step-id]                      Show audit log
   lrail <alias|id> bash '<command>'                   Execute through proxy
   lrail <alias|id> policy generate                    Generate policy from trail`);
   process.exit(1);
@@ -78,6 +81,17 @@ if (target === "docs") {
     process.exit(0);
   }
 
+  // lrail wf instances [--status <status>] — list all instances
+  if (workflowName === "instances" && !command) {
+    let statusFilter: string | undefined;
+    const statusIdx = args.indexOf("--status");
+    if (statusIdx !== -1 && args[statusIdx + 1]) {
+      statusFilter = args[statusIdx + 1];
+    }
+    runListInstances(statusFilter);
+    process.exit(0);
+  }
+
   if (!command) {
     console.error(`Usage: lrail wf ${workflowName} <command>
 
@@ -97,6 +111,7 @@ Instance commands (after 'create'):
   lrail <alias> status                   Check instance status
   lrail <alias> query [--step <stepId>]  Query instance state
   lrail <alias> reset <step-id>          Reset a step
+  lrail <alias> log [step-id]            Show audit log
   lrail <alias> bash '<command>'         Execute through proxy
   lrail <alias> policy generate          Generate policy from trail`);
     process.exit(1);
@@ -197,6 +212,7 @@ Instance commands (after 'create'):
   lrail <alias> status                   Check instance status
   lrail <alias> query [--step <stepId>]  Query instance state
   lrail <alias> reset <step-id>          Reset a step
+  lrail <alias> log [step-id]            Show audit log
   lrail <alias> bash '<command>'         Execute through proxy
   lrail <alias> policy generate          Generate policy from trail`);
       process.exit(1);
@@ -223,6 +239,7 @@ Commands:
   status                       Check instance status
   query [--step <stepId>]      Query instance state
   reset <step-id>              Reset a step
+  log [step-id]                Show audit log
   bash '<command>'             Execute through proxy
   policy generate              Generate policy from trail`);
     process.exit(1);
@@ -277,6 +294,12 @@ Commands:
       break;
     }
 
+    case "log": {
+      const stepId = args[2]; // optional step filter
+      runLog(id, stepId);
+      break;
+    }
+
     case "policy": {
       const sub = args[2];
       if (sub === "generate") {
@@ -299,6 +322,7 @@ Commands:
   status                       Check instance status
   query [--step <stepId>]      Query instance state
   reset <step-id>              Reset a step
+  log [step-id]                Show audit log
   bash '<command>'             Execute through proxy
   policy generate              Generate policy from trail`);
       process.exit(1);

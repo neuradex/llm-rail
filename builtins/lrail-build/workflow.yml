@@ -1,12 +1,12 @@
 name: lrail-build
-version: "0.1.0"
-description: "Build a working lrail workflow from requirements — design, generate YAML, and verify by test run."
+version: "0.2.0"
+description: "Generate a working lrail workflow — design, generate YAML, and verify by test run."
 phase: draft
 params:
   requirements:
     type: string
     required: true
-    description: "Natural language description of what the workflow should accomplish"
+    description: "Finalized requirements (post-analysis, confirmed by user)"
   output_name:
     type: string
     required: false
@@ -65,7 +65,7 @@ steps:
       Convert the step plan into a valid lrail workflow YAML for '{{output_name}}'.
       Requirements: {{requirements}}
 
-      Save to `workflows/{{output_name}}.yml`, then validate with `lrail wf {{output_name}} validate`.
+      Save to `workflows/{{output_name}}/workflow.yml`, then validate with `lrail wf {{output_name}} validate`.
       Fix any validation errors before submitting.
     depends_on: design
     context_in:
@@ -100,6 +100,15 @@ steps:
       4. Programmatic steps auto-execute
 
       Record rejection count and whether all steps completed.
+
+      If you modify the workflow YAML during the test run, record each change as a modification object
+      in the `modifications` output array with: field, before, after, reason, and type.
+      Type must be one of:
+      - "bug_fix" — syntax errors, EPIPE, wrong field names, broken scripts
+      - "requirement_change" — altering thresholds, criteria, or scope from the original requirements
+
+      Bug fixes are expected. Requirement changes should be a last resort —
+      exhaust other approaches first (better data sources, retry logic, etc.).
     depends_on: generate-yaml
     context_in:
       workflow_yaml: "{generate-yaml.workflow_yaml}"
@@ -107,6 +116,7 @@ steps:
       - completed
       - total_rejections
       - step_results
+      - modifications
     validation:
       - field: completed
         op: type
@@ -121,6 +131,10 @@ steps:
       - field: step_results
         op: type
         value: array
+      - field: modifications
+        op: type
+        value: array
     tips:
       - If a step fails, analyze why and retry with corrected output
-      - Focus on making the workflow complete, not on producing perfect content
+      - Bug fixes (syntax, runtime errors) are fine — just record them
+      - Requirement changes (thresholds, criteria) are a last resort — try harder before changing the spec

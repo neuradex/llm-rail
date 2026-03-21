@@ -18,8 +18,8 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
-        { id: "s2", description: "Step 2", depends_on: "s1", required_output: ["b"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
+        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -30,9 +30,9 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
-        { id: "s2", description: "Step 2", required_output: ["b"] },
-        { id: "s3", description: "Step 3", depends_on: ["s1", "s2"], required_output: ["c"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
+        { id: "s2", instruction: "Step 2", required_output: ["b"] },
+        { id: "s3", instruction: "Step 3", depends_on: ["s1", "s2"], required_output: ["c"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -43,8 +43,8 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
-        { id: "s1", description: "Step 1 dup", required_output: ["b"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
+        { id: "s1", instruction: "Step 1 dup", required_output: ["b"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -55,7 +55,7 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", depends_on: "nonexistent", required_output: ["a"] },
+        { id: "s1", instruction: "Step 1", depends_on: "nonexistent", required_output: ["a"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -66,8 +66,8 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
-        { id: "s2", description: "Step 2", depends_on: ["s1", "bad"], required_output: ["b"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
+        { id: "s2", instruction: "Step 2", depends_on: ["s1", "bad"], required_output: ["b"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -78,8 +78,8 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", depends_on: "s2", required_output: ["a"] },
-        { id: "s2", description: "Step 2", depends_on: "s1", required_output: ["b"] },
+        { id: "s1", instruction: "Step 1", depends_on: "s2", required_output: ["a"] },
+        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -96,10 +96,10 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
         {
           id: "s2",
-          description: "Step 2",
+          instruction: "Step 2",
           depends_on: "s1",
           required_output: ["b"],
           context_in: { data: "{unknown.field}" },
@@ -110,11 +110,11 @@ describe("validateWorkflowDef", () => {
     assert.ok(errors.some((e) => e.includes("unknown step 'unknown'")));
   });
 
-  it("accepts explicit agentic type with description and required_output", () => {
+  it("accepts explicit agentic type with instruction and required_output", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", type: "agentic", description: "Step 1", required_output: ["a"] },
+        { id: "s1", type: "agentic", instruction: "Step 1", required_output: ["a"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -158,7 +158,7 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       policy: { mode: "invalid" as any },
-      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
     };
     const errors = validateWorkflowDef(def);
     assert.ok(errors.some((e) => e.includes("trail") && e.includes("enforce")));
@@ -168,7 +168,7 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       policy: { mode: "enforce" },
-      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
     };
     const errors = validateWorkflowDef(def);
     assert.ok(errors.some((e) => e.includes("enforce") && e.includes("rule")));
@@ -178,7 +178,7 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       policy: { mode: "trail" },
-      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
     };
     const errors = validateWorkflowDef(def);
     assert.equal(errors.length, 0);
@@ -188,10 +188,96 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       params: { x: { type: "invalid" as any } },
-      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
     };
     const errors = validateWorkflowDef(def);
     assert.ok(errors.some((e) => e.includes("invalid type")));
+  });
+
+  it("accepts valid phase values", () => {
+    for (const phase of ["draft", "dev"] as const) {
+      const def: WorkflowDef = {
+        name: "test",
+        phase,
+        steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
+      };
+      const errors = validateWorkflowDef(def);
+      assert.equal(errors.length, 0, `phase '${phase}' should be valid`);
+    }
+  });
+
+  it("rejects invalid phase", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      phase: "beta" as any,
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("Invalid phase")));
+  });
+
+  it("stable phase requires enforce policy", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      phase: "stable",
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("enforce")));
+  });
+
+  it("stable phase allows agentic steps with enforce policy", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      phase: "stable",
+      policy: { mode: "enforce", rules: [{ effect: "allow", commands: ["echo *"] }] },
+      steps: [
+        { id: "s1", instruction: "Agentic step", required_output: ["a"] },
+        { id: "s2", type: "programmatic", actions: [{ run: "echo hello" }] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
+  });
+
+  it("rejects reserved workflow names", () => {
+    const def: WorkflowDef = {
+      name: "list",
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("reserved")));
+  });
+
+  it("rejects instance-ID-like workflow names", () => {
+    const def: WorkflowDef = {
+      name: "0321-164541",
+      steps: [{ id: "s1", instruction: "Step 1", required_output: ["a"] }],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("instance ID")));
+  });
+
+  it("rejects agentic step without instruction", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", description: "Step 1", required_output: ["a"] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.ok(errors.some((e) => e.includes("must have an instruction")));
+  });
+
+  it("accepts agentic step with instruction but no description", () => {
+    const def: WorkflowDef = {
+      name: "test",
+      steps: [
+        { id: "s1", instruction: "Do the thing", required_output: ["a"] },
+      ],
+    };
+    const errors = validateWorkflowDef(def);
+    assert.equal(errors.length, 0);
   });
 });
 
@@ -337,6 +423,130 @@ describe("assertion ops", () => {
     assert.ok(!result.valid);
     assert.ok(result.errors[0].includes("x must be zero"));
   });
+
+  it("verify_source — rejects missing url field", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet" } },
+      },
+    ];
+    const r1 = runAssertions(rules, {
+      items: [{ ticker: "X", per: 10, per_snippet: "PE 10" }],
+    });
+    assert.ok(!r1.valid);
+    assert.ok(r1.errors[0].includes("source_url"));
+  });
+
+  it("verify_source — rejects missing snippet field", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet" } },
+      },
+    ];
+    const result = runAssertions(rules, {
+      items: [{ ticker: "X", per: 10, source_url: "https://example.com" }],
+    });
+    assert.ok(!result.valid);
+    assert.ok(result.errors[0].includes("per_snippet"));
+  });
+
+  it("verify_source — rejects when snippet not found at URL", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet" } },
+      },
+    ];
+    const result = runAssertions(rules, {
+      items: [
+        {
+          ticker: "X",
+          per: 10,
+          source_url: "https://example.com",
+          per_snippet: "PE Ratio 10 — this-text-does-not-exist-xyz123",
+        },
+      ],
+    });
+    assert.ok(!result.valid);
+    assert.ok(result.errors[0].includes("not found"));
+  });
+
+  it("verify_source — rejects when snippet lacks data value", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet", roe: "roe_snippet" } },
+      },
+    ];
+    const result = runAssertions(rules, {
+      items: [
+        {
+          ticker: "X",
+          per: 17.33,
+          roe: 14.48,
+          source_url: "https://example.com",
+          per_snippet: "Sony",
+          roe_snippet: "ROE is 14.48%",
+        },
+      ],
+    });
+    assert.ok(!result.valid);
+    assert.ok(result.errors[0].includes("per_snippet does not contain per=17.33"));
+  });
+
+  it("verify_source — skips null data values", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet", roe: "roe_snippet" } },
+      },
+    ];
+    // per is null → skips per check, roe_snippet contains roe value but won't be on example.com
+    const result = runAssertions(rules, {
+      items: [
+        {
+          ticker: "X",
+          per: null,
+          roe: 14.48,
+          source_url: "https://example.com",
+          per_snippet: "N/A",
+          roe_snippet: "ROE is 14.48%",
+        },
+      ],
+    });
+    assert.ok(!result.valid);
+    // Error should be about URL fetch, not about snippet value check
+    assert.ok(!result.errors[0].includes("does not contain"));
+  });
+
+  it("verify_source — accepts per-field snippets at URL", () => {
+    const rules = [
+      {
+        field: "items",
+        op: "verify_source" as const,
+        value: { url_field: "source_url", field_snippets: { per: "per_snippet" } },
+      },
+    ];
+    const result = runAssertions(rules, {
+      items: [
+        {
+          ticker: "X",
+          per: null,
+          source_url: "https://example.com",
+          per_snippet: "whatever",
+        },
+      ],
+    });
+    // per is null → skips, no snippets to verify → passes
+    assert.ok(result.valid);
+  });
 });
 
 // ── Context resolution ──
@@ -370,7 +580,7 @@ describe("context resolution", () => {
   it("buildStepContext resolves context_in", () => {
     const stepDef = {
       id: "s2",
-      description: "test",
+      instruction: "test",
       required_output: ["x"],
       context_in: {
         files: "{s1.file_list}",
@@ -399,10 +609,10 @@ describe("dependency", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "1", required_output: ["a"] },
-        { id: "s2", description: "2", depends_on: "s1", required_output: ["b"] },
-        { id: "s3", description: "3", depends_on: "s2", required_output: ["c"] },
-        { id: "s4", description: "4", required_output: ["d"] },
+        { id: "s1", instruction: "1", required_output: ["a"] },
+        { id: "s2", instruction: "2", depends_on: "s1", required_output: ["b"] },
+        { id: "s3", instruction: "3", depends_on: "s2", required_output: ["c"] },
+        { id: "s4", instruction: "4", required_output: ["d"] },
       ],
     };
     const downstream = collectDownstream(def, "s1");
@@ -413,9 +623,9 @@ describe("dependency", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", description: "1", required_output: ["a"] },
-        { id: "s2", description: "2", required_output: ["b"] },
-        { id: "s3", description: "3", depends_on: ["s1", "s2"], required_output: ["c"] },
+        { id: "s1", instruction: "1", required_output: ["a"] },
+        { id: "s2", instruction: "2", required_output: ["b"] },
+        { id: "s3", instruction: "3", depends_on: ["s1", "s2"], required_output: ["c"] },
       ],
     };
     const steps: InstanceState["steps"] = {
@@ -432,7 +642,7 @@ describe("dependency", () => {
   it("isReady returns true for steps with no dependencies", () => {
     const def: WorkflowDef = {
       name: "test",
-      steps: [{ id: "s1", description: "1", required_output: ["a"] }],
+      steps: [{ id: "s1", instruction: "1", required_output: ["a"] }],
     };
     assert.equal(isReady(def, "s1", { s1: { status: "pending" } }), true);
   });
@@ -596,13 +806,15 @@ describe("E2E with params and context_in", () => {
       steps: [
         {
           id: "step1",
-          description: "Analyze {{target}}",
+          description: "Analyze target",
+          instruction: "Analyze {{target}}",
           required_output: ["result"],
           validation: [{ field: "result", op: "not_empty" }],
         },
         {
           id: "step2",
           description: "Process result",
+          instruction: "Process result",
           depends_on: "step1",
           context_in: { data: "{step1.result}" },
           required_output: ["summary"],
@@ -626,15 +838,15 @@ describe("E2E with params and context_in", () => {
     const { createInstance, loadInstance, saveInstance } = await import("../src/engine/state.js");
     const { loadWorkflow } = await import("../src/engine/workflow.js");
     const { validateStepOutput, runAssertions } = await import("../src/engine/validator.js");
-    const { resolveDescription, buildStepContext, collectStepOutputs } = await import("../src/engine/context.js");
+    const { resolveInstruction, buildStepContext, collectStepOutputs } = await import("../src/engine/context.js");
 
     const def = loadWorkflow("param-test");
     const state = createInstance(def, { target: "myrepo" });
     assert.deepEqual(state.params, { target: "myrepo" });
 
-    // Resolve description
-    const desc = resolveDescription(def.steps[0].description, state.params!, {});
-    assert.equal(desc, "Analyze myrepo");
+    // Resolve instruction
+    const instr = resolveInstruction(def.steps[0].instruction!, state.params!, {});
+    assert.equal(instr, "Analyze myrepo");
 
     // Step 1 complete
     state.steps["step1"].status = "completed";
@@ -671,9 +883,9 @@ describe("reset cascade", () => {
     const workflow = {
       name: "reset-test",
       steps: [
-        { id: "s1", description: "Step 1", required_output: ["a"] },
-        { id: "s2", description: "Step 2", depends_on: "s1", required_output: ["b"] },
-        { id: "s3", description: "Step 3", depends_on: "s2", required_output: ["c"] },
+        { id: "s1", instruction: "Step 1", required_output: ["a"] },
+        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
+        { id: "s3", instruction: "Step 3", depends_on: "s2", required_output: ["c"] },
       ],
     };
     fs.writeFileSync(
@@ -754,7 +966,7 @@ describe("mixed step types", () => {
         },
         {
           id: "analyze",
-          description: "Analyze the project",
+          instruction: "Analyze the project",
           required_output: ["result"],
         },
         {
@@ -767,7 +979,7 @@ describe("mixed step types", () => {
         },
         {
           id: "review",
-          description: "Review results",
+          instruction: "Review results",
           depends_on: "post-process",
           required_output: ["verdict"],
         },

@@ -13,7 +13,8 @@ context:
   env: production
 steps:
   - id: collect
-    description: Collect data for {{target}}
+    description: Collect data
+    instruction: Collect data for {{target}}
     required_output:
       - items
     validation:
@@ -29,6 +30,7 @@ steps:
 
   - id: analyze
     description: Analyze collected data
+    instruction: Analyze collected data
     depends_on: collect
     required_output:
       - result
@@ -40,6 +42,7 @@ steps:
 
   - id: report
     description: Generate final report
+    instruction: Generate final report
     depends_on: analyze
     required_output:
       - summary

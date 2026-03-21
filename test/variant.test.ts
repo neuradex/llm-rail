@@ -30,6 +30,7 @@ describe("mergeVariant", () => {
       {
         id: "collect",
         description: "Collect data",
+        instruction: "Collect data",
         required_output: ["items"],
         validation: [
           { field: "items", op: "type", value: "array" },
@@ -40,12 +41,14 @@ describe("mergeVariant", () => {
       {
         id: "analyze",
         description: "Analyze data",
+        instruction: "Analyze data",
         depends_on: "collect",
         required_output: ["result", "score"],
       },
       {
         id: "report",
         description: "Generate report",
+        instruction: "Generate report",
         depends_on: "analyze",
         required_output: ["summary"],
       },
@@ -138,6 +141,7 @@ describe("mergeVariant", () => {
         {
           id: "extra-step",
           description: "Extra processing",
+          instruction: "Extra processing",
           depends_on: "analyze",
           required_output: ["extra"],
         },
@@ -235,7 +239,7 @@ describe("variant filesystem operations", () => {
       "workflows/dir-wf/workflow.yml",
       yaml.dump({
         name: "dir-wf",
-        steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+        steps: [{ id: "s1", description: "Step 1", instruction: "Step 1", required_output: ["a"] }],
       }),
     );
     fs.writeFileSync(
@@ -254,7 +258,7 @@ describe("variant filesystem operations", () => {
       "workflows/single-wf.yml",
       yaml.dump({
         name: "single-wf",
-        steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+        steps: [{ id: "s1", description: "Step 1", instruction: "Step 1", required_output: ["a"] }],
       }),
     );
 
@@ -353,7 +357,7 @@ describe("createInstance with variant", () => {
       "workflows/vi-test.yml",
       yaml.dump({
         name: "vi-test",
-        steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+        steps: [{ id: "s1", description: "Step 1", instruction: "Step 1", required_output: ["a"] }],
       }),
     );
   });
@@ -388,7 +392,7 @@ describe("mergeVariantAnnotated", () => {
     const { mergeVariantAnnotated } = await import("../src/engine/variant.js");
     const base: WorkflowDef = {
       name: "test",
-      steps: [{ id: "s1", description: "Step 1", required_output: ["a"] }],
+      steps: [{ id: "s1", description: "Step 1", instruction: "Step 1", required_output: ["a"] }],
     };
     const variant: VariantDef = {
       extends: "base",

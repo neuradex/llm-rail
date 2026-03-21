@@ -3,5 +3,6 @@ description: This variant is missing extends field
 steps:
   - id: collect
     description: Override
+    instruction: Override
     required_output:
       - items

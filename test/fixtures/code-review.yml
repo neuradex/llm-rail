@@ -2,6 +2,7 @@ name: code-review
 steps:
   - id: analyze
     description: コードベース分析
+    instruction: コードベース分析
     required_output:
       - file_list
       - complexity_score
@@ -21,6 +22,7 @@ steps:
 
   - id: review
     description: レビューコメント作成
+    instruction: レビューコメント作成
     depends_on: analyze
     required_output:
       - comments
@@ -32,6 +34,7 @@ steps:
 
   - id: summary
     description: レビューサマリー作成
+    instruction: レビューサマリー作成
     depends_on: review
     required_output:
       - verdict

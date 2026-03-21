@@ -5,10 +5,26 @@ import type { WorkflowDef, VariantDef, StepDef } from "../types.js";
 import { loadYaml } from "../util.js";
 
 /**
+ * Resolve the builtins directory — package root or cwd fallback.
+ */
+function resolveBuiltinsDir(): string {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  if (pluginRoot) {
+    const dir = path.resolve(pluginRoot, "builtins");
+    if (fs.existsSync(dir)) return dir;
+  }
+  const local = path.resolve("builtins");
+  if (fs.existsSync(local)) return local;
+  return "";
+}
+
+/**
  * Resolve workflow path — directory format or single file.
+ * Resolution order: workflows/ (user) → builtins/ (package).
  * Directory format takes priority when both exist.
  */
 export function resolveWorkflowPath(name: string): { basePath: string; isDirectory: boolean } {
+  // 1. User workflows
   const dirPath = path.resolve("workflows", name);
   const dirBase = path.resolve(dirPath, "workflow.yml");
   if (fs.existsSync(dirBase)) {
@@ -18,6 +34,21 @@ export function resolveWorkflowPath(name: string): { basePath: string; isDirecto
   const filePath = path.resolve("workflows", `${name}.yml`);
   if (fs.existsSync(filePath)) {
     return { basePath: filePath, isDirectory: false };
+  }
+
+  // 2. Builtin workflows
+  const builtinsDir = resolveBuiltinsDir();
+  if (builtinsDir) {
+    const builtinDir = path.resolve(builtinsDir, name);
+    const builtinDirBase = path.resolve(builtinDir, "workflow.yml");
+    if (fs.existsSync(builtinDirBase)) {
+      return { basePath: builtinDirBase, isDirectory: true };
+    }
+
+    const builtinFile = path.resolve(builtinsDir, `${name}.yml`);
+    if (fs.existsSync(builtinFile)) {
+      return { basePath: builtinFile, isDirectory: false };
+    }
   }
 
   throw new Error(`Workflow not found: ${name}`);

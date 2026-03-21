@@ -10,7 +10,8 @@
   "files": [
     "dist/",
     "bin/",
-    "workflows/",
+    "builtins/",
+    "learn/",
     ".claude-plugin/",
     "skills/",
     "agents/",

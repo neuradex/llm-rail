@@ -103,6 +103,7 @@ We are actively looking for contributions in these areas:
 - **Benchmarks** — realistic before/after comparisons: cost, accuracy, and completion rate with and without LLM Rail on real-world tasks
 - **`lrail docs` indexing** — smarter doc discovery so agents can efficiently find relevant topics without scanning all files
 - **Hooks patterns** — reusable lifecycle hook recipes for common needs (notifications, metrics, CI gates, etc.)
+- **Bug reports & design feedback** — found a bug, a gap in the design, or something that doesn't feel right? Open an issue. All feedback is welcome.
 
 ## License
 

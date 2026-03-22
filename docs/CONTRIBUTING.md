@@ -1,6 +1,6 @@
 # Contributing
 
-> **English** · [한국어](./CONTRIBUTING.ko.md) · [日本語](./CONTRIBUTING.ja.md)
+> **English** · [한국어](./docs/CONTRIBUTING.ko.md) · [日本語](./docs/CONTRIBUTING.ja.md)
 
 Thank you for your interest in contributing to LLM Rail. This guide covers the process for setting up a development environment, making changes, and submitting contributions.
 

@@ -1,6 +1,10 @@
 {
   "name": "llm-rail",
-  "version": "0.1.0",
-  "description": "Deterministic workflow control for LLM agents — design, validate, and execute YAML workflows",
-  "author": { "name": "neuradex" }
+  "version": "0.2.0-beta",
+  "description": "Guardrails for agentic work — decompose tasks into validated steps, enforce policy, audit everything",
+  "author": { "name": "neuradex" },
+  "homepage": "https://github.com/neuradex/llm-rail",
+  "repository": "https://github.com/neuradex/llm-rail",
+  "license": "MIT",
+  "keywords": ["workflow", "guardrails", "agent", "llm", "validation", "policy", "audit"]
 }

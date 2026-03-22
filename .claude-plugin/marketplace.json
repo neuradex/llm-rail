@@ -1,0 +1,19 @@
+{
+  "name": "neuradex-llm-rail",
+  "owner": {
+    "name": "neuradex"
+  },
+  "metadata": {
+    "description": "LLM Rail — guardrails for agentic work. Workflow decomposition, policy enforcement, audit trail.",
+    "version": "0.2.0-beta"
+  },
+  "plugins": [
+    {
+      "name": "llm-rail",
+      "source": ".",
+      "description": "Guardrails for agentic work — decompose tasks into validated steps, enforce policy, audit everything",
+      "homepage": "https://github.com/neuradex/llm-rail",
+      "keywords": ["workflow", "guardrails", "agent", "llm", "validation", "policy", "audit"]
+    }
+  ]
+}

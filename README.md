@@ -241,7 +241,11 @@ npm install llm-rail
 ### As a Claude Code Plugin
 
 ```bash
-claude install llm-rail
+# Add the marketplace
+/plugin marketplace add neuradex/llm-rail
+
+# Install the plugin
+/plugin install llm-rail@neuradex-llm-rail
 ```
 
 Then run `/llm-rail:init` in your project to set up workflows and register in `CLAUDE.md`.

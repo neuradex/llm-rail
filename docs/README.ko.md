@@ -241,7 +241,11 @@ npm install llm-rail
 ### Claude Code 플러그인으로
 
 ```bash
-claude install llm-rail
+# 마켓플레이스 추가
+/plugin marketplace add neuradex/llm-rail
+
+# 플러그인 설치
+/plugin install llm-rail@neuradex-llm-rail
 ```
 
 프로젝트에서 `/llm-rail:init`을 실행하면 워크플로우 세팅과 `CLAUDE.md` 등록이 완료됩니다.

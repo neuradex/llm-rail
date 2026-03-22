@@ -1,6 +1,6 @@
 {
   "name": "llm-rail",
-  "version": "0.2.0-beta",
+  "version": "0.2.1-beta",
   "description": "Deterministic workflow control CLI for LLM agents",
   "type": "module",
   "license": "MIT",
@@ -8,7 +8,14 @@
     "type": "git",
     "url": "https://github.com/neuradex/llm-rail"
   },
-  "keywords": ["claude-code-plugin", "llm", "workflow", "agent", "guardrails", "ai-safety"],
+  "keywords": [
+    "claude-code-plugin",
+    "llm",
+    "workflow",
+    "agent",
+    "guardrails",
+    "ai-safety"
+  ],
   "bin": {
     "lrail": "./bin/llm-rail.js"
   },

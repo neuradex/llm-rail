@@ -12,6 +12,7 @@ import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
 import { runLog } from "./commands/log.js";
 import { runShow } from "./commands/show.js";
+import { runSummary } from "./commands/summary.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { resolveInstanceId } from "./engine/state.js";
@@ -26,6 +27,7 @@ function usage(): never {
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
   lrail wf <name> validate [--variant <v>]            Validate workflow YAML
   lrail wf <name> show [--variant <v>]                Show workflow YAML
+  lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
   lrail wf <name> merge <variant> [--backup <name>]   Merge variant into base
   lrail wf <name> list [--status <status>]             List instances
@@ -99,6 +101,7 @@ Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>]               Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
+  summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
@@ -143,6 +146,20 @@ Instance commands (after 'create'):
     case "show":
       runShow(workflowName, variantFlag);
       break;
+
+    case "summary": {
+      const summaryParams: string[] = [];
+      for (let i = 3; i < args.length; i++) {
+        if (args[i] === "--param" && args[i + 1]) {
+          summaryParams.push(args[i + 1]);
+          i++;
+        } else if (args[i] === "--variant") {
+          i++; // skip value, already parsed
+        }
+      }
+      runSummary(workflowName, summaryParams, variantFlag);
+      break;
+    }
 
     case "variants":
       runVariants(workflowName);
@@ -200,6 +217,7 @@ Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>]               Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
+  summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances

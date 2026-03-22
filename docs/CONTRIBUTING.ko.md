@@ -1,6 +1,6 @@
 # 기여 가이드
 
-> [English](./docs/CONTRIBUTING.md) · **한국어** · [日本語](./docs/CONTRIBUTING.ja.md)
+> [English](./CONTRIBUTING.md) · **한국어** · [日本語](./CONTRIBUTING.ja.md)
 
 LLM Rail에 관심을 가져주셔서 감사합니다. 이 가이드는 개발 환경 설정, 변경 사항 작성, 기여 제출 과정을 안내합니다.
 

@@ -1,6 +1,6 @@
 # コントリビューションガイド
 
-> [English](./docs/CONTRIBUTING.md) · [한국어](./docs/CONTRIBUTING.ko.md) · **日本語**
+> [English](./CONTRIBUTING.md) · [한국어](./CONTRIBUTING.ko.md) · **日本語**
 
 LLM Railへの関心をお寄せいただきありがとうございます。このガイドでは、開発環境のセットアップ、変更の作成、コントリビューションの提出手順をご案内します。
 

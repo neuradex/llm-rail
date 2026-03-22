@@ -2,21 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 import type { WorkflowDef, VariantDef, StepDef } from "../types.js";
-import { loadYaml } from "../util.js";
-
-/**
- * Resolve the builtins directory — package root or cwd fallback.
- */
-function resolveBuiltinsDir(): string {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const dir = path.resolve(pluginRoot, "builtins");
-    if (fs.existsSync(dir)) return dir;
-  }
-  const local = path.resolve("builtins");
-  if (fs.existsSync(local)) return local;
-  return "";
-}
+import { loadYaml, resolvePackageDir } from "../util.js";
 
 /**
  * Resolve workflow path — directory format or single file.
@@ -37,7 +23,7 @@ export function resolveWorkflowPath(name: string): { basePath: string; isDirecto
   }
 
   // 2. Builtin workflows
-  const builtinsDir = resolveBuiltinsDir();
+  const builtinsDir = resolvePackageDir("builtins");
   if (builtinsDir) {
     const builtinDir = path.resolve(builtinsDir, name);
     const builtinDirBase = path.resolve(builtinDir, "workflow.yml");

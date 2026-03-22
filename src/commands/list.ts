@@ -3,21 +3,11 @@ import * as path from "node:path";
 import { listInstances } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
 import { listVariants } from "../engine/variant.js";
+import { resolvePackageDir } from "../util.js";
 
 interface WorkflowEntry {
   name: string;
   source: "user" | "builtin";
-}
-
-function resolveBuiltinsDir(): string {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const dir = path.resolve(pluginRoot, "builtins");
-    if (fs.existsSync(dir)) return dir;
-  }
-  const local = path.resolve("builtins");
-  if (fs.existsSync(local)) return local;
-  return "";
 }
 
 function scanWorkflowDir(dirPath: string): string[] {
@@ -50,7 +40,7 @@ export function runListWorkflows(): void {
   const entries = new Map<string, WorkflowEntry>();
 
   // Builtins first (user can override)
-  const builtinsDir = resolveBuiltinsDir();
+  const builtinsDir = resolvePackageDir("builtins");
   for (const name of scanWorkflowDir(builtinsDir)) {
     entries.set(name, { name, source: "builtin" });
   }

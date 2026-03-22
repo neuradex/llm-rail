@@ -1,5 +1,9 @@
 {
   "permissions": {
-    "allow": ["Bash(node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js*)"]
+    "allow": [
+      "Bash(node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js*)",
+      "Bash(node dist/cli.js*)",
+      "Bash(npx tsx src/cli.ts*)"
+    ]
   }
 }

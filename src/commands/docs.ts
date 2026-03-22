@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePackageDir } from "../util.js";
 
 interface DocNode {
   name: string;
@@ -22,19 +22,8 @@ function parseFrontmatter(content: string): { meta: Record<string, string>; body
 }
 
 function resolveDocsDir(): string {
-  // 1. Check plugin root (set by Claude Code plugin system)
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const dir = path.resolve(pluginRoot, "learn");
-    if (fs.existsSync(dir)) return dir;
-  }
-  // 2. Resolve relative to CLI binary (works for npm install + plugin cache)
-  const cliDir = path.dirname(fileURLToPath(import.meta.url));
-  const fromBin = path.resolve(cliDir, "..", "learn");
-  if (fs.existsSync(fromBin)) return fromBin;
-  // 3. Current working directory
-  const local = path.resolve("learn");
-  if (fs.existsSync(local)) return local;
+  const dir = resolvePackageDir("learn");
+  if (dir) return dir;
   throw new Error("learn/ directory not found");
 }
 

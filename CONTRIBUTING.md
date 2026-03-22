@@ -99,6 +99,7 @@ We are actively looking for contributions in these areas:
 - **Validation operators** — new operators for common use cases
 - **Programmatic step patterns** — more action primitives beyond `shell:` and `js:`
 - **Sample workflows** — production-grade workflow examples that showcase complex use cases (multi-step pipelines, policy enforcement, validation chains, accumulate patterns, etc.)
+- **Agent integrations** — integrations with other AI agents beyond Claude Code (OpenAI Codex, Devin, Cursor Agent, etc.)
 
 ## License
 

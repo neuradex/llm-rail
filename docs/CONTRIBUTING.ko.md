@@ -99,6 +99,7 @@ node --import tsx --test test/variant.test.ts   # 특정 테스트 실행
 - **검증 연산자** — 일반적인 사용 사례를 위한 새로운 연산자
 - **프로그래매틱 스텝 패턴** — `shell:`, `js:` 외 새로운 액션 프리미티브
 - **샘플 워크플로우** — 프로덕션 수준의 복잡한 유즈케이스를 보여주는 워크플로우 예제 (멀티 스텝 파이프라인, 정책 적용, 검증 체인, accumulate 패턴 등)
+- **에이전트 통합** — Claude Code 외 다른 AI 에이전트와의 통합 (OpenAI Codex, Devin, Cursor Agent 등)
 
 ## 라이선스
 

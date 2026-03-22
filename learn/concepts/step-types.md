@@ -58,6 +58,30 @@ Good for: filtering, sorting, arithmetic, API calls, data transformation.
 
 **Rule of thumb**: If you can write it as a shell command that always produces the correct output, it should be programmatic. If the step requires understanding, interpretation, or exploration, keep it agentic.
 
+## Step Execution Chain
+
+When a result is submitted via `lrail <id> next --result`, the following chain executes in order:
+
+```
+1. Parse JSON result
+2. Accumulate merge (if step has accumulate config)
+3. Resolve templates in validation/assertion values ({{param}}, {step.field})
+4. Run validation rules
+   → fail: reject (accumulate: save pool + stay in step)
+5. Fire before_complete hook (can block)
+6. Run actions (if defined — works on agentic steps too)
+   → extracted values merge into step output
+7. Mark step completed
+8. Run assertions (post-completion checks)
+   → fail: revert step to in_progress, agent retries
+9. Advance to next step (auto-execute programmatic steps)
+```
+
+Key points:
+- **Actions on agentic steps**: agentic steps can define `actions` that auto-execute after validation passes. Use this for derived computations (e.g., counting items that match a condition).
+- **Validation vs assertions**: validation blocks completion. Assertions revert it after the fact.
+- **Template resolution in gates**: validation values like `min_length: "{{min_companies}}"` or `min_length: "{step1.count}"` are resolved before evaluation.
+
 ## Agent Selection for Agentic Steps
 
 Agentic steps are executed by a sub-agent. The agent type determines what tools are available:

@@ -100,6 +100,9 @@ We are actively looking for contributions in these areas:
 - **Programmatic step patterns** — more action primitives beyond `shell:` and `js:`
 - **Sample workflows** — production-grade workflow examples that showcase complex use cases (multi-step pipelines, policy enforcement, validation chains, accumulate patterns, etc.)
 - **Agent integrations** — integrations with other AI agents beyond Claude Code (OpenAI Codex, Devin, Cursor Agent, etc.)
+- **Benchmarks** — realistic before/after comparisons: cost, accuracy, and completion rate with and without LLM Rail on real-world tasks
+- **`lrail docs` indexing** — smarter doc discovery so agents can efficiently find relevant topics without scanning all files
+- **Hooks patterns** — reusable lifecycle hook recipes for common needs (notifications, metrics, CI gates, etc.)
 
 ## License
 

@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="https://img.shields.io/npm/v/lrail?style=flat-square&color=blue" alt="npm" />
+  <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
-  <img src="https://img.shields.io/badge/license-private-lightgrey?style=flat-square" alt="license" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license" />
 </p>
 
 <p align="center">
@@ -12,19 +12,12 @@
   <a href="#why-rails">Why Rails</a> ·
   <a href="#how-it-works">How It Works</a> ·
   <a href="#getting-started">Getting Started</a> ·
-  <a href="#claude-code-plugin">Plugin</a> ·
-  <a href="./docs/CONTRIBUTING.md">Contributing</a>
-</p>
-
-<p align="center">
-  <strong>English</strong> ·
-  <a href="./docs/README.ko.md">한국어</a> ·
-  <a href="./docs/README.ja.md">日本語</a>
+  <a href="#claude-code-plugin">Plugin</a>
 </p>
 
 ---
 
-Ruby on Rails laid rails for web development. **lrail lays rails for agentic work.**
+Ruby on Rails laid rails for web development. **LLM Rail lays rails for agentic work.**
 
 The word "rail" carries a dual meaning — and both are intentional:
 
@@ -33,9 +26,9 @@ The word "rail" carries a dual meaning — and both are intentional:
 
 LLM agents choke on complex tasks. They skip steps, hallucinate outputs, and lose track of what they were supposed to do as context grows. Throwing a bigger model at it costs more — with no guarantee it'll work. The root cause: **LLMs have recency bias**. In a long context, they forget the original instructions and drift.
 
-Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." lrail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
+Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." LLM Rail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
 
-**lrail** fixes this with three layers of rails:
+**LLM Rail** fixes this with three layers of rails:
 
 | Rail | What it controls |
 |---|---|
@@ -43,7 +36,7 @@ Current approaches to AI safety amount to **stickers on a dashboard** — prompt
 | **Policy Rail** | Every shell command goes through a bash proxy with IAM-style allow/deny rules. Agents can only do what's explicitly permitted. |
 | **Audit Rail** | Every action, command, and validation — logged. Full traceability per instance. |
 
-Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. lrail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
+Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. LLM Rail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
 
 Your AI agent failed a complex code review? Break it into 3 validated steps. Run each with Haiku. Total cost drops from $2 to $0.08. Every output verified. Full audit trail.
 
@@ -53,9 +46,9 @@ Your AI agent failed a complex code review? Break it into 3 validated steps. Run
 
 LLMs have **recency bias** — the longer the context, the more they forget their original instructions ([Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427), [Liu et al. 2023](https://arxiv.org/abs/2307.03172)). This is the fundamental failure mode of complex agentic tasks.
 
-Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. lrail fills this gap.
+Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. LLM Rail fills this gap.
 
-lrail solves the recency problem by **keeping each step's context small and focused**:
+LLM Rail solves the recency problem by **keeping each step's context small and focused**:
 
 - Each step gets a clean agent with only the data it needs via `context_in`
 - No accumulated context pollution from prior steps
@@ -73,7 +66,7 @@ For enterprises, this answers three critical questions: **"Can it handle complex
 
 ### Step Types
 
-lrail supports two step types in a single workflow:
+LLM Rail supports two step types in a single workflow:
 
 ```yaml
 steps:
@@ -81,12 +74,13 @@ steps:
   - id: fetch-data
     type: programmatic
     actions:
-      - run: "curl -s {{api_url}}/data"
+      - shell: "curl -s {{api_url}}/data"
         extract: { records: "data", count: "total" }
 
   # Agentic: LLM agent does the work. Output validated.
   - id: analyze
     description: "Analyze {{count}} records for anomalies"
+    instruction: "Analyze the records and identify anomalies with risk scoring"
     depends_on: fetch-data
     context_in:
       records: "{fetch-data.records}"
@@ -104,7 +98,7 @@ steps:
     type: programmatic
     depends_on: analyze
     actions:
-      - run: "curl -X POST {{webhook}} -d '{\"score\": {{risk_score}}}'"
+      - shell: "curl -X POST {{webhook}} -d '{\"score\": {{risk_score}}}'"
 ```
 
 **Programmatic steps** execute in milliseconds with zero token cost. **Agentic steps** get a focused, validated scope that Haiku handles reliably.
@@ -131,7 +125,7 @@ All commands go through the bash proxy (`lrail <id> bash "<cmd>"`), which enforc
 
 ### Validation Gates
 
-21 built-in operators check each step's output before advancing:
+22 built-in operators check each step's output before advancing:
 
 ```yaml
 validation:
@@ -148,7 +142,55 @@ assertions:
     message: Every comment must reference a file
 ```
 
-Bad output gets rejected, not passed forward. The agent retries with the error message — no human intervention needed.
+Two tiers: **validation** (pre-completion guards) rejects bad submissions. **assertions** (post-completion checks) revert the step on failure. The agent retries with the error message — no human intervention needed.
+
+Includes `verify_source` for anti-fabrication (fetches URLs and verifies data snippets exist on the page) and `script` for custom shell-based validation logic.
+
+### Workflow Lifecycle
+
+Every workflow progresses through maturity phases:
+
+```
+draft → dev → stable
+```
+
+- **draft**: Exploration. No constraints. Run it, see what happens, iterate.
+- **dev**: Working workflow. Refine validation, convert agentic steps to programmatic.
+- **stable**: Production-ready. Policy must be in `enforce` mode.
+
+Use `lrail wf <name> promote` to analyze runs and get promotion recommendations.
+
+### Variants
+
+Multiple design approaches coexist, get compared, and merge:
+
+```
+workflows/stock-screening/
+  workflow.yml              # Base (execution target)
+  api-driven.workflow.yml   # Direct API approach
+  programmatic.workflow.yml # Fully deterministic
+```
+
+Variants use `extends: base` and define only differences. Steps merge by ID — same ID overrides, new IDs append, missing IDs keep base. Merge a winning variant into the base with `lrail wf <name> merge <variant>`.
+
+### Accumulate Mode
+
+For steps that collect data incrementally:
+
+```yaml
+- id: collect
+  instruction: "Collect company data in batches"
+  required_output: [companies]
+  accumulate:
+    companies:
+      key: ticker
+  validation:
+    - field: companies
+      op: min_length
+      value: 20
+```
+
+The agent submits batches. Each batch merges into a pool with deduplication by key. Validation runs against the accumulated pool — the step stays open until the quality gate passes.
 
 ### Audit Trail
 
@@ -168,10 +210,13 @@ Every event is recorded per instance:
 | | |
 |---|---|
 | **Step Types** | `programmatic` (no LLM, direct execution) and `agentic` (LLM agent with validation) in one workflow. |
-| **Actions** | Shell commands with template interpolation and JSON extraction. Sequential with context accumulation. |
+| **Actions** | `js:` (JavaScript with auto-injected context) and `shell:` (template interpolation + JSON extraction). Pipe-style data flow between chained actions. |
 | **Policy** | AWS IAM-inspired allow/deny rules with trail and enforce modes. Bash proxy for all agent commands. |
-| **Validation Gates** | 21 built-in operators. Structural validation + business logic assertions with custom error messages. |
+| **Validation Gates** | 22 built-in operators. Structural validation + business logic assertions + `verify_source` anti-fabrication + `script` custom logic. |
 | **Explicit Data Flow** | `context_in` passes only needed data between steps — no implicit merging, no context pollution. |
+| **Accumulate Mode** | Incremental data collection with dedup-by-key merging. Quality gate keeps the step open until validation passes. |
+| **Variants** | Multiple workflow designs coexist, compare, and merge. ID-based step merging with `extends: base`. |
+| **Lifecycle Phases** | `draft` → `dev` → `stable` progression with promotion analysis. |
 | **Lifecycle Hooks** | Gate and event hooks at every stage (`step:before_start`, `step:completed`, `policy:denied`, etc.). |
 | **Audit Logs** | Every event recorded in JSONL. Audit + policy logs per instance for full traceability. |
 | **Claude Code Plugin** | Built-in skills & agents — design, run, and audit workflows without leaving the editor. |
@@ -183,36 +228,48 @@ Every event is recorded per instance:
 ### Install
 
 ```bash
-npm install lrail
+npm install llm-rail
 ```
 
 ### As a Claude Code Plugin
 
 ```bash
-claude install lrail
+claude install llm-rail
 ```
 
-Then run `/lrail:init` in your project to set up workflows and register in `CLAUDE.md`.
+Then run `/llm-rail:init` in your project to set up workflows and register in `CLAUDE.md`.
 
-### Usage
+### CLI Reference
 
 ```bash
-# Create a workflow instance
-lrail wf code-review create --param target=src/
+# Browse documentation
+lrail docs [topic]
 
-# Start → validate → advance, step by step
-lrail 0321-143022 start
-lrail 0321-143022 next --result '{"file_list":["src/main.ts"],"complexity_score":5}'
+# Workflow management
+lrail wf list                                       # List all workflows
+lrail wf instances [--status <status>]              # List all instances
+lrail wf <name> create [--variant <v>] [--param k=v]  # Create instance
+lrail wf <name> validate [--variant <v>]            # Validate workflow YAML
+lrail wf <name> show [--variant <v>]                # Show workflow YAML
+lrail wf <name> variants                            # List variants
+lrail wf <name> merge <variant> [--backup <name>]   # Merge variant into base
+lrail wf <name> list [--status <status>]            # List instances
+lrail wf <name> promote                             # Suggest phase promotion
+lrail wf <name> policy check --command '<cmd>'      # Dry-run policy check
 
-# Execute commands through policy-enforced proxy
-lrail 0321-143022 bash 'git diff --stat'
+# Instance execution
+lrail <id> start                                    # Begin execution
+lrail <id> next --result '<json>'                   # Submit step result
+lrail <id> status                                   # Check progress
+lrail <id> query [--step <stepId>]                  # Query instance state
+lrail <id> reset <step-id>                          # Reset a step
+lrail <id> log [step-id] [-f]                       # Show audit log
+lrail <id> bash '<command>'                         # Execute through policy proxy
+lrail <id> summary                                  # Workflow summary with warnings
+lrail <id> policy generate                          # Generate policy from trail
 
-# Check progress anytime
-lrail 0321-143022 status
-
-# Policy management
-lrail wf code-review policy check --command 'curl https://api.example.com'
-lrail 0321-143022 policy generate
+# Variant management
+lrail wf <name> save-variant <v> --yaml '<content>'  # Save a variant YAML file
 ```
 
 ---
@@ -223,20 +280,31 @@ Install as a Claude Code plugin and never touch the CLI manually.
 
 | Skill | What it does |
 |---|---|
-| `/lrail:init` | Set up lrail in your project |
-| `/lrail:design` | Describe a task in natural language → get a validated YAML workflow |
-| `/lrail:run` | Execute end-to-end — a single Haiku agent runs all steps sequentially |
-| `/lrail:review` | Trial run + analysis — detect issues, suggest fixes, generate policy |
-| `/lrail:status` | Check progress on running workflows |
+| `/llm-rail:init` | Set up LLM Rail in your project |
+| `/llm-rail:design` | Describe a task in natural language → get a validated YAML workflow |
+| `/llm-rail:build` | Generate and optimize workflows using built-in meta-workflows |
+| `/llm-rail:run` | Execute end-to-end — a single agent runs all steps sequentially |
+| `/llm-rail:review` | Trial run + analysis — detect issues, suggest fixes, generate policy |
+| `/llm-rail:status` | Check progress on running workflows |
+| `/llm-rail:optimize` | Optimize an existing workflow (baseline, 3 optimizations, 3-tier verification) |
 
-### What happens when you run `/lrail:run`
+### Automated Workflow Generation
+
+Don't want to write YAML by hand? Let the framework build it for you:
+
+- **`/llm-rail:build`** — Describe a task in natural language. The framework analyzes feasibility, generates a workflow, validates it, and runs a test execution — all automatically.
+- **`/llm-rail:optimize`** — Takes an existing workflow and runs a 7-step optimization pipeline: baseline measurement → programmatic ratio improvement → execution time reduction → validation failure reduction → 3-tier model verification → synthesis report. Results are saved as a variant file, never modifying the original.
+
+These meta-workflows use LLM Rail itself to build and improve LLM Rail workflows — the framework is self-hosting.
+
+### What happens when you run `/llm-rail:run`
 
 ```
 Orchestrator (your main agent)
   │
   ├── validate workflow → create instance
   │
-  └── spawn one Haiku agent for the entire instance
+  └── spawn one agent for the entire instance
         │
         ├── start → [programmatic steps auto-execute] → agentic step prompt
         ├── work → next → [programmatic steps auto-execute] → agentic step prompt

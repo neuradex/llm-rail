@@ -8,7 +8,7 @@ description: How to mature a workflow through phases
 ### Check current state
 
 ```bash
-lrail my-workflow promote
+lrail wf my-workflow promote
 ```
 
 This analyzes completed runs and shows:
@@ -34,7 +34,7 @@ What to do:
 2. `lrail <id> policy generate` to create an allow-list
 3. Add the generated policy with `mode: enforce`
 4. Set `phase: stable`
-5. `lrail my-workflow validate` to confirm
+5. `lrail wf my-workflow validate` to confirm
 
 ### Going back
 

@@ -40,7 +40,7 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
   // Phase validation
   const phase = def.phase || "draft";
   if (def.phase && !["draft", "dev", "stable"].includes(def.phase)) {
-    errors.push(`Invalid phase '${def.phase}'. Must be 'draft', 'verified', or 'locked'`);
+    errors.push(`Invalid phase '${def.phase}'. Must be 'draft', 'dev', or 'stable'`);
   }
   if (!Array.isArray(def.steps) || def.steps.length === 0) {
     errors.push("Workflow must have at least one step");
@@ -78,8 +78,18 @@ export function validateWorkflowDef(def: WorkflowDef): string[] {
         errors.push(`Programmatic step '${step.id}' must have at least one action`);
       } else {
         for (let i = 0; i < step.actions.length; i++) {
-          if (!step.actions[i].run || step.actions[i].run.trim() === "") {
-            errors.push(`Step '${step.id}' action[${i}] must have a non-empty 'run'`);
+          const a = step.actions[i] as unknown as Record<string, unknown>;
+          const hasJs = typeof a.js === "string" && a.js.trim() !== "";
+          const hasShell = typeof a.shell === "string" && a.shell.trim() !== "";
+
+          if (!hasJs && !hasShell) {
+            errors.push(`Step '${step.id}' action[${i}] must have a non-empty 'js' or 'shell'`);
+          }
+          if (hasJs && hasShell) {
+            errors.push(`Step '${step.id}' action[${i}] must have exactly one of 'js' or 'shell'`);
+          }
+          if (hasJs && a.extract) {
+            errors.push(`Step '${step.id}' action[${i}] 'js' action does not use 'extract' — use return instead`);
           }
         }
       }

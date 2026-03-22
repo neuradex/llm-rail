@@ -17,6 +17,7 @@ description: A simple two-step workflow
 steps:
   - id: greet
     description: "Generate a greeting message"
+    instruction: "Generate a warm greeting message"
     required_output: [message]
     validation:
       - field: message
@@ -25,6 +26,7 @@ steps:
 
   - id: respond
     description: "Write a response to the greeting"
+    instruction: "Write a thoughtful response to the greeting message"
     depends_on: greet
     context_in:
       greeting: "{greet.message}"
@@ -34,13 +36,13 @@ steps:
 ### 2. Validate
 
 ```bash
-lrail hello validate
+lrail wf hello validate
 ```
 
 ### 3. Create an instance
 
 ```bash
-lrail hello create
+lrail wf hello create
 # → Instance created: 0321-143022
 ```
 

@@ -98,10 +98,10 @@ steps:
       - screened
       - screened_count
     actions:
-      - run: "node workflows/stock-screening/screen.js"
-        extract:
-          screened: screened
-          screened_count: screened_count
+      - js: |
+          const financials = context.financials;
+          const screened = financials.filter(c => c.per !== null && c.roe !== null && c.per <= 25 && c.roe >= 10);
+          return { screened: screened, screened_count: screened.length };
     validation:
       - field: screened
         op: type
@@ -252,14 +252,11 @@ steps:
       - field: portfolio
         op: script
         value: |
-          node -e '
-            const portfolio = JSON.parse(process.env.FIELD_VALUE);
-            const total = portfolio.reduce((sum, p) => sum + p.weight, 0);
-            if (total !== 100) {
-              console.error("Allocation weights sum to " + total + ", must be exactly 100");
-              process.exit(1);
-            }
-          '
+          const portfolio = context.FIELD_VALUE;
+          const total = portfolio.reduce((sum, p) => sum + p.weight, 0);
+          if (total !== 100) {
+            throw new Error("Allocation weights sum to " + total + ", must be exactly 100");
+          }
         message: "Portfolio allocation weights must sum to exactly 100"
 
 policy:

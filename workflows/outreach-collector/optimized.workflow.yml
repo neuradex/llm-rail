@@ -1,0 +1,53 @@
+extends: base
+variant: optimized
+
+steps:
+  - id: collect-companies-with-contacts
+    instruction: |
+      Search for companies matching: {{target_criteria}} {{search_keywords}}
+      Find at least {{min_companies}} companies with contact forms or emails.
+
+      Per company return: name, website_url, description (1 sentence), industry, contact_type ("form"/"email"), form_url (null if email), email (null if form).
+      Skip companies without contact info. Submit all in one batch.
+    tips:
+      - Use WebSearch for "{{target_criteria}} contact form inquiry"
+      - Check /contact, /contact-us, /inquiry pages via WebFetch
+      - contact_type must be exactly "form" or "email"
+      - Submit ALL companies in a single batch to avoid round-trips
+      - "Example: {\"companies\":[{\"name\":\"Acme\",\"website_url\":\"https://acme.com\",\"description\":\"Cloud platform\",\"industry\":\"SaaS\",\"contact_type\":\"form\",\"form_url\":\"https://acme.com/contact\",\"email\":null}]}"
+
+  - id: prepare-form-data
+    description: Normalize company data and filter form-type companies
+    actions:
+      - js: |
+          const normalized = context.companies.map(co => ({
+            ...co,
+            website_url: co.website_url.replace(/\/+$/, ""),
+            form_url: co.form_url ? co.form_url.replace(/\/+$/, "") : null,
+            contact_type: co.contact_type.toLowerCase().trim(),
+            name: co.name.trim(),
+            email: co.email ? co.email.toLowerCase().trim() : null
+          }));
+          const formCompanies = normalized.filter(x => x.contact_type === "form");
+          return { form_count: formCompanies.length, form_companies: formCompanies, companies_normalized: normalized };
+    required_output:
+      - form_count
+      - form_companies
+      - companies_normalized
+
+  - id: extract-form-structures
+    instruction: |
+      For each company in form_companies, fetch form_url and extract the form structure.
+      Return: company_name, form_url, fields (array of {name, type, required, label, options}), action_url, method (GET/POST), notes.
+      Submit all in one batch.
+    tips:
+      - Use WebFetch to get each form page
+      - For JS-rendered forms (HubSpot, Marketo, kintone), note the platform in notes field and extract what you can
+      - Submit ALL forms in a single batch
+      - "Example: {\"forms\":[{\"company_name\":\"Acme\",\"form_url\":\"https://acme.com/contact\",\"fields\":[{\"name\":\"email\",\"type\":\"email\",\"required\":true,\"label\":\"Email\",\"options\":null}],\"action_url\":\"https://acme.com/submit\",\"method\":\"POST\",\"notes\":\"Standard HTML form\"}]}"
+
+  - id: generate-outreach-report
+    context_in:
+      companies: "{prepare-form-data.companies_normalized}"
+      forms: "{extract-form-structures.forms}"
+      form_count: "{prepare-form-data.form_count}"

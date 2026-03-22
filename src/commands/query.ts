@@ -4,7 +4,7 @@ import { resolveDescription, resolveInstruction, buildStepContext, collectStepOu
 
 export function runQuery(id: string, stepId?: string): void {
   const state = loadInstance(id);
-  const def = loadWorkflow(state.workflow_name);
+  const def = loadWorkflow(state.workflow_name, state.variant);
 
   // Determine which step to query
   let stepIndex: number;
@@ -34,7 +34,7 @@ export function runQuery(id: string, stepId?: string): void {
   }
 
   const exampleResult: Record<string, string> = {};
-  for (const field of step.required_output) {
+  for (const field of step.required_output || []) {
     exampleResult[field] = "...";
   }
 

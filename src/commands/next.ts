@@ -18,7 +18,7 @@ export function runNext(id: string, resultJson: string): void {
     process.exit(1);
   }
 
-  const def = loadWorkflow(state.workflow_name);
+  const def = loadWorkflow(state.workflow_name, state.variant);
   const currentStep = def.steps[state.current_step];
 
   if (!currentStep) {

@@ -106,47 +106,38 @@ steps:
     context_in:
       financials: "{collect-financials.financials}"
     actions:
-      - run: |
-          node -e '
-            const data = JSON.parse(process.env.CONTEXT);
-            const financials = data.financials;
-            const criteria = { per_max: 15, roe_min: 10 };
-            const candidates = [];
-            const filtered_out = [];
-            for (const f of financials) {
-              const per = typeof f.per === "string" ? parseFloat(f.per) : f.per;
-              const roe = typeof f.roe === "string" ? parseFloat(f.roe) : f.roe;
-              if (per != null && roe != null && per > 0 && per <= criteria.per_max && roe >= criteria.roe_min) {
-                candidates.push({ ...f, per, roe });
-              } else {
-                const reasons = [];
-                if (per == null || per < 0) reasons.push("PER is null or negative (loss-making)");
-                else if (per > criteria.per_max) reasons.push("PER " + per + " > " + criteria.per_max);
-                if (roe == null) reasons.push("ROE is null");
-                else if (roe < criteria.roe_min) reasons.push("ROE " + roe + "% < " + criteria.roe_min + "%");
-                filtered_out.push({ ...f, per, roe, reason: reasons.join(", ") });
-              }
+      - js: |
+          const financials = context.financials;
+          const criteria = { per_max: 15, roe_min: 10 };
+          const candidates = [];
+          const filtered_out = [];
+          for (const f of financials) {
+            const per = typeof f.per === "string" ? parseFloat(f.per) : f.per;
+            const roe = typeof f.roe === "string" ? parseFloat(f.roe) : f.roe;
+            if (per != null && roe != null && per > 0 && per <= criteria.per_max && roe >= criteria.roe_min) {
+              candidates.push({ ...f, per, roe });
+            } else {
+              const reasons = [];
+              if (per == null || per < 0) reasons.push("PER is null or negative (loss-making)");
+              else if (per > criteria.per_max) reasons.push("PER " + per + " > " + criteria.per_max);
+              if (roe == null) reasons.push("ROE is null");
+              else if (roe < criteria.roe_min) reasons.push("ROE " + roe + "% < " + criteria.roe_min + "%");
+              filtered_out.push({ ...f, per, roe, reason: reasons.join(", ") });
             }
-            // If no candidates pass, include nearest-miss companies sorted by distance to criteria
-            let nearest_miss = [];
-            if (candidates.length === 0) {
-              nearest_miss = filtered_out
-                .filter(f => f.per != null && f.per > 0 && f.roe != null)
-                .map(f => ({
-                  ...f,
-                  distance: Math.max(0, f.per - criteria.per_max) + Math.max(0, criteria.roe_min - f.roe)
-                }))
-                .sort((a, b) => a.distance - b.distance)
-                .slice(0, 5);
-            }
-            console.log(JSON.stringify({ candidates, filtered_out, nearest_miss, criteria, candidates_count: candidates.length }));
-          '
-        extract:
-          candidates: candidates
-          filtered_out: filtered_out
-          nearest_miss: nearest_miss
-          criteria: criteria
-          candidates_count: candidates_count
+          }
+          // If no candidates pass, include nearest-miss companies sorted by distance to criteria
+          let nearest_miss = [];
+          if (candidates.length === 0) {
+            nearest_miss = filtered_out
+              .filter(f => f.per != null && f.per > 0 && f.roe != null)
+              .map(f => ({
+                ...f,
+                distance: Math.max(0, f.per - criteria.per_max) + Math.max(0, criteria.roe_min - f.roe)
+              }))
+              .sort((a, b) => a.distance - b.distance)
+              .slice(0, 5);
+          }
+          return { candidates, filtered_out, nearest_miss, criteria, candidates_count: candidates.length };
 
   - id: news-analysis
     description: Analyze recent news and sentiment

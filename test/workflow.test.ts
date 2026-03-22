@@ -125,7 +125,7 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", type: "programmatic", actions: [{ run: "echo hello" }] },
+        { id: "s1", type: "programmatic", actions: [{ shell: "echo hello" }] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -147,11 +147,11 @@ describe("validateWorkflowDef", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
-        { id: "s1", type: "programmatic", actions: [{ run: "" }] },
+        { id: "s1", type: "programmatic", actions: [{ shell: "" }] },
       ],
     };
     const errors = validateWorkflowDef(def);
-    assert.ok(errors.some((e) => e.includes("non-empty 'run'")));
+    assert.ok(errors.some((e) => e.includes("non-empty")));
   });
 
   it("validates policy mode", () => {
@@ -233,7 +233,7 @@ describe("validateWorkflowDef", () => {
       policy: { mode: "enforce", rules: [{ effect: "allow", commands: ["echo *"] }] },
       steps: [
         { id: "s1", instruction: "Agentic step", required_output: ["a"] },
-        { id: "s2", type: "programmatic", actions: [{ run: "echo hello" }] },
+        { id: "s2", type: "programmatic", actions: [{ shell: "echo hello" }] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -1018,7 +1018,7 @@ describe("mixed step types", () => {
           id: "setup",
           type: "programmatic",
           actions: [
-            { run: `echo '{"version": "1.0", "ready": true}'`, extract: { version: "version", ready: "ready" } },
+            { shell: `echo '{"version": "1.0", "ready": true}'`, extract: { version: "version", ready: "ready" } },
           ],
         },
         {
@@ -1031,7 +1031,7 @@ describe("mixed step types", () => {
           type: "programmatic",
           depends_on: "analyze",
           actions: [
-            { run: `echo '{"processed": true}'`, extract: { processed: "processed" } },
+            { shell: `echo '{"processed": true}'`, extract: { processed: "processed" } },
           ],
         },
         {
@@ -1107,8 +1107,8 @@ describe("mixed step types", () => {
     const allProgWorkflow = {
       name: "all-prog",
       steps: [
-        { id: "s1", type: "programmatic", actions: [{ run: `echo '{"a":1}'`, extract: { a: "a" } }] },
-        { id: "s2", type: "programmatic", depends_on: "s1", actions: [{ run: `echo '{"b":2}'`, extract: { b: "b" } }] },
+        { id: "s1", type: "programmatic", actions: [{ shell: `echo '{"a":1}'`, extract: { a: "a" } }] },
+        { id: "s2", type: "programmatic", depends_on: "s1", actions: [{ shell: `echo '{"b":2}'`, extract: { b: "b" } }] },
       ],
     };
     fs.writeFileSync(
@@ -1136,7 +1136,7 @@ describe("mixed step types", () => {
     const failWorkflow = {
       name: "fail-prog",
       steps: [
-        { id: "s1", type: "programmatic", actions: [{ run: "exit 1" }] },
+        { id: "s1", type: "programmatic", actions: [{ shell: "exit 1" }] },
       ],
     };
     fs.writeFileSync(
@@ -1215,7 +1215,7 @@ describe("accumulate config validation", () => {
         {
           id: "s1",
           type: "programmatic",
-          actions: [{ run: "echo '{}'" }],
+          actions: [{ shell: "echo '{}'" }],
           accumulate: { items: { key: "name" } },
         },
       ],

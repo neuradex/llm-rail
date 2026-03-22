@@ -36,10 +36,16 @@ export type ValidationRule = AssertionRule;
 
 // ── Action / Policy ──
 
-export interface ActionDef {
-  run: string;
+export interface JsActionDef {
+  js: string;
+}
+
+export interface ShellActionDef {
+  shell: string;
   extract?: Record<string, string>;
 }
+
+export type ActionDef = JsActionDef | ShellActionDef;
 
 export interface PolicyRule {
   effect: "allow" | "deny";

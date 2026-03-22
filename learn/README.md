@@ -18,9 +18,10 @@ Core building blocks of the framework.
 
 - **step-types** — Agentic vs programmatic steps, agent selection
 - **validation** — Declarative guards, cross-step assertions, verify_source
-- **actions** — Shell execution with `run` + `extract`
+- **actions** — `js:` and `shell:` actions with pipe data flow
 - **policy** — Command control: trail → enforce
 - **phases** — Workflow lifecycle: draft → dev → stable
+- **variants** — Multiple workflow designs, extends, merge semantics
 
 ### workflow/
 How to use LLM Rail in practice.
@@ -28,5 +29,6 @@ How to use LLM Rail in practice.
 - **first-run** — Your first workflow from scratch
 - **execution** — How to execute a workflow instance (commands, flow, orchestration)
 - **review** — How to review a workflow (trial run, analysis, audit)
+- **design-process** — Workflow design methodology and planning
 - **design-tips** — Design principles and anti-patterns
 - **promote** — Maturing a workflow through phases

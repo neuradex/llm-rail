@@ -56,7 +56,9 @@ steps:
       <field>:
         key: <dedupe field>
     actions:                               # required for programmatic
-      - run: <shell command>
+      - js: |                              # JS with auto-injected context, use return
+          return { key: context.field };
+      - shell: <shell command>             # shell with {{param}} templates
         extract:
           targetKey: sourceKey
 policy:

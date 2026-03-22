@@ -10,18 +10,14 @@ steps:
   - id: collect-companies
     type: programmatic
     actions:
-      - run: |
-          node -e '
-            const endpoint = process.env.CONTEXT ? JSON.parse(process.env.CONTEXT).api_endpoint : "https://api.example.com";
-            console.log(JSON.stringify({
-              companies: [
-                { ticker: "6723.T", company_name: "Renesas Electronics", exchange: "TSE" },
-                { ticker: "6857.T", company_name: "Advantest", exchange: "TSE" }
-              ]
-            }));
-          '
-        extract:
-          companies: companies
+      - js: |
+          const endpoint = context.api_endpoint || "https://api.example.com";
+          return {
+            companies: [
+              { ticker: "6723.T", company_name: "Renesas Electronics", exchange: "TSE" },
+              { ticker: "6857.T", company_name: "Advantest", exchange: "TSE" }
+            ]
+          };
   - id: collect-financials
     instruction: "Fetch financials from {{api_endpoint}} for each company"
     tips:

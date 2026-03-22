@@ -19,7 +19,7 @@ export function runStart(id: string): void {
     process.exit(1);
   }
 
-  const def = loadWorkflow(state.workflow_name);
+  const def = loadWorkflow(state.workflow_name, state.variant);
 
   // First, advance through any leading programmatic steps
   state.status = "in_progress";

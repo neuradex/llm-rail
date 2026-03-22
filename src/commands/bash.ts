@@ -6,7 +6,7 @@ import { fireHook, makeHookPayload } from "../engine/hooks.js";
 
 export function runBash(id: string, command: string): void {
   const state = loadInstance(id);
-  const def = loadWorkflow(state.workflow_name);
+  const def = loadWorkflow(state.workflow_name, state.variant);
 
   const currentStep = def.steps[state.current_step];
   const stepId = currentStep?.id || "unknown";

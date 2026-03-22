@@ -6,7 +6,7 @@ import { fireHook, makeHookPayload } from "../engine/hooks.js";
 
 export function runReset(id: string, stepId: string): void {
   const state = loadInstance(id);
-  const def = loadWorkflow(state.workflow_name);
+  const def = loadWorkflow(state.workflow_name, state.variant);
 
   // Validate step exists
   const stepIndex = def.steps.findIndex((s) => s.id === stepId);
@@ -44,7 +44,7 @@ export function runReset(id: string, stepId: string): void {
   }
 
   // Update workflow status
-  if (state.status === "completed") {
+  if (state.status === "completed" || state.status === "error") {
     state.status = "in_progress";
   }
 

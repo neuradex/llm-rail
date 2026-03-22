@@ -34,7 +34,7 @@ steps:
   - id: collect
     type: programmatic
     actions:
-      - run: "curl -s {{api_endpoint}}/items"
+      - shell: "curl -s {{api_endpoint}}/items"
         extract: { items: items }
 ```
 

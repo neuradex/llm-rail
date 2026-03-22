@@ -62,10 +62,10 @@ LLMs have recency bias — long context leads to forgotten instructions and drif
 - Run `lrail wf list` to see available workflows
 
 ### Commands
-- `/lrail:design` — Design a new workflow from a task description
-- `/lrail:run <workflow> [--param k=v]` — Execute a workflow end-to-end
-- `/lrail:review` — Trial run + analysis — detect issues, suggest fixes, generate policy
-- `/lrail:status` — Check workflow instance status or list all instances
+- `/llm-rail:design` — Design a new workflow from a task description
+- `/llm-rail:run <workflow> [--param k=v]` — Execute a workflow end-to-end
+- `/llm-rail:review` — Trial run + analysis — detect issues, suggest fixes, generate policy
+- `/llm-rail:status` — Check workflow instance status or list all instances
 - `lrail docs <topic>` — Browse documentation (e.g., `lrail docs concepts/step-types`)
 - Workflow definitions: `workflows/*.yml`
 ```
@@ -86,4 +86,4 @@ Report the results:
 - The `.gitignore` status
 - Whether CLAUDE.md was updated (and what was added)
 - Suggest running `lrail docs` to learn about lrail concepts
-- Suggest running `/lrail:design` to create a custom workflow
+- Suggest running `/llm-rail:design` to create a custom workflow

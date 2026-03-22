@@ -77,9 +77,9 @@ Good:
 - id: filter
   type: programmatic
   actions:
-    - run: "node -e 'const d=JSON.parse(process.env.CONTEXT); console.log(JSON.stringify({filtered: d.items.filter(x=>x.score>80)}))'"
-      extract:
-        filtered: filtered
+    - js: |
+        const filtered = context.items.filter(x => x.score > 80);
+        return { filtered };
 ```
 
 ### Design for the weakest model
@@ -110,7 +110,7 @@ Bad — validation separated from the producing step:
 - id: execute-variant
   type: programmatic
   actions:
-    - run: "node variant_code.js"
+    - shell: "node variant_code.js"
       extract:
         variant_result: result
 

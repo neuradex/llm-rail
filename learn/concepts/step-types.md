@@ -27,20 +27,15 @@ Good for: research, judgment, synthesis, creative work.
 
 ### programmatic
 
-The CLI auto-executes shell commands. No agent involved. Requires `actions`.
+The CLI auto-executes actions. No agent involved. Requires `actions`.
 
 ```yaml
 - id: screen-candidates
   type: programmatic
   actions:
-    - run: |
-        node -e '
-          const data = JSON.parse(process.env.CONTEXT);
-          const filtered = data.items.filter(x => x.score > 80);
-          console.log(JSON.stringify({ result: filtered }));
-        '
-      extract:
-        result: result
+    - js: |
+        const filtered = context.items.filter(x => x.score > 80);
+        return { result: filtered };
 ```
 
 Good for: filtering, sorting, arithmetic, API calls, data transformation.
@@ -101,17 +96,20 @@ This is the difference between "stickers on the dashboard saying don't speed" (p
 
 ## Actions
 
-Programmatic steps use `actions` with `run` and optional `extract`:
+Programmatic steps use `actions` with `js:` or `shell:`:
 
 ```yaml
 actions:
-  - run: "curl -s https://api.example.com/data"
+  - shell: "curl -s https://api.example.com/data"
     extract:
       items: items
-      count: total
+  - js: |
+      const enriched = context.items.map(x => ({ ...x, fetched: true }));
+      return { items: enriched, count: enriched.length };
 ```
 
-- `run`: shell command (supports `{{param}}` templates)
-- `extract`: maps JSON keys from stdout to step output
-- Context is passed via `CONTEXT` env var (JSON)
-- Multiple actions run sequentially; each can use previous extractions
+- `js:` — JavaScript with auto-injected `context`, use `return` for output
+- `shell:` — shell command (supports `{{param}}` templates), optional `extract:`
+- Multiple actions run sequentially with pipe-style data flow
+
+See `lrail docs concepts/actions` for full syntax and pipe flow rules.

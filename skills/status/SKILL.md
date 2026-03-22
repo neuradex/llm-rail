@@ -15,5 +15,5 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js $ARGUMENTS status
 
 If $ARGUMENTS is empty, list all instances:
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js list
+node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js wf instances
 ```

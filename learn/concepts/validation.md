@@ -88,9 +88,21 @@ Verification order:
 
 Run arbitrary shell commands as assertion gates. The command receives:
 - `FIELD_VALUE` env var: JSON value of the field being validated
-- `CONTEXT` env var: full step output data as JSON (assertions only)
+- `CONTEXT` env var: full step output data as JSON (assertions only, payloads ≤ 8KB)
+- `CONTEXT_FILE` env var: path to a temp JSON file with the same data (for payloads > 8KB; `CONTEXT` is unset in this case)
 
 Exit code 0 = pass, non-zero = fail. stderr is used as the error message.
+
+**Handling large context**: When using Node.js scripts, read context safely:
+```javascript
+node -e '
+const fs = require("fs");
+const ctx = process.env.CONTEXT
+  ? JSON.parse(process.env.CONTEXT)
+  : JSON.parse(fs.readFileSync(process.env.CONTEXT_FILE, "utf8"));
+// use ctx...
+'
+```
 
 ```yaml
 assertions:

@@ -55,6 +55,9 @@ steps: StepDef[]       # ordered step definitions
   assertions: AssertionRule[]   # business logic assertions
   context_in:                   # explicit data flow from prior steps
     local_name: "{stepId.field}"
+  accumulate:                   # optional — for incremental collection
+    field_name:
+      key: unique_key_field
   tips: string[]                # execution hints for the agent
   meta: object                  # arbitrary metadata (e.g., requires_approval)
   actions: ActionDef[]          # optional — run AFTER agent output passes validation
@@ -65,14 +68,32 @@ steps: StepDef[]       # ordered step definitions
 - id: string                    # unique step identifier
   type: programmatic            # required
   depends_on: string | string[] # step id(s) this depends on
-  actions:                      # required — at least one
-    - run: string               # shell command, supports {{field}} templates
+  actions:                      # required — at least one ActionDef
+    - js: |                     # JS action: context injected, use return for output
+        return { key: context.field };
+    - shell: string             # Shell action: supports {{field}} templates
       extract:                  # optional — extract from stdout JSON
         targetKey: sourceKey
   description: string           # optional
   context_in:                   # optional
     local_name: "{stepId.field}"
 ```
+
+### ActionDef types
+```yaml
+# js: — JavaScript with auto-injected context, return for output
+- js: |
+    const filtered = context.items.filter(x => x.active);
+    return { result: filtered };
+# No extract: allowed (validation rejects it). Use return instead.
+
+# shell: — Shell command with template resolution
+- shell: "curl -s https://api.example.com/{{market}}/data"
+  extract:                      # optional
+    targetKey: sourceKey
+```
+
+Actions chain with pipe-style data flow. See `lrail docs concepts/actions`.
 
 ### VariantDef (variant file schema)
 ```yaml
@@ -90,19 +111,22 @@ policy: PolicyDef          # replaces base policy entirely
 ```
 
 ### Template Syntax
-- `{{param}}` — parameter interpolation in `instruction`, `description`, and action `run` fields
+- `{{param}}` — parameter interpolation in `instruction`, `description`, and `shell:` command fields
 - `{stepId.field}` — step output reference in context_in values
+- `context.<field>` — access step context inside `js:` actions (auto-injected)
 
 ## CLI Reference
 
 ```bash
 lrail docs [topic]                                   # browse built-in documentation
+lrail wf list                                        # list all workflows
+lrail wf instances [--status <status>]               # list all instances
 lrail wf <name> validate [--variant <v>]             # validate YAML schema
 lrail wf <name> create [--variant <v>] [--param k=v] # create instance
 lrail wf <name> show [--variant <v>]                 # show YAML (merged if variant)
 lrail wf <name> variants                             # list available variants
-lrail wf <name> merge <variant> [--backup <name>]    # merge variant into base
 lrail wf <name> list [--status <status>]             # list instances
+lrail wf <name> merge <variant> [--backup <name>]    # merge variant into base
 lrail wf <name> promote                              # suggest phase promotion
 lrail wf <name> policy check --command '<cmd>'       # dry-run policy check
 lrail <alias|id> start                               # start execution
@@ -111,6 +135,9 @@ lrail <alias|id> bash '<command>'                    # execute through policy pr
 lrail <alias|id> status                              # check status
 lrail <alias|id> query [--step <id>]                 # query current state
 lrail <alias|id> reset <step-id>                     # reset a step
+lrail <alias|id> log [step-id] [-f]                  # show audit log
+lrail <alias|id> summary                             # show workflow summary with warnings
+lrail wf <name> save-variant <v> --yaml '<content>'  # save variant YAML file
 ```
 
 ## Behavior

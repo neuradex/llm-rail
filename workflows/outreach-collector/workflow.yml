@@ -1,0 +1,148 @@
+name: outreach-collector
+version: "0.3.0"
+description: Collect companies matching target criteria with contact methods (form URL or email), count form-type companies, and extract form structures for outreach automation
+phase: draft
+
+params:
+  target_criteria:
+    type: string
+    required: true
+    description: Target company criteria — industry, region, keywords (e.g. 'Japanese B2B SaaS companies in manufacturing industry')
+  min_companies:
+    type: number
+    required: false
+    default: 10
+    description: Minimum number of companies to collect (range 10-500)
+  search_keywords:
+    type: string
+    required: false
+    default: ""
+    description: Additional search terms to narrow results
+
+steps:
+  - id: collect-companies-with-contacts
+    description: Search and collect companies with verified contact methods
+    instruction: |
+      Search the web for companies matching: {{target_criteria}} {{search_keywords}}
+
+      For each company:
+      1. Find name and website URL
+      2. Check for contact/inquiry form URL (try /contact, /contact-us, /inquiry, /お問い合わせ)
+      3. If no form found, look for contact email
+      4. Set contact_type: "form" or "email"
+      5. Skip companies with neither form nor email
+
+      Return per company: name, website_url, description (1-2 sentences), industry, contact_type, form_url (null if email), email (null if form).
+
+      Submit batches of 5-15. Pool accumulates with dedup by name. Collect at least {{min_companies}}.
+    required_output:
+      - companies
+    accumulate:
+      companies:
+        key: name
+    validation:
+      - field: companies
+        op: type
+        value: array
+      - field: companies
+        op: min_length
+        value: "{{min_companies}}"
+        message: "Must collect at least {{min_companies}} companies"
+      - field: companies
+        op: each_has
+        value: name
+      - field: companies
+        op: each_has
+        value: website_url
+      - field: companies
+        op: each_has
+        value: contact_type
+    tips:
+      - Use WebSearch to find companies, WebFetch to verify contact methods
+      - contact_type must be exactly "form" or "email"
+      - Submit all {{min_companies}} companies in a single batch if possible to avoid multiple round-trips
+
+  - id: prepare-form-data
+    description: Count and filter form-type companies
+    type: programmatic
+    depends_on: collect-companies-with-contacts
+    context_in:
+      companies: "{collect-companies-with-contacts.companies}"
+    actions:
+      - js: |
+          const formCompanies = context.companies.filter(x => x.contact_type === "form");
+          return { form_count: formCompanies.length, form_companies: formCompanies };
+    required_output:
+      - form_count
+      - form_companies
+
+  - id: extract-form-structures
+    description: Extract form HTML structure for all form-type companies
+    depends_on: prepare-form-data
+    instruction: |
+      For each company in form_companies, visit form_url and extract the HTML form structure.
+
+      Extract per form: company_name, form_url, fields (array of {name, type, required, label, options}), action_url, method (GET/POST), notes.
+
+      Submit all results in a single batch. Pool deduplicates by company_name.
+    context_in:
+      form_companies: "{prepare-form-data.form_companies}"
+      form_count: "{prepare-form-data.form_count}"
+    required_output:
+      - forms
+    accumulate:
+      forms:
+        key: company_name
+    validation:
+      - field: forms
+        op: type
+        value: array
+      - field: forms
+        op: min_length
+        value: "{prepare-form-data.form_count}"
+        message: "Must extract form structures for all form-type companies (expected {prepare-form-data.form_count})"
+      - field: forms
+        op: each_has
+        value: company_name
+      - field: forms
+        op: each_has
+        value: form_url
+      - field: forms
+        op: each_has
+        value: fields
+      - field: forms
+        op: each_has
+        value: method
+    tips:
+      - Use WebFetch to retrieve each form page HTML
+      - Parse <form> elements for fields, action URL, and method
+      - Submit all forms in one batch to minimize round-trips
+      - For hidden fields, include them (needed for CSRF tokens)
+      - Note CAPTCHA or JavaScript-rendered forms in notes field
+
+  - id: generate-outreach-report
+    description: Generate final outreach report with summary statistics
+    type: programmatic
+    depends_on: extract-form-structures
+    context_in:
+      companies: "{collect-companies-with-contacts.companies}"
+      forms: "{extract-form-structures.forms}"
+      form_count: "{prepare-form-data.form_count}"
+    actions:
+      - js: |
+          const companies = context.companies;
+          const forms = context.forms;
+          const report = {
+            total_companies: companies.length,
+            form_companies: companies.filter(x => x.contact_type === "form").length,
+            email_companies: companies.filter(x => x.contact_type === "email").length,
+            forms_extracted: forms.length,
+            industries: [...new Set(companies.map(x => x.industry))],
+            form_ratio: Math.round((companies.filter(x => x.contact_type === "form").length / companies.length) * 100) / 100
+          };
+          return { report: report };
+    required_output:
+      - report
+
+policy:
+  mode: trail

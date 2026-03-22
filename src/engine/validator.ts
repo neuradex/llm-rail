@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { StepDef, AssertionRule, AssertionOp, ValidationResult, ScriptLog } from "../types.js";
 
 type OpHandler = (value: unknown, expected: unknown, field: string) => string | null;
@@ -318,10 +321,21 @@ export function runAssertions(
   const errors: string[] = [];
 
   // Set CONTEXT env var for script assertions
+  // When context JSON is large, write to temp file to avoid EPIPE/E2BIG
   const hasScript = rules.some((r) => r.op === "script");
   const prevContext = process.env.CONTEXT;
+  const prevContextFile = process.env.CONTEXT_FILE;
+  let contextTempFile: string | undefined;
   if (hasScript) {
-    process.env.CONTEXT = JSON.stringify(data);
+    const contextJson = JSON.stringify(data);
+    if (contextJson.length <= 8192) {
+      process.env.CONTEXT = contextJson;
+    } else {
+      contextTempFile = path.join(os.tmpdir(), `lrail-assert-ctx-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      fs.writeFileSync(contextTempFile, contextJson, "utf-8");
+      process.env.CONTEXT_FILE = contextTempFile;
+      delete process.env.CONTEXT;
+    }
     _scriptLogs = [];
   }
 
@@ -344,6 +358,11 @@ export function runAssertions(
     if (hasScript) {
       if (prevContext !== undefined) process.env.CONTEXT = prevContext;
       else delete process.env.CONTEXT;
+      if (prevContextFile !== undefined) process.env.CONTEXT_FILE = prevContextFile;
+      else delete process.env.CONTEXT_FILE;
+      if (contextTempFile && fs.existsSync(contextTempFile)) {
+        try { fs.unlinkSync(contextTempFile); } catch { /* ignore */ }
+      }
     }
   }
 

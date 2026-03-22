@@ -15,6 +15,7 @@ import { runShow } from "./commands/show.js";
 import { runSummary } from "./commands/summary.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
+import { runSaveVariant } from "./commands/save-variant.js";
 import { resolveInstanceId } from "./engine/state.js";
 
 const args = process.argv.slice(2);
@@ -29,6 +30,7 @@ function usage(): never {
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
+  lrail wf <name> save-variant <v> --yaml '<content>'  Save a variant YAML file
   lrail wf <name> merge <variant> [--backup <name>]   Merge variant into base
   lrail wf <name> list [--status <status>]             List instances
   lrail wf <name> promote                             Suggest phase promotion
@@ -103,6 +105,7 @@ Workflow commands:
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
+  save-variant <v> --yaml '<content>'   Save a variant YAML file
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
   promote                                Suggest phase promotion
@@ -165,6 +168,19 @@ Instance commands (after 'create'):
       runVariants(workflowName);
       break;
 
+    case "save-variant": {
+      const svName = args[3];
+      if (!svName) {
+        console.error(`Usage: lrail wf ${workflowName} save-variant <variant-name> --yaml '<content>'`);
+        process.exit(1);
+      }
+      const yamlIdx = args.indexOf("--yaml");
+      const yamlContent = yamlIdx !== -1 ? args[yamlIdx + 1] : undefined;
+      const fromStdin = args.includes("--stdin");
+      runSaveVariant(workflowName, svName, yamlContent, fromStdin);
+      break;
+    }
+
     case "merge": {
       const mergeVariant = args[3];
       if (!mergeVariant) {
@@ -219,6 +235,7 @@ Workflow commands:
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
+  save-variant <v> --yaml '<content>'   Save a variant YAML file
   merge <variant> [--backup <name>]      Merge variant into base
   list [--status <status>]               List instances
   promote                                Suggest phase promotion

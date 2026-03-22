@@ -4,11 +4,11 @@ import { validateStepOutput, runAssertions } from "../engine/validator.js";
 import { formatStepStart, formatRejection, formatCompletion, formatAutoCompleted } from "../engine/output.js";
 import { appendLog } from "../audit/logger.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
-import { collectStepOutputs } from "../engine/context.js";
+import { collectStepOutputs, resolveTemplate } from "../engine/context.js";
 import { executeActions } from "../engine/actions.js";
 import { advanceThrough } from "../engine/runner.js";
 import { nowISO } from "../util.js";
-import type { WorkflowDef, InstanceState, AccumulateFieldConfig } from "../types.js";
+import type { WorkflowDef, InstanceState, AccumulateFieldConfig, StepDef, AssertionRule } from "../types.js";
 
 export function runNext(id: string, resultJson: string): void {
   const state = loadInstance(id);
@@ -41,8 +41,12 @@ export function runNext(id: string, resultJson: string): void {
     output = mergeAccumulate(existing, output, currentStep.accumulate);
   }
 
+  // Resolve template variables in validation rules before checking
+  const stepOutputs = collectStepOutputs(state.steps);
+  const resolvedStep = resolveStepRules(currentStep, state.params || {}, stepOutputs);
+
   // Validate step output (validation rules)
-  const result = validateStepOutput(currentStep, output);
+  const result = validateStepOutput(resolvedStep, output);
 
   if (!result.valid) {
     // In accumulate mode: save progress, show pool status, and stay in step
@@ -111,9 +115,9 @@ export function runNext(id: string, resultJson: string): void {
   );
 
   // Run cross-step assertions if defined
-  if (currentStep.assertions) {
+  if (resolvedStep.assertions) {
     const mergedData: Record<string, unknown> = { ...state.context };
-    const assertResult = runAssertions(currentStep.assertions, mergedData);
+    const assertResult = runAssertions(resolvedStep.assertions, mergedData);
 
     // Log script assertion results to audit log
     if (assertResult.script_logs) {
@@ -213,6 +217,35 @@ function mergeAccumulate(
   }
 
   return merged;
+}
+
+/**
+ * Resolve template variables ({{param}}, {step.field}) in validation/assertion rule values and messages.
+ */
+function resolveStepRules(
+  step: StepDef,
+  params: Record<string, unknown>,
+  stepOutputs: Record<string, Record<string, unknown>>,
+): StepDef {
+  const resolveRules = (rules: AssertionRule[]): AssertionRule[] =>
+    rules.map((rule) => {
+      const resolved = { ...rule };
+      if (typeof resolved.value === "string") {
+        const str = resolveTemplate(resolved.value, params, stepOutputs);
+        // Convert to number if the resolved string is numeric
+        const num = Number(str);
+        resolved.value = isNaN(num) ? str : num;
+      }
+      if (typeof resolved.message === "string") {
+        resolved.message = resolveTemplate(resolved.message, params, stepOutputs);
+      }
+      return resolved;
+    });
+
+  const copy = { ...step };
+  if (copy.validation) copy.validation = resolveRules(copy.validation);
+  if (copy.assertions) copy.assertions = resolveRules(copy.assertions);
+  return copy;
 }
 
 function formatPoolStatus(

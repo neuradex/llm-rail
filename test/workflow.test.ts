@@ -1156,6 +1156,39 @@ describe("mixed step types", () => {
   });
 });
 
+// ── template resolution in validation values ──
+
+describe("template resolution in validation values", () => {
+  it("resolves {{param}} in validation value to number", () => {
+    const template = "{{min_companies}}";
+    const params = { min_companies: 50 };
+    const resolved = resolveTemplate(template, params, {});
+    assert.equal(resolved, "50");
+    assert.equal(Number(resolved), 50);
+    assert.ok(!isNaN(Number(resolved)), "resolved value must not be NaN");
+  });
+
+  it("NaN when template is NOT resolved (the bug)", () => {
+    // This demonstrates the bug: unresolved template → NaN → validation always passes
+    const unresolved = "{{min_companies}}";
+    assert.ok(isNaN(Number(unresolved)), "unresolved template produces NaN");
+  });
+
+  it("min_length correctly rejects when template is resolved", () => {
+    // After template resolution, min_length should work correctly
+    const step: StepDef = {
+      id: "test",
+      instruction: "test",
+      required_output: ["items"],
+      validation: [{ field: "items", op: "min_length", value: 50 }],
+    };
+    const output = { items: Array.from({ length: 10 }, (_, i) => ({ id: i })) };
+    const result = validateStepOutput(step, output);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("min_length 50")));
+  });
+});
+
 // ── accumulate validation ──
 
 describe("accumulate config validation", () => {

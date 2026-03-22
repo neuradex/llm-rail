@@ -15,12 +15,7 @@ Initialize lrail in the current project.
 mkdir -p workflows
 ```
 
-2. Copy sample workflows from the plugin:
-```bash
-cp ${CLAUDE_PLUGIN_ROOT}/workflows/*.yml workflows/
-```
-
-3. Add `.llm-rail/` to `.gitignore` (runtime state directory):
+2. Add `.llm-rail/` to `.gitignore` (runtime state directory):
 ```bash
 if [ -f .gitignore ]; then
   grep -q '.llm-rail/' .gitignore || echo '.llm-rail/' >> .gitignore
@@ -29,7 +24,7 @@ else
 fi
 ```
 
-4. **Register lrail in CLAUDE.md** — inject context so the agent knows about lrail in every session.
+3. **Register lrail in CLAUDE.md** — inject context so the agent knows about lrail in every session.
 
 First, check if CLAUDE.md already has an lrail section:
 ```bash
@@ -70,20 +65,10 @@ LLMs have recency bias — long context leads to forgotten instructions and drif
 - Workflow definitions: `workflows/*.yml`
 ```
 
-5. List the copied workflows with a brief description of each:
-```bash
-for f in workflows/*.yml; do
-  name=$(basename "$f" .yml)
-  desc=$(grep '^description:' "$f" | head -1 | sed 's/description: *//')
-  echo "  - $name: $desc"
-done
-```
-
 ## Report
 
 Report the results:
-- How many workflows were copied
 - The `.gitignore` status
 - Whether CLAUDE.md was updated (and what was added)
+- Suggest running `/llm-rail:design` to create a custom workflow for this project
 - Suggest running `lrail docs` to learn about lrail concepts
-- Suggest running `/llm-rail:design` to create a custom workflow

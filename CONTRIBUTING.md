@@ -98,6 +98,7 @@ We are actively looking for contributions in these areas:
 - **Security model** — strengthening structural enforcement, exploring new isolation patterns
 - **Validation operators** — new operators for common use cases
 - **Programmatic step patterns** — more action primitives beyond `shell:` and `js:`
+- **Sample workflows** — production-grade workflow examples that showcase complex use cases (multi-step pipelines, policy enforcement, validation chains, accumulate patterns, etc.)
 
 ## License
 

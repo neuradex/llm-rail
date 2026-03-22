@@ -245,7 +245,7 @@ npm install llm-rail
 /plugin marketplace add neuradex/llm-rail
 
 # プラグインのインストール
-/plugin install llm-rail@neuradex-llm-rail
+/plugin install llm-rail@neuradex
 ```
 
 プロジェクト内で`/llm-rail:init`を実行すると、ワークフローのセットアップと`CLAUDE.md`への登録が完了します。

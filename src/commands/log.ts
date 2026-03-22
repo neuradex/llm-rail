@@ -90,6 +90,7 @@ function eventIcon(event: string): string {
     case "step_completed": return "✓";
     case "step_auto_completed": return "⚙";
     case "step_rejected": return "✗";
+    case "pool_updated": return "↑";
     case "assertion_failed": return "✗";
     case "script_assertion": return "⚡";
     case "action_failed": return "!";
@@ -114,6 +115,11 @@ function formatDetail(entry: AuditEntry): string {
   if (entry.event === "step_rejected" || entry.event === "assertion_failed") {
     const errors = entry.data.errors as string[];
     if (errors) return `  ${errors.join("; ")}`;
+  }
+
+  if (entry.event === "pool_updated") {
+    const pool = entry.data.pool as string;
+    return pool ? `  ${pool}` : "";
   }
 
   if (entry.event === "action_failed") {

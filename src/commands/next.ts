@@ -54,7 +54,7 @@ export function runNext(id: string, resultJson: string): void {
       state.steps[currentStep.id].output = output;
       saveInstance(state);
       const poolStatus = formatPoolStatus(output, currentStep.accumulate);
-      appendLog(state.workflow_name, state.id, "step_rejected", currentStep.id, { errors: result.errors, pool: poolStatus });
+      appendLog(state.workflow_name, state.id, "pool_updated", currentStep.id, { errors: result.errors, pool: poolStatus });
       console.log(formatRejection(state, currentStep, result.errors));
       console.log(`\nPool status: ${poolStatus}`);
       process.exit(1);

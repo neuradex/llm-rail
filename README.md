@@ -22,6 +22,8 @@
   <a href="./docs/README.ja.md">日本語</a>
 </p>
 
+> **Beta (0.2.x)** — This project is under active development. APIs, CLI commands, and workflow schema may change without notice. Pin your version if you depend on stability.
+
 ---
 
 Ruby on Rails laid rails for web development. **LLM Rail lays rails for agentic work.**

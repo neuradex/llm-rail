@@ -12,7 +12,14 @@
   <a href="#why-rails">Why Rails</a> ·
   <a href="#how-it-works">How It Works</a> ·
   <a href="#getting-started">Getting Started</a> ·
-  <a href="#claude-code-plugin">Plugin</a>
+  <a href="#claude-code-plugin">Plugin</a> ·
+  <a href="./docs/CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <strong>English</strong> ·
+  <a href="./docs/README.ko.md">한국어</a> ·
+  <a href="./docs/README.ja.md">日本語</a>
 </p>
 
 ---

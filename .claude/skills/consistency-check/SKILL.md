@@ -56,7 +56,23 @@ You are auditing the lrail repository for inconsistencies. The key principle: **
 - `allowed-tools` in skills must include all tools actually used
 - Agent `tools` list must match tools the agent is told to use
 
-### 7. Terminology
+### 7. Translated READMEs (i18n sync)
+- **Source of truth**: `README.md` (English)
+- **Must match**: `docs/README.ko.md` (Korean), `docs/README.ja.md` (Japanese)
+- Check for:
+  - Missing or outdated sections (compare section headings between English and translations)
+  - Old product naming (`lrail` used as framework name instead of `LLM Rail`, old npm package name)
+  - Old syntax in code examples (`run:` instead of `shell:`/`js:`, missing `instruction` field in agentic steps)
+  - Stale numbers (e.g., operator count, step counts)
+  - Old skill prefix (`/lrail:` instead of `/llm-rail:`)
+  - Badge URLs not matching English (npm, license)
+  - CLI Reference section missing commands that exist in English
+  - Feature Summary table rows missing or outdated
+- Tone check:
+  - Korean: 합니다체 (polite but not overly formal). 반말/다체 is wrong.
+  - Japanese: です・ます調 (polite form). だ体/である体 is wrong.
+
+### 8. Terminology
 - **LLM Rail** = the framework name
 - **`lrail`** = the CLI command
 - Docs and agents should not confuse these (e.g., "lrail is a framework" is wrong — "LLM Rail is a framework, `lrail` is its CLI" is correct)
@@ -64,7 +80,7 @@ You are auditing the lrail repository for inconsistencies. The key principle: **
 ## Process
 
 1. **Gather sources**: Read `src/cli.ts`, `src/types.ts`, `src/engine/validator.ts`, all `learn/**/*.md`
-2. **Gather dependents**: Read all `skills/*/SKILL.md`, all `agents/*.md`, `README.md`, `package.json`
+2. **Gather dependents**: Read all `skills/*/SKILL.md`, all `agents/*.md`, `README.md`, `docs/README.ko.md`, `docs/README.ja.md`, `package.json`
 3. **Compare each check category** above. For each inconsistency:
    - **Where**: which files conflict
    - **What**: the specific mismatch (quote both sides)
@@ -87,6 +103,10 @@ You are auditing the lrail repository for inconsistencies. The key principle: **
 
 ### CLI Commands
 - 🔴 first-run.md shows `lrail hello validate` but CLI expects `lrail wf hello validate`
+
+### Translated READMEs (i18n)
+- 🔴 README.ko.md missing "Variants" section (present in English)
+- 🟡 README.ja.md uses だ体 — should use です・ます調
 
 ### Terminology
 - 🟢 step-runner.md says "lrail framework" — should say "LLM Rail framework"

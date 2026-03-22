@@ -42,7 +42,7 @@ If `NEEDS_INJECT` or `NO_FILE`, append the following block to `CLAUDE.md` (creat
 ```
 ## lrail — Guardrails for Agentic Work
 
-This project uses [lrail](https://github.com/neuradex/lrail) to optimize complex agent tasks.
+This project uses [lrail](https://github.com/neuradex/llm-rail) to optimize complex agent tasks.
 
 LLMs have recency bias — long context leads to forgotten instructions and drift. lrail fixes this by decomposing tasks into validated steps, each running in a clean, narrow context. The result: speed (Haiku instead of Opus), safety (policy + validation), and transparency (full audit trail).
 

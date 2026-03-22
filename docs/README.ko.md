@@ -232,6 +232,70 @@ workflows/stock-screening/
 
 ---
 
+## 보안 모델
+
+LLM Rail은 **구조적 안전성**을 제공합니다 — 프롬프트 수준의 "조심하세요" 경고가 아닙니다. 보안 모델은 세 개의 레이어로 구성되어 있습니다.
+
+### 레이어 1: 에이전트 도구 제한
+
+Claude Code는 두 가지 에이전트 타입을 지원합니다. 선택에 따라 보안 수준이 결정됩니다:
+
+| | Custom Agent (e.g. `step-runner`) | General-Purpose Agent |
+|---|---|---|
+| 도구 제한 (`allowed-tools`) | 가능 — 화이트리스트만 허용 | 불가 — 모든 도구 사용 가능 |
+| Bash 패턴 제한 | 가능 (e.g. `Bash(node */dist/cli.js *bash*)`) | 불가 |
+| WebSearch / WebFetch | 사용 불가 | 사용 가능 |
+| 하위 에이전트 생성 | 불가 | 가능 |
+
+**Custom agent는 lrail bash 프록시를 통한 명령만 실행하도록 잠글 수 있습니다.** 이를 통해 정책 적용이 프롬프트 의존이 아닌 구조적 강제가 됩니다.
+
+### 레이어 2: 정책 적용
+
+에이전트가 `lrail <id> bash '<cmd>'`로만 제한되면, 모든 명령이 정책 엔진을 거칩니다:
+
+```yaml
+policy:
+  mode: enforce
+  rules:
+    - effect: allow
+      commands: ["curl -s https://api.example.com/*", "jq *"]
+    - effect: deny
+      commands: ["curl *", "rm *", "sudo *"]
+```
+
+에이전트가 접근할 수 있는 **도메인**, 실행할 수 있는 **바이너리**, 허용되는 **인자**를 프롬프트가 아닌 프레임워크 수준에서 제어할 수 있습니다.
+
+### 레이어 3: 감사 로그
+
+모든 명령 실행은 `policy.jsonl`에 전체 명령어, 정책 판정, 타임스탬프와 함께 기록됩니다. `trail` 모드(전부 허용)에서도 모든 행위가 기록되어 사후 검토가 가능합니다.
+
+### 제어를 잃지 않는 웹 접근
+
+웹 접근이 필요한 에이전트가 반드시 제한 없는 `WebFetch`/`WebSearch`를 사용할 필요는 없습니다. 대신 bash 프록시를 통한 `curl`을 사용할 수 있습니다:
+
+```yaml
+# Programmatic 스텝 — 토큰 비용 없음, 정책 완전 제어
+- id: search
+  type: programmatic
+  actions:
+    - shell: "curl -s https://google.serper.dev/search -H 'X-API-KEY: {{serper_key}}' -d '{\"q\": \"{{query}}\"}'"
+      extract: { results: "organic" }
+```
+
+이를 통해 `WebFetch`가 제공할 수 없는 **도메인 수준 접근 제어**가 가능합니다.
+
+### 권장 구성
+
+구조적 안전성을 극대화하려면:
+1. **Custom agent**를 사용하고 `allowed-tools`를 `Bash(lrail*), Read, Glob, Grep`으로 제한합니다
+2. 정책을 **enforce 모드**로 설정하고 명시적 허용 목록을 작성합니다
+3. 에이전틱 웹 도구 대신 `curl`을 사용한 **programmatic 스텝**으로 웹에 접근합니다
+4. `policy.jsonl` 감사 로그를 검토합니다
+
+> **이 영역은 현재 활발히 개발 중입니다.** Custom agent 제한과 general-purpose agent 기능 사이의 간극을 좁히는 방법을 지속적으로 탐구하고 있습니다. 기여와 아이디어를 환영합니다. [Contributing](./CONTRIBUTING.ko.md)을 참고해 주세요.
+
+---
+
 ## 시작하기
 
 ### 설치

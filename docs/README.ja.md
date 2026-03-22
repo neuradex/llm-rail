@@ -232,6 +232,70 @@ workflows/stock-screening/
 
 ---
 
+## セキュリティモデル
+
+LLM Railは**構造的な安全性**を提供します — プロンプトレベルの「注意してください」という警告ではありません。セキュリティモデルは3つのレイヤーで構成されています。
+
+### レイヤー1：エージェントのツール制限
+
+Claude Codeは2種類のエージェントタイプをサポートしています。選択によってセキュリティの上限が決まります：
+
+| | Custom Agent（例：`step-runner`） | General-Purpose Agent |
+|---|---|---|
+| ツール制限（`allowed-tools`） | 可能 — ホワイトリストのみ許可 | 不可 — 全ツール利用可能 |
+| Bashパターン制限 | 可能（例：`Bash(node */dist/cli.js *bash*)`） | 不可 |
+| WebSearch / WebFetch | 利用不可 | 利用可能 |
+| サブエージェント生成 | 不可 | 可能 |
+
+**Custom agentはlrail bashプロキシ経由のコマンドのみ実行するようロックダウンできます。** これにより、ポリシーの適用がプロンプト依存ではなく構造的な強制になります。
+
+### レイヤー2：ポリシーの適用
+
+エージェントが`lrail <id> bash '<cmd>'`に制限されると、すべてのコマンドがポリシーエンジンを経由します：
+
+```yaml
+policy:
+  mode: enforce
+  rules:
+    - effect: allow
+      commands: ["curl -s https://api.example.com/*", "jq *"]
+    - effect: deny
+      commands: ["curl *", "rm *", "sudo *"]
+```
+
+エージェントがアクセスできる**ドメイン**、実行できる**バイナリ**、許可される**引数**を、プロンプトではなくフレームワークレベルで制御できます。
+
+### レイヤー3：監査ログ
+
+すべてのコマンド実行は`policy.jsonl`に、コマンド全文、ポリシー判定、タイムスタンプとともに記録されます。`trail`モード（全許可）でもすべてのアクションが記録され、事後レビューが可能です。
+
+### 制御を失わないウェブアクセス
+
+ウェブアクセスが必要なエージェントが、制限のない`WebFetch`/`WebSearch`を使う必要はありません。代わりにbashプロキシ経由で`curl`を使用できます：
+
+```yaml
+# Programmaticステップ — トークンコストなし、ポリシーで完全制御
+- id: search
+  type: programmatic
+  actions:
+    - shell: "curl -s https://google.serper.dev/search -H 'X-API-KEY: {{serper_key}}' -d '{\"q\": \"{{query}}\"}'"
+      extract: { results: "organic" }
+```
+
+これにより、`WebFetch`では提供できない**ドメインレベルのアクセス制御**が可能になります。
+
+### 推奨構成
+
+構造的な安全性を最大化するには：
+1. **Custom agent**を使用し、`allowed-tools`を`Bash(lrail*), Read, Glob, Grep`に制限します
+2. ポリシーを**enforceモード**に設定し、明示的な許可リストを作成します
+3. エージェンティックなウェブツールの代わりに、`curl`を使用した**programmaticステップ**でウェブにアクセスします
+4. `policy.jsonl`の監査ログをレビューします
+
+> **この領域は現在活発に開発中です。** Custom agentの制限とgeneral-purpose agentの機能の間のギャップを埋める方法を継続的に模索しています。貢献やアイデアを歓迎します。[Contributing](./CONTRIBUTING.ja.md)をご参照ください。
+
+---
+
 ## はじめに
 
 ### インストール

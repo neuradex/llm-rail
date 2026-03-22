@@ -2,174 +2,103 @@
 
 > [English](./CONTRIBUTING.md) · [한국어](./CONTRIBUTING.ko.md) · [日本語](./CONTRIBUTING.ja.md)
 
+LLM Rail에 관심을 가져주셔서 감사합니다. 이 가이드는 개발 환경 설정, 변경 사항 작성, 기여 제출 과정을 안내합니다.
+
+## 개발 환경 설정
+
+```bash
+git clone https://github.com/neuradex/llm-rail.git
+cd llm-rail
+npm install
+npm run build
+npm test
+```
+
+실시간 리로드로 개발하기:
+
+```bash
+npm run dev -- docs              # 개발 모드로 CLI 실행
+npx tsx src/cli.ts wf list       # 소스에서 직접 실행
+```
+
 ## 프로젝트 구조
 
 ```
-src/
-├── cli.ts                # CLI 엔트리포인트
-├── types.ts              # 타입 정의 (StepDef, ActionDef, PolicyDef 등)
-├── util.ts               # YAML I/O, ID 생성, 유틸리티
-├── engine/
-│   ├── workflow.ts       # 워크플로우 정의 로딩 & 스키마 검증
-│   ├── state.ts          # 인스턴스 상태 CRUD (.llm-rail/{workflow}/{instance}/)
-│   ├── validator.ts      # 스텝 출력 검증 (21개 연산자)
-│   ├── context.ts        # 스텝 간 컨텍스트 해결 & 템플릿 보간
-│   ├── dependency.ts     # 스텝 간 의존성 해결
-│   ├── hooks.ts          # 라이프사이클 훅 (gate / event)
-│   ├── actions.ts        # 액션 실행기 (template, stdin, extract)
-│   ├── runner.ts         # 프로그래매틱 스텝 자동 실행 (advanceThrough)
-│   ├── policy.ts         # 정책 평가 + 트레일 로깅
-│   ├── tip-pool.ts       # 팁 랜덤 선택
-│   └── output.ts         # CLI 출력 포매팅
-├── commands/
-│   ├── create.ts         ├── start.ts
-│   ├── next.ts           ├── status.ts
-│   ├── query.ts          ├── reset.ts
-│   ├── list.ts           ├── validate.ts
-│   ├── bash.ts           └── policy.ts
-└── audit/
-    └── logger.ts         # 감사 로그 (JSONL) + instanceDir 헬퍼
+src/           # TypeScript 소스
+  cli.ts       # CLI 엔트리포인트
+  types.ts     # 타입 정의
+  engine/      # 코어 엔진 (워크플로우, 상태, 검증, 정책, 액션)
+  commands/    # CLI 커맨드 핸들러
+  audit/       # 감사 로깅
+learn/         # 문서 (단일 진실 원천 — `lrail docs`로 제공)
+agents/        # 에이전트 정의 (역할 + lrail docs 참조)
+skills/        # 스킬 정의 (행동 워크플로우 + lrail docs 참조)
+builtins/      # 빌트인 메타 워크플로우
+test/          # 테스트 (node:test)
 ```
 
-## 개발
+## 레퍼런스 문서
+
+스키마 상세, 검증 연산자, 라이프사이클 훅 등 기술 레퍼런스는 `learn/`에 있으며 `lrail docs <topic>`으로 접근합니다. 내용을 복제하지 마세요 — 항상 `lrail docs`로 참조하세요.
+
+주요 토픽:
 
 ```bash
-npm install                          # 의존성 설치
-npm run build                        # 빌드
-npm test                             # 테스트 실행
-npm run dev -- create code-review    # 개발 모드
+lrail docs concepts/step-types      # 스텝 타입 (agentic / programmatic)
+lrail docs concepts/validation      # 검증 연산자
+lrail docs concepts/actions         # 액션 시스템
+lrail docs concepts/policy          # 정책 적용
+lrail docs workflow/execution       # 실행 절차
 ```
 
-## CLI 레퍼런스
+## 변경 사항 작성
 
+1. 저장소를 포크하고 기능 브랜치를 생성합니다
+2. 테스트와 함께 변경 사항을 작성합니다
+3. `npm test`로 검증합니다
+4. `main` 브랜치에 대해 Pull Request를 제출합니다
+
+### 문서 유지보수
+
+소스 코드 수정 시 문서를 동기화하세요:
+
+| 변경 영역 | 업데이트 대상 |
+|---|---|
+| CLI 커맨드 | `learn/workflow/execution.md`, `learn/workflow/first-run.md` |
+| 검증 연산자 | `learn/concepts/validation.md` |
+| 스텝 타입 동작 | `learn/concepts/step-types.md` |
+| 정책 동작 | `learn/concepts/policy.md` |
+| 액션 동작 | `learn/concepts/actions.md` |
+| 타입 정의 | `agents/workflow-designer.md` 스키마 참조 |
+
+**에이전트나 스킬에 개념 설명을 추가하지 마세요.** `learn/`에 작성하고 `lrail docs`로 참조하세요.
+
+### 코드 컨벤션
+
+- ES 모듈 기반 TypeScript (`"type": "module"`)
+- `js-yaml` 외에 외부 런타임 의존성 없음
+- 함수는 일반 객체를 반환 — 데이터 구조에 클래스 사용 금지
+- CLI 출력은 `engine/output.ts` 포매팅 헬퍼 사용
+
+### 테스트
+
+Node.js 빌트인 테스트 러너(`node:test`)를 사용합니다:
+
+```bash
+npm test                           # 전체 테스트 실행
+node --import tsx --test test/variant.test.ts   # 특정 테스트 실행
 ```
-lrail wf <workflow> create [--param k=v]                워크플로우 정의로 인스턴스 생성
-lrail <id> start                                     다음 대기 중인 스텝 시작
-lrail <id> next --result '<json>'                    스텝 출력 제출 (검증됨)
-lrail <id> bash '<command>'                          정책 적용 프록시를 통한 명령 실행
-lrail <id> status                                    인스턴스 진행 상황 표시
-lrail <id> query [--step <step-id>]                  스텝 상세 조회
-lrail <id> reset <step-id>                           스텝 리셋 후 재실행
-lrail wf <workflow> validate                            워크플로우 YAML 스키마 검증
-lrail wf <name> list [--status <status>]                       전체 인스턴스 목록
-lrail wf <workflow> policy check --command '<cmd>'      정책 체크 드라이런
-lrail <alias|id> policy generate         트레일 로그로부터 허용 목록 생성
-```
 
-## 워크플로우 스키마
+테스트는 격리를 위해 `before`/`after` 훅에서 임시 디렉토리를 생성합니다.
 
-### 최상위
+## 기여를 환영하는 영역
 
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `name` | string | O | 워크플로우 식별자 |
-| `version` | string | X | Semver 버전 |
-| `description` | string | X | 워크플로우 설명 |
-| `params` | object | X | 입력 파라미터 (type, required, default, description, validation) |
-| `context` | object | X | 공유 컨텍스트 |
-| `policy` | PolicyDef | X | 명령 실행 정책 (trail/enforce) |
-| `steps` | StepDef[] | O | 정렬된 스텝 정의 |
+다음 영역에서 적극적으로 기여를 찾고 있습니다:
 
-### 스텝 필드
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `id` | string | O | 고유 스텝 식별자 |
-| `type` | string | X | `"agentic"` (기본값) 또는 `"programmatic"` |
-| `description` | string | agentic 전용 | `{{param}}` 보간 지원 |
-| `depends_on` | string \| string[] | X | 선행 스텝 ID |
-| `required_output` | string[] | agentic 전용 | 에이전트가 반드시 생성해야 하는 필드 |
-| `actions` | ActionDef[] | programmatic 필수 | 실행할 셸 명령 |
-| `validation` | Rule[] | X | 구조적 검증 규칙 |
-| `assertions` | Rule[] | X | 비즈니스 로직 어서션 |
-| `context_in` | object | X | 명시적 데이터 플로우: `로컬명: "{stepId.field}"` |
-| `tips` | string[] | X | 실행 힌트 (스텝당 2개 랜덤 표시) |
-| `meta` | object | X | 훅용 임의 메타데이터 |
-
-### ActionDef
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `run` | string | O | 셸 명령. `{{field}}` 템플릿 보간 지원. |
-| `extract` | object | X | stdout JSON에서 추출할 `targetKey: sourceKey` 매핑. |
-
-### PolicyDef
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `mode` | string | O | `"trail"` (로그만) 또는 `"enforce"` (deny-first 규칙) |
-| `rules` | PolicyRule[] | enforce 전용 | `{ effect: "allow"\|"deny", commands: string[] }` 배열 |
-
-### 템플릿 문법
-
-- `{{param}}` — description 및 action `run` 필드에서 파라미터 보간
-- `{stepId.field}` — `context_in`에서 스텝 출력 참조
-
-## 검증 연산자
-
-`validation`과 `assertions` 규칙에 사용 가능한 21개 내장 연산자:
-
-| 연산자 | 설명 | 대상 |
-|---|---|---|
-| `exists` | 필드가 존재하는지 | any |
-| `not_empty` | 비어있지 않은지 | string / array / object |
-| `type` | 타입 체크 (`string`, `number`, `boolean`, `array`, `object`) | any |
-| `min_length` | 최소 길이 | string / array |
-| `max_length` | 최대 길이 | string / array |
-| `length` | 정확한 길이 | string / array |
-| `min` | 최솟값 | number |
-| `max` | 최댓값 | number |
-| `between` | 범위 `[min, max]` | number |
-| `eq` | 완전 일치 | any |
-| `neq` | 불일치 | any |
-| `gt` | 초과 | number |
-| `gte` | 이상 | number |
-| `lt` | 미만 | number |
-| `lte` | 이하 | number |
-| `contains` | 값 포함 | string / array |
-| `not_contains` | 값 미포함 | string / array |
-| `matches` | 정규표현식 매치 | string |
-| `one_of` | 허용 값 목록 내 | any |
-| `each_has` | 배열의 각 요소가 해당 키를 보유 | array |
-
-모든 규칙에 `message` 필드로 커스텀 에러 메시지 지정 가능.
-
-- **`validation`** — 구조적 체크 (타입, 길이, 비어있음). "데이터 형태가 맞는가?"
-- **`assertions`** — 비즈니스 로직 체크 (값 범위, 허용 값). "데이터가 타당한가?"
-
-## 라이프사이클 훅
-
-워크플로우/스텝 라이프사이클에서 발생하는 훅:
-
-| 훅 | 타입 | 설명 |
-|---|---|---|
-| `step:before_start` | gate | 스텝 시작을 차단할 수 있음 |
-| `step:started` | event | 스텝이 `in_progress`에 진입한 후 발생 |
-| `step:rejected` | event | 검증 실패 시 발생 |
-| `step:before_complete` | gate | 스텝 완료를 차단할 수 있음 |
-| `step:completed` | event | 스텝 완료 후 발생 |
-| `step:reset` | event | 스텝 리셋 시 발생 |
-| `workflow:created` | event | 인스턴스 생성 시 발생 |
-| `workflow:completed` | event | 모든 스텝 완료 시 발생 |
-| `workflow:error` | event | 워크플로우 에러 발생 시 |
-| `action:before_run` | event | 액션 실행 전 발생 |
-| `action:completed` | event | 액션 완료 후 발생 |
-| `action:failed` | event | 액션 실패 시 발생 |
-| `policy:denied` | event | 정책이 명령을 차단했을 때 발생 |
-
-Gate 훅은 `{ allow: boolean, message?: string }`을 반환.
-
-## 인스턴스 디렉토리 구조
-
-모든 인스턴스 데이터는 통합 디렉토리에 저장:
-
-```
-.llm-rail/{workflow-name}/{instance-id}/
-  ├── state.yaml      # 인스턴스 상태 (steps, context, status)
-  ├── audit.jsonl      # 라이프사이클 이벤트 로그
-  └── policy.jsonl     # 명령 실행 로그 (bash proxy)
-```
+- **보안 모델** — 구조적 강제 강화, 새로운 격리 패턴 탐색
+- **검증 연산자** — 일반적인 사용 사례를 위한 새로운 연산자
+- **프로그래매틱 스텝 패턴** — `shell:`, `js:` 외 새로운 액션 프리미티브
 
 ## 라이선스
 
-Private
+MIT — [LICENSE](../LICENSE) 참조

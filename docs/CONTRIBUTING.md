@@ -2,174 +2,103 @@
 
 > [English](./CONTRIBUTING.md) · [한국어](./CONTRIBUTING.ko.md) · [日本語](./CONTRIBUTING.ja.md)
 
+Thank you for your interest in contributing to LLM Rail. This guide covers the process for setting up a development environment, making changes, and submitting contributions.
+
+## Development Setup
+
+```bash
+git clone https://github.com/neuradex/llm-rail.git
+cd llm-rail
+npm install
+npm run build
+npm test
+```
+
+For development with live reload:
+
+```bash
+npm run dev -- docs              # Run CLI in dev mode
+npx tsx src/cli.ts wf list       # Run directly from source
+```
+
 ## Project Structure
 
 ```
-src/
-├── cli.ts                # CLI entry point
-├── types.ts              # Type definitions (StepDef, ActionDef, PolicyDef, etc.)
-├── util.ts               # YAML I/O, ID generation, utilities
-├── engine/
-│   ├── workflow.ts       # Workflow loading & schema validation
-│   ├── state.ts          # Instance state CRUD (.llm-rail/{workflow}/{instance}/)
-│   ├── validator.ts      # Step output validation (21 operators)
-│   ├── context.ts        # Cross-step context resolution & template interpolation
-│   ├── dependency.ts     # Step dependency resolution
-│   ├── hooks.ts          # Lifecycle hooks (gate / event)
-│   ├── actions.ts        # Action executor (template, stdin, extract)
-│   ├── runner.ts         # Programmatic step auto-execution (advanceThrough)
-│   ├── policy.ts         # Policy evaluation + trail logging
-│   ├── tip-pool.ts       # Random tip selection
-│   └── output.ts         # CLI output formatting
-├── commands/
-│   ├── create.ts         ├── start.ts
-│   ├── next.ts           ├── status.ts
-│   ├── query.ts          ├── reset.ts
-│   ├── list.ts           ├── validate.ts
-│   ├── bash.ts           └── policy.ts
-└── audit/
-    └── logger.ts         # Audit log (JSONL) + instanceDir helper
+src/           # TypeScript source
+  cli.ts       # CLI entry point
+  types.ts     # Type definitions
+  engine/      # Core engine (workflow, state, validation, policy, actions)
+  commands/    # CLI command handlers
+  audit/       # Audit logging
+learn/         # Documentation (single source of truth — served via `lrail docs`)
+agents/        # Agent definitions (role + lrail docs references)
+skills/        # Skill definitions (behavioral workflow + lrail docs references)
+builtins/      # Built-in meta-workflows
+test/          # Tests (node:test)
 ```
 
-## Development
+## Reference Documentation
+
+Schema details, validation operators, lifecycle hooks, and other technical references live in `learn/` and are accessed via `lrail docs <topic>`. Do not duplicate them — always reference with `lrail docs`.
+
+Key topics:
 
 ```bash
-npm install                          # Install dependencies
-npm run build                        # Build
-npm test                             # Run tests
-npm run dev -- create code-review    # Dev mode
+lrail docs concepts/step-types      # Step types (agentic / programmatic)
+lrail docs concepts/validation      # Validation operators
+lrail docs concepts/actions         # Action system
+lrail docs concepts/policy          # Policy enforcement
+lrail docs workflow/execution       # Execution procedure
 ```
 
-## CLI Reference
+## Making Changes
 
+1. Fork the repository and create a feature branch
+2. Make your changes with tests
+3. Run `npm test` to verify
+4. Submit a pull request against `main`
+
+### Documentation Maintenance
+
+When modifying source code, keep docs in sync:
+
+| Changed area | Update |
+|---|---|
+| CLI commands | `learn/workflow/execution.md`, `learn/workflow/first-run.md` |
+| Validation operators | `learn/concepts/validation.md` |
+| Step type behavior | `learn/concepts/step-types.md` |
+| Policy behavior | `learn/concepts/policy.md` |
+| Actions behavior | `learn/concepts/actions.md` |
+| Type definitions | `agents/workflow-designer.md` schema reference |
+
+**Never add concept explanations to agents or skills.** Put them in `learn/` and reference with `lrail docs`.
+
+### Code Conventions
+
+- TypeScript with ES modules (`"type": "module"`)
+- No external runtime dependencies beyond `js-yaml`
+- Functions return plain objects — no classes for data structures
+- CLI output uses `engine/output.ts` formatting helpers
+
+### Testing
+
+Tests use Node.js built-in test runner (`node:test`):
+
+```bash
+npm test                           # Run all tests
+node --import tsx --test test/variant.test.ts   # Run a specific test
 ```
-lrail wf <workflow> create [--param k=v]                Create instance from workflow definition
-lrail <id> start                                     Start the next pending step
-lrail <id> next --result '<json>'                    Submit step output (validated)
-lrail <id> bash '<command>'                          Execute command through policy-enforced proxy
-lrail <id> status                                    Show instance progress
-lrail <id> query [--step <step-id>]                  Query step details
-lrail <id> reset <step-id>                           Reset a step for re-execution
-lrail wf <workflow> validate                            Validate workflow YAML schema
-lrail wf <name> list [--status <status>]                       List all instances
-lrail wf <workflow> policy check --command '<cmd>'      Dry-run policy check
-lrail <alias|id> policy generate         Generate allow-list from trail logs
-```
 
-## Workflow Schema
+Tests create temporary directories in `before`/`after` hooks for isolation.
 
-### Top-level
+## Areas of Interest
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | yes | Workflow identifier |
-| `version` | string | no | Semver version |
-| `description` | string | no | Human-readable purpose |
-| `params` | object | no | Input parameters (type, required, default, description, validation) |
-| `context` | object | no | Shared context |
-| `policy` | PolicyDef | no | Command execution policy (trail/enforce) |
-| `steps` | StepDef[] | yes | Ordered step definitions |
+We are actively looking for contributions in these areas:
 
-### Step fields
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `id` | string | yes | Unique step identifier |
-| `type` | string | no | `"agentic"` (default) or `"programmatic"` |
-| `description` | string | agentic only | Supports `{{param}}` interpolation |
-| `depends_on` | string \| string[] | no | Step ID(s) this depends on |
-| `required_output` | string[] | agentic only | Fields the agent must produce |
-| `actions` | ActionDef[] | programmatic required | Shell commands to execute |
-| `validation` | Rule[] | no | Structural validation rules |
-| `assertions` | Rule[] | no | Business logic assertions |
-| `context_in` | object | no | Explicit data flow: `local_name: "{stepId.field}"` |
-| `tips` | string[] | no | Execution hints (2 randomly shown per step) |
-| `meta` | object | no | Arbitrary metadata for hooks |
-
-### ActionDef
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `run` | string | yes | Shell command. Supports `{{field}}` template interpolation. |
-| `extract` | object | no | Map of `targetKey: sourceKey` to extract from stdout JSON. |
-
-### PolicyDef
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `mode` | string | yes | `"trail"` (log only) or `"enforce"` (deny-first rules) |
-| `rules` | PolicyRule[] | enforce only | Array of `{ effect: "allow"\|"deny", commands: string[] }` |
-
-### Template Syntax
-
-- `{{param}}` — Parameter interpolation in description and action `run` fields
-- `{stepId.field}` — Step output reference in `context_in` values
-
-## Validation Operators
-
-21 built-in operators for `validation` and `assertions` rules:
-
-| Op | Description | Applies to |
-|---|---|---|
-| `exists` | Field exists | any |
-| `not_empty` | Not empty | string / array / object |
-| `type` | Type check (`string`, `number`, `boolean`, `array`, `object`) | any |
-| `min_length` | Minimum length | string / array |
-| `max_length` | Maximum length | string / array |
-| `length` | Exact length | string / array |
-| `min` | Minimum value | number |
-| `max` | Maximum value | number |
-| `between` | Range `[min, max]` | number |
-| `eq` | Strict equality | any |
-| `neq` | Not equal | any |
-| `gt` | Greater than | number |
-| `gte` | Greater or equal | number |
-| `lt` | Less than | number |
-| `lte` | Less or equal | number |
-| `contains` | Contains value | string / array |
-| `not_contains` | Does not contain | string / array |
-| `matches` | Regex match | string |
-| `one_of` | One of allowed values | any |
-| `each_has` | Every array item has key | array |
-
-All rules support a `message` field for custom error text.
-
-- **`validation`** — Structural checks (type, length, emptiness). "Is the data shaped correctly?"
-- **`assertions`** — Business logic checks (value ranges, allowed values). "Does the data make sense?"
-
-## Lifecycle Hooks
-
-Hooks fire at workflow/step lifecycle events:
-
-| Hook | Type | Description |
-|---|---|---|
-| `step:before_start` | gate | Can block step from starting |
-| `step:started` | event | Fires after step enters `in_progress` |
-| `step:rejected` | event | Fires when validation fails |
-| `step:before_complete` | gate | Can block step completion |
-| `step:completed` | event | Fires after step completes |
-| `step:reset` | event | Fires when step is reset |
-| `workflow:created` | event | Fires when instance is created |
-| `workflow:completed` | event | Fires when all steps are done |
-| `workflow:error` | event | Fires on workflow error |
-| `action:before_run` | event | Fires before action execution |
-| `action:completed` | event | Fires after action completes |
-| `action:failed` | event | Fires when action fails |
-| `policy:denied` | event | Fires when policy blocks a command |
-
-Gate hooks return `{ allow: boolean, message?: string }`.
-
-## Instance Directory Structure
-
-All instance data is stored under a unified directory:
-
-```
-.llm-rail/{workflow-name}/{instance-id}/
-  ├── state.yaml      # Instance state (steps, context, status)
-  ├── audit.jsonl      # Lifecycle event log
-  └── policy.jsonl     # Command execution log (bash proxy)
-```
+- **Security model** — strengthening structural enforcement, exploring new isolation patterns
+- **Validation operators** — new operators for common use cases
+- **Programmatic step patterns** — more action primitives beyond `shell:` and `js:`
 
 ## License
 
-Private
+MIT — see [LICENSE](../LICENSE)

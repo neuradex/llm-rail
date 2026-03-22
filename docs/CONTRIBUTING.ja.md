@@ -2,174 +2,103 @@
 
 > [English](./CONTRIBUTING.md) · [한국어](./CONTRIBUTING.ko.md) · [日本語](./CONTRIBUTING.ja.md)
 
+LLM Railへの関心をお寄せいただきありがとうございます。このガイドでは、開発環境のセットアップ、変更の作成、コントリビューションの提出手順をご案内します。
+
+## 開発環境のセットアップ
+
+```bash
+git clone https://github.com/neuradex/llm-rail.git
+cd llm-rail
+npm install
+npm run build
+npm test
+```
+
+ライブリロードでの開発:
+
+```bash
+npm run dev -- docs              # 開発モードでCLIを実行
+npx tsx src/cli.ts wf list       # ソースから直接実行
+```
+
 ## プロジェクト構成
 
 ```
-src/
-├── cli.ts                # CLI エントリポイント
-├── types.ts              # 型定義 (StepDef, ActionDef, PolicyDef など)
-├── util.ts               # YAML I/O, ID生成, ユーティリティ
-├── engine/
-│   ├── workflow.ts       # ワークフロー定義の読み込み・スキーマ検証
-│   ├── state.ts          # インスタンス状態の CRUD (.llm-rail/{workflow}/{instance}/)
-│   ├── validator.ts      # ステップ出力の検証 (21演算子)
-│   ├── context.ts        # ステップ間コンテキスト解決・テンプレート展開
-│   ├── dependency.ts     # ステップ間依存関係の解決
-│   ├── hooks.ts          # ライフサイクルフック (gate / event)
-│   ├── actions.ts        # アクション実行器 (template, stdin, extract)
-│   ├── runner.ts         # プログラマティックステップの自動実行 (advanceThrough)
-│   ├── policy.ts         # ポリシー評価 + トレイルロギング
-│   ├── tip-pool.ts       # Tips のランダム選出
-│   └── output.ts         # CLI 出力フォーマッタ
-├── commands/
-│   ├── create.ts         ├── start.ts
-│   ├── next.ts           ├── status.ts
-│   ├── query.ts          ├── reset.ts
-│   ├── list.ts           ├── validate.ts
-│   ├── bash.ts           └── policy.ts
-└── audit/
-    └── logger.ts         # 監査ログ (JSONL) + instanceDir ヘルパー
+src/           # TypeScriptソース
+  cli.ts       # CLIエントリポイント
+  types.ts     # 型定義
+  engine/      # コアエンジン (ワークフロー、状態、バリデーション、ポリシー、アクション)
+  commands/    # CLIコマンドハンドラー
+  audit/       # 監査ログ
+learn/         # ドキュメント (単一の信頼できる情報源 — `lrail docs`で提供)
+agents/        # エージェント定義 (役割 + lrail docs参照)
+skills/        # スキル定義 (行動ワークフロー + lrail docs参照)
+builtins/      # ビルトインメタワークフロー
+test/          # テスト (node:test)
 ```
 
-## 開発
+## リファレンスドキュメント
+
+スキーマの詳細、バリデーション演算子、ライフサイクルフックなどの技術リファレンスは `learn/` にあり、`lrail docs <topic>` でアクセスできます。内容を複製せず、常に `lrail docs` で参照してください。
+
+主要トピック:
 
 ```bash
-npm install                          # 依存関係のインストール
-npm run build                        # ビルド
-npm test                             # テスト実行
-npm run dev -- create code-review    # 開発モード
+lrail docs concepts/step-types      # ステップタイプ (agentic / programmatic)
+lrail docs concepts/validation      # バリデーション演算子
+lrail docs concepts/actions         # アクションシステム
+lrail docs concepts/policy          # ポリシー適用
+lrail docs workflow/execution       # 実行手順
 ```
 
-## CLI リファレンス
+## 変更の作成
 
+1. リポジトリをフォークし、フィーチャーブランチを作成します
+2. テストとともに変更を作成します
+3. `npm test` で検証します
+4. `main` ブランチに対してPull Requestを提出します
+
+### ドキュメントのメンテナンス
+
+ソースコード変更時はドキュメントを同期してください:
+
+| 変更箇所 | 更新対象 |
+|---|---|
+| CLIコマンド | `learn/workflow/execution.md`, `learn/workflow/first-run.md` |
+| バリデーション演算子 | `learn/concepts/validation.md` |
+| ステップタイプの動作 | `learn/concepts/step-types.md` |
+| ポリシーの動作 | `learn/concepts/policy.md` |
+| アクションの動作 | `learn/concepts/actions.md` |
+| 型定義 | `agents/workflow-designer.md` スキーマ参照 |
+
+**エージェントやスキルに概念説明を追加しないでください。** `learn/` に記載し、`lrail docs` で参照してください。
+
+### コードコンベンション
+
+- ESモジュールベースのTypeScript (`"type": "module"`)
+- `js-yaml` 以外の外部ランタイム依存関係なし
+- 関数はプレーンオブジェクトを返す — データ構造にクラスを使用しない
+- CLI出力は `engine/output.ts` のフォーマッティングヘルパーを使用
+
+### テスト
+
+Node.jsビルトインテストランナー (`node:test`) を使用:
+
+```bash
+npm test                           # 全テスト実行
+node --import tsx --test test/variant.test.ts   # 特定テストの実行
 ```
-lrail wf <workflow> create [--param k=v]                ワークフロー定義からインスタンスを作成
-lrail <id> start                                     次の待機中ステップを開始
-lrail <id> next --result '<json>'                    ステップ出力を提出 (検証あり)
-lrail <id> bash '<command>'                          ポリシー適用プロキシ経由でコマンドを実行
-lrail <id> status                                    インスタンスの進捗を表示
-lrail <id> query [--step <step-id>]                  ステップ詳細を照会
-lrail <id> reset <step-id>                           ステップをリセットして再実行
-lrail wf <workflow> validate                            ワークフローYAMLスキーマを検証
-lrail wf <name> list [--status <status>]                       全インスタンスを一覧表示
-lrail wf <workflow> policy check --command '<cmd>'      ポリシーチェックのドライラン
-lrail <alias|id> policy generate         トレイルログから許可リストを生成
-```
 
-## ワークフロースキーマ
+テストは `before`/`after` フックで一時ディレクトリを作成し、分離を確保します。
 
-### トップレベル
+## コントリビューションを歓迎する分野
 
-| フィールド | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `name` | string | ○ | ワークフロー識別子 |
-| `version` | string | × | Semverバージョン |
-| `description` | string | × | ワークフローの説明 |
-| `params` | object | × | 入力パラメータ (type, required, default, description, validation) |
-| `context` | object | × | 共有コンテキスト |
-| `policy` | PolicyDef | × | コマンド実行ポリシー (trail/enforce) |
-| `steps` | StepDef[] | ○ | 順序付きステップ定義 |
+以下の分野でのコントリビューションを積極的に募集しています:
 
-### ステップフィールド
-
-| フィールド | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `id` | string | ○ | 一意のステップ識別子 |
-| `type` | string | × | `"agentic"` (デフォルト) または `"programmatic"` |
-| `description` | string | agentic のみ | `{{param}}` 展開対応 |
-| `depends_on` | string \| string[] | × | 先行ステップID |
-| `required_output` | string[] | agentic のみ | エージェントが必ず生成すべきフィールド |
-| `actions` | ActionDef[] | programmatic 必須 | 実行するシェルコマンド |
-| `validation` | Rule[] | × | 構造バリデーションルール |
-| `assertions` | Rule[] | × | ビジネスロジックアサーション |
-| `context_in` | object | × | 明示的データフロー: `ローカル名: "{stepId.field}"` |
-| `tips` | string[] | × | 実行ヒント (ステップごとに2つランダム表示) |
-| `meta` | object | × | フック用の任意メタデータ |
-
-### ActionDef
-
-| フィールド | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `run` | string | ○ | シェルコマンド。`{{field}}` テンプレート展開対応。 |
-| `extract` | object | × | stdout JSONから抽出する `targetKey: sourceKey` マッピング。 |
-
-### PolicyDef
-
-| フィールド | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `mode` | string | ○ | `"trail"` (ログのみ) または `"enforce"` (deny-firstルール) |
-| `rules` | PolicyRule[] | enforce のみ | `{ effect: "allow"\|"deny", commands: string[] }` の配列 |
-
-### テンプレート構文
-
-- `{{param}}` — description および action `run` フィールドでのパラメータ展開
-- `{stepId.field}` — `context_in`でのステップ出力参照
-
-## バリデーション演算子
-
-`validation`と`assertions`ルールで使用できる21の組み込み演算子:
-
-| 演算子 | 説明 | 対象 |
-|---|---|---|
-| `exists` | フィールドが存在するか | any |
-| `not_empty` | 空でないか | string / array / object |
-| `type` | 型チェック (`string`, `number`, `boolean`, `array`, `object`) | any |
-| `min_length` | 最小長 | string / array |
-| `max_length` | 最大長 | string / array |
-| `length` | 完全一致の長さ | string / array |
-| `min` | 最小値 | number |
-| `max` | 最大値 | number |
-| `between` | 範囲 `[min, max]` | number |
-| `eq` | 完全一致 | any |
-| `neq` | 不一致 | any |
-| `gt` | より大きい | number |
-| `gte` | 以上 | number |
-| `lt` | より小さい | number |
-| `lte` | 以下 | number |
-| `contains` | 値を含む | string / array |
-| `not_contains` | 値を含まない | string / array |
-| `matches` | 正規表現マッチ | string |
-| `one_of` | 許可値リスト内 | any |
-| `each_has` | 配列の各要素が指定キーを持つ | array |
-
-全ルールに`message`フィールドでカスタムエラーメッセージを指定可能。
-
-- **`validation`** — 構造チェック (型、長さ、空チェック)。「データの形は正しいか？」
-- **`assertions`** — ビジネスロジックチェック (値の範囲、許可値)。「データは妥当か？」
-
-## ライフサイクルフック
-
-ワークフロー・ステップのライフサイクルで発火するフック:
-
-| フック | タイプ | 説明 |
-|---|---|---|
-| `step:before_start` | gate | ステップの開始をブロック可能 |
-| `step:started` | event | ステップが`in_progress`に遷移した後に発火 |
-| `step:rejected` | event | バリデーション失敗時に発火 |
-| `step:before_complete` | gate | ステップの完了をブロック可能 |
-| `step:completed` | event | ステップ完了後に発火 |
-| `step:reset` | event | ステップリセット時に発火 |
-| `workflow:created` | event | インスタンス作成時に発火 |
-| `workflow:completed` | event | 全ステップ完了時に発火 |
-| `workflow:error` | event | ワークフローエラー発生時に発火 |
-| `action:before_run` | event | アクション実行前に発火 |
-| `action:completed` | event | アクション完了後に発火 |
-| `action:failed` | event | アクション失敗時に発火 |
-| `policy:denied` | event | ポリシーがコマンドをブロックした時に発火 |
-
-Gateフックは`{ allow: boolean, message?: string }`を返す。
-
-## インスタンスディレクトリ構造
-
-全インスタンスデータは統合ディレクトリに保存:
-
-```
-.llm-rail/{workflow-name}/{instance-id}/
-  ├── state.yaml      # インスタンス状態 (steps, context, status)
-  ├── audit.jsonl      # ライフサイクルイベントログ
-  └── policy.jsonl     # コマンド実行ログ (bash proxy)
-```
+- **セキュリティモデル** — 構造的強制の強化、新しいアイソレーションパターンの探求
+- **バリデーション演算子** — 一般的なユースケース向けの新しい演算子
+- **プログラマティックステップパターン** — `shell:`、`js:` 以外の新しいアクションプリミティブ
 
 ## ライセンス
 
-Private
+MIT — [LICENSE](../LICENSE) を参照

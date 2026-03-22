@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "llm-rail",
-      "source": ".",
+      "source": "./",
       "description": "Guardrails for agentic work — decompose tasks into validated steps, enforce policy, audit everything",
       "homepage": "https://github.com/neuradex/llm-rail",
       "keywords": ["workflow", "guardrails", "agent", "llm", "validation", "policy", "audit"]

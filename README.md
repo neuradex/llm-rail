@@ -14,7 +14,7 @@
   <a href="#security-model">Security</a> ·
   <a href="#getting-started">Getting Started</a> ·
   <a href="#claude-code-plugin">Plugin</a> ·
-  <a href="./docs/CONTRIBUTING.md">Contributing</a>
+  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
@@ -285,7 +285,7 @@ For maximum structural safety:
 3. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
 4. Review `policy.jsonl` audit logs
 
-> **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./docs/CONTRIBUTING.md).
+> **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./CONTRIBUTING.md).
 
 ---
 

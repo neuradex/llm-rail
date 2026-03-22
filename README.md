@@ -5,12 +5,13 @@
 </p>
 
 <p align="center">
-  <strong>Guardrails for agentic work.</strong>
+  <strong>Structural safety for AI agents.</strong>
 </p>
 
 <p align="center">
-  <a href="#why-rails">Why Rails</a> ·
+  <a href="#the-problem">The Problem</a> ·
   <a href="#how-it-works">How It Works</a> ·
+  <a href="#security-model">Security</a> ·
   <a href="#getting-started">Getting Started</a> ·
   <a href="#claude-code-plugin">Plugin</a> ·
   <a href="./docs/CONTRIBUTING.md">Contributing</a>
@@ -26,36 +27,25 @@
 
 ---
 
-Ruby on Rails laid rails for web development. **LLM Rail lays rails for agentic work.**
+LLM agents skip steps, hallucinate data, and run commands they shouldn't. **LLM Rail makes these failures structurally impossible** — not by asking models to be careful, but by building execution structures where bad things can't happen.
 
-The word "rail" carries a dual meaning — and both are intentional:
+Existing agent frameworks handle orchestration — but safety is left to the prompt. "Be careful." "Don't make mistakes." These are **stickers on a dashboard**. LLM Rail takes a different approach: **structural safety at the framework level**.
 
-- **Rail as track**: Pre-defined workflow steps that agents run on. Fast, efficient, no wasted motion.
-- **Rail as guardrail**: Structural controls that prevent agents from going off course.
-
-LLM agents choke on complex tasks. They skip steps, hallucinate outputs, and lose track of what they were supposed to do as context grows. Throwing a bigger model at it costs more — with no guarantee it'll work. The root cause: **LLMs have recency bias**. In a long context, they forget the original instructions and drift.
-
-Current approaches to AI safety amount to **stickers on a dashboard** — prompt-level warnings like "be careful" and "don't make mistakes." LLM Rail takes a different approach: **structural safety**. Build execution structures where bad things *can't* happen, instead of asking models to be good.
-
-**LLM Rail** fixes this with three layers of rails:
-
-| Rail | What it controls |
+| Layer | What it enforces |
 |---|---|
-| **Workflow Rail** | Decompose tasks into validated steps. Each step runs in a narrow context — small enough for Haiku instead of Opus. |
-| **Policy Rail** | Every shell command goes through a bash proxy with IAM-style allow/deny rules. Agents can only do what's explicitly permitted. |
-| **Audit Rail** | Every action, command, and validation — logged. Full traceability per instance. |
-
-Think of it as **Convention over Configuration for the LLM era**. Rails defined "how to build web apps" with MVC. LLM Rail defines "how to run AI agents" with workflow decomposition + execution control + audit trail. Opus designs the workflows. Haiku runs on them.
+| **Workflow** | Decompose tasks into validated steps. Each step runs in a narrow context — small enough for Haiku instead of Opus. |
+| **Policy** | Every command goes through a bash proxy (`lrail <id> bash`). IAM-style allow/deny rules. Agents can only do what's explicitly permitted. |
+| **Audit** | Every action, command, and policy decision — logged per instance. Full traceability. |
 
 Your AI agent failed a complex code review? Break it into 3 validated steps. Run each with Haiku. Total cost drops from $2 to $0.08. Every output verified. Full audit trail.
 
 ---
 
-## Why Rails
+## The Problem
 
 LLMs have **recency bias** — the longer the context, the more they forget their original instructions ([Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427), [Liu et al. 2023](https://arxiv.org/abs/2307.03172)). This is the fundamental failure mode of complex agentic tasks.
 
-Existing frameworks like LangChain and CrewAI handle orchestration — but not **execution control and audit trail** at the framework level. They tell agents *what* to do, but not *how much they're allowed to do*. LLM Rail fills this gap.
+Existing frameworks like LangChain and CrewAI tell agents *what* to do, but not *how much they're allowed to do*. They handle orchestration — but not **execution control and audit** at the framework level. LLM Rail fills this gap.
 
 LLM Rail solves the recency problem by **keeping each step's context small and focused**:
 
@@ -65,9 +55,9 @@ LLM Rail solves the recency problem by **keeping each step's context small and f
 
 This is why **Haiku can replace Opus**. It's not about model capability — it's about scope. A small model in a small context outperforms a large model drowning in a large context.
 
-And because the workflow engine — not the LLM — tracks progress, **every step executes without exception**, even in a workflow with hundreds of steps. An LLM agent in a long context will inevitably skip steps. A workflow engine never forgets.
+The workflow engine — not the LLM — tracks progress, so **every step executes without exception**, even in a workflow with hundreds of steps. An LLM agent in a long context will inevitably skip steps. A workflow engine never forgets.
 
-For enterprises, this answers three critical questions: **"Can it handle complex processes?"** — yes, the engine guarantees every step completes. **"Can you control it?"** — yes, with policy rails. **"Can you trace issues?"** — yes, with audit rails. All answered at the architecture level, not with prompt-level promises.
+For enterprises: **"Can you control it?"** — policy enforced at the framework level. **"Can you trace issues?"** — full audit trail. **"Can it handle complex processes?"** — the engine guarantees every step completes. All answered structurally, not with prompt-level promises.
 
 ---
 
@@ -398,7 +388,7 @@ One agent, one instance, start to finish. Each step gets a narrow, validated sco
 ---
 
 <p align="center">
-  <strong>Safe AI = building structures where bad things can't happen, not asking models to be good.</strong>
+  <strong>Prompt-level safety is a sticker on a dashboard. Structural safety is the seatbelt.</strong>
   <br>
-  Define the rails. Let cheap models run on them — fast, safe, and transparent.
+  LLM Rail builds the seatbelt.
 </p>

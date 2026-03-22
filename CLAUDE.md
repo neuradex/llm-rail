@@ -34,22 +34,16 @@ Run `/consistency-check` periodically to detect drift between source code, docs,
 
 ## Development Environment
 
-When working in this repository (as a contributor), use `node dist/cli.js` instead of `lrail`:
 ```bash
-# Build first (required after source changes)
-npm run build
+# Install dependencies + build
+npm install && npm run build
 
-# Run CLI
-node dist/cli.js docs
-node dist/cli.js wf list
-node dist/cli.js wf <name> validate
-```
+# lrail is now available via npx or node_modules/.bin
+lrail docs
+lrail wf list
 
-For live development without rebuilding:
-```bash
+# For live development without rebuilding
 npx tsx src/cli.ts docs
 ```
 
 The CLI resolves package directories (`learn/`, `builtins/`) via `import.meta.url`, so it works from the repo root without setting any environment variables.
-
-When installed as a plugin, `CLAUDE_PLUGIN_ROOT` is set automatically by Claude Code and `settings.json` grants permission for `node ${CLAUDE_PLUGIN_ROOT}/dist/cli.js*`.

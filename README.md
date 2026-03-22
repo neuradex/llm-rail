@@ -234,24 +234,28 @@ Every event is recorded per instance:
 
 ## Security Model
 
-LLM Rail provides **structural safety** — not prompt-level "please be careful" warnings. The security model has three layers that work together:
+LLM Rail provides **structural safety** — not prompt-level "please be careful" warnings.
 
-### Layer 1: Agent Tool Restriction
+The core mechanism: **all agent commands must go through `lrail <id> bash '<cmd>'`**. This single control point enables policy enforcement and full audit logging.
 
-Claude Code supports two agent types. The choice determines the security ceiling:
+```
+Agent → lrail <id> bash 'curl ...' → Policy check → Audit log → Execute (or deny)
+```
+
+### Structural Enforcement
+
+Custom agents can be restricted to `Bash(lrail *)` via `allowed-tools`, meaning they **can only execute commands through the lrail bash proxy** — no direct shell access. This makes the policy layer structurally enforced, not prompt-dependent.
 
 | | Custom Agent (e.g. `step-runner`) | General-Purpose Agent |
 |---|---|---|
 | Tool restriction (`allowed-tools`) | Yes — whitelist only | No — all tools available |
-| Bash pattern restriction | Yes (e.g. `Bash(node */dist/cli.js *bash*)`) | No |
+| Bash restriction | `Bash(lrail *)` — proxy only | Unrestricted |
+| Policy enforcement | Structural (cannot bypass) | Prompt-dependent |
 | WebSearch / WebFetch | Not available | Available |
-| Sub-agent spawning | Not available | Available |
 
-**Custom agents can be locked down to only execute commands through the lrail bash proxy**, making policy enforcement structural rather than prompt-dependent.
+### Policy Rules
 
-### Layer 2: Policy Enforcement
-
-When agents are restricted to `lrail <id> bash '<cmd>'`, every command goes through the policy engine:
+The workflow's policy rules operate **on top of** the bash proxy. Every command that passes through `lrail <id> bash` is evaluated against these rules:
 
 ```yaml
 policy:
@@ -263,18 +267,17 @@ policy:
       commands: ["curl *", "rm *", "sudo *"]
 ```
 
-This means you can control **which domains** an agent can access, **which binaries** it can run, and **which arguments** are permitted — at the framework level, not the prompt level.
+This gives you **domain-level access control** — which URLs, which binaries, which arguments are permitted — at the framework level.
 
-### Layer 3: Audit Trail
+### Audit Trail
 
 Every command execution is logged in `policy.jsonl` with the full command, policy decision, and timestamp. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
 
 ### Web Access Without Losing Control
 
-Agents that need web access don't have to use unrestricted `WebFetch`/`WebSearch`. Instead, use `curl` through the bash proxy:
+Instead of unrestricted `WebFetch`/`WebSearch`, use `curl` through the bash proxy:
 
 ```yaml
-# Programmatic step — zero tokens, full policy control
 - id: search
   type: programmatic
   actions:
@@ -282,17 +285,17 @@ Agents that need web access don't have to use unrestricted `WebFetch`/`WebSearch
       extract: { results: "organic" }
 ```
 
-This gives you **domain-level access control** that `WebFetch` cannot provide.
+Programmatic steps execute through the proxy automatically. For agentic steps, the agent calls `lrail <id> bash 'curl ...'` — same policy, same audit.
 
 ### Recommended Configuration
 
 For maximum structural safety:
-1. Use **custom agents** with `allowed-tools` restricted to `Bash(lrail*), Read, Glob, Grep`
+1. Use **custom agents** with `allowed-tools: Bash(lrail *), Read, Glob, Grep`
 2. Set policy to **enforce mode** with explicit allow-list
-3. Use **programmatic steps** with `curl` for web access instead of agentic web tools
+3. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
 4. Review `policy.jsonl` audit logs
 
-> **This area is under active development.** We are continuously exploring ways to strengthen the structural security model — particularly around bridging the gap between custom agent restrictions and general-purpose agent capabilities. Contributions and ideas are welcome. See [Contributing](./docs/CONTRIBUTING.md).
+> **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./docs/CONTRIBUTING.md).
 
 ---
 

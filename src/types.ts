@@ -150,6 +150,14 @@ export interface AuditEntry {
   data?: Record<string, unknown>;
 }
 
+// ── Command Log (Global) ──
+
+export interface CommandLogEntry {
+  timestamp: string;
+  command: string;
+  cwd: string;
+}
+
 // ── Validation Result ──
 
 export interface ScriptLog {

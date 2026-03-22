@@ -17,12 +17,15 @@ import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
 import { resolveInstanceId } from "./engine/state.js";
+import { runGlobalLog } from "./commands/global-log.js";
+import { appendCommandLog } from "./audit/command-log.js";
 
 const args = process.argv.slice(2);
 
 function usage(): never {
   console.error(`Usage:
   lrail docs [topic]                                  Browse documentation
+  lrail log [-n <count>] [-f]                         Show command history
   lrail wf list                                       List all workflows
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
@@ -53,6 +56,7 @@ function banner(): void {
    Track & Guardrail  v${v}
 
   lrail docs [topic]           Browse documentation
+  lrail log [-n N] [-f]        Show command history
   lrail wf list                List workflows
   lrail wf <name> create       Create a new instance
   lrail wf <name> variants     List variants
@@ -69,11 +73,21 @@ if (args.length < 1) {
 
 const target = args[0];
 
+// Record command to global log (skip log/help/docs to avoid noise)
+if (target !== "log" && target !== "help" && target !== "--help" && target !== "docs") {
+  try { appendCommandLog(args); } catch { /* best-effort */ }
+}
+
 // --- Global commands ---
 if (target === "docs") {
   runDocs(args.slice(1).join("/"));
 } else if (target === "help" || target === "--help") {
   usage();
+} else if (target === "log") {
+  const followFlag = args.includes("-f") || args.includes("--follow");
+  const nIdx = args.indexOf("-n");
+  const limit = nIdx !== -1 && args[nIdx + 1] ? parseInt(args[nIdx + 1], 10) : undefined;
+  runGlobalLog(limit, followFlag);
 } else if (target === "wf") {
   // --- Workflow commands: lrail wf <name> <command> ---
   const workflowName = args[1];

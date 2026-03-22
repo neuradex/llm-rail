@@ -20,6 +20,7 @@
     ".claude-plugin/",
     "skills/",
     "agents/",
+    "hooks/",
     "settings.json",
     "README.md"
   ],

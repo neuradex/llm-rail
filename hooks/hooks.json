@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"${CLAUDE_PLUGIN_ROOT}/dist/cli.js\" || (cd \"${CLAUDE_PLUGIN_ROOT}\" && npm install --ignore-scripts 2>/dev/null && npm run build 2>/dev/null)"
+          }
+        ]
+      }
+    ]
+  }
+}

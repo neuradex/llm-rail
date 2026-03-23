@@ -68,13 +68,16 @@ policy:
   rules:
     - effect: deny
       commands:
-        - "rm -rf *"
-        - "sudo *"
-        - "chmod 777 *"
-        - "git push --force *"
-        - "git reset --hard *"
-        - regex: "curl.*\\|\\s*(bash|sh)"   # シェルへのパイプ
-        - regex: "lrail\\.yml"              # この設定を保護
+        - "rm -rf *"                             # 再帰強制削除
+        - regex: "rm\\s+-r\\s"                   # rm -r（再帰削除）
+        - "sudo *"                               # 権限昇格
+        - "git push --force *"                   # 強制プッシュ
+        - regex: "git\\s+reset\\s+--hard"        # ハードリセット
+        - regex: "git\\s+clean\\s+(-\\w*f)"      # git clean（未追跡ファイル削除）
+        - regex: "git\\s+checkout\\s+--\\s+\\."   # git checkout -- .（全変更を復元）
+        - regex: "curl.*\\|\\s*(bash|sh)"        # シェルへのパイプ
+        - regex: "npm\\s+(uninstall|remove)\\s+.*llm-rail"  # 自己保護
+        - regex: "lrail\\.yml"                   # この設定を保護
 ```
 
 ホームディレクトリに置けば配下のすべてのプロジェクトに適用されます。特定のプロジェクトに置けば、そのディレクトリツリーでグローバル設定をオーバーライドします。cwdから上位に辿って最も近い`lrail.yml`が適用されます — `.gitignore`と同じ仕組みです。

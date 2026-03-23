@@ -68,13 +68,16 @@ policy:
   rules:
     - effect: deny
       commands:
-        - "rm -rf *"
-        - "sudo *"
-        - "chmod 777 *"
-        - "git push --force *"
-        - "git reset --hard *"
-        - regex: "curl.*\\|\\s*(bash|sh)"   # pipe to shell
-        - regex: "lrail\\.yml"              # protect this config
+        - "rm -rf *"                             # recursive force delete
+        - regex: "rm\\s+-r\\s"                   # rm -r (recursive delete)
+        - "sudo *"                               # privilege escalation
+        - "git push --force *"                   # force push
+        - regex: "git\\s+reset\\s+--hard"        # hard reset
+        - regex: "git\\s+clean\\s+(-\\w*f)"      # git clean (deletes untracked files)
+        - regex: "git\\s+checkout\\s+--\\s+\\."   # git checkout -- . (mass revert)
+        - regex: "curl.*\\|\\s*(bash|sh)"        # pipe to shell
+        - regex: "npm\\s+(uninstall|remove)\\s+.*llm-rail"  # self-protection
+        - regex: "lrail\\.yml"                   # protect this config
 ```
 
 Put it in your home directory and it covers every project underneath. Put it in a specific project and it overrides the global one for that directory tree. The nearest `lrail.yml` walking up from cwd wins — just like `.gitignore`.

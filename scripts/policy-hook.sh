@@ -17,7 +17,7 @@ fi
 
 # Block commands targeting lrail.yml
 if echo "$COMMAND" | grep -qE '(^|\s|/)(cat\s*>|sed\s+-i|mv\s|cp\s|rm\s|tee\s).*lrail\.yml|lrail\.yml.*(>|>>)'; then
-  echo "LLM Rail: modification of lrail.yml is blocked by policy" >&2
+  echo "LLM Rail: modification of lrail.yml is blocked by policy. If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
   exit 2
 fi
 
@@ -36,7 +36,7 @@ EVAL_OUTPUT=$(lrail policy eval --command "$COMMAND" 2>&1)
 EVAL_EXIT=$?
 
 if [ "$EVAL_EXIT" -ne 0 ]; then
-  echo "LLM Rail policy denied: $(echo "$EVAL_OUTPUT" | head -1)" >&2
+  echo "LLM Rail policy denied: $(echo "$EVAL_OUTPUT" | head -1). If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
   exit 2
 fi
 

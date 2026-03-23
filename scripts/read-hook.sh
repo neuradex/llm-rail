@@ -16,7 +16,7 @@ CHECK_OUTPUT=$(lrail policy check-file "$FILE_PATH" 2>&1)
 CHECK_EXIT=$?
 
 if [ "$CHECK_EXIT" -ne 0 ]; then
-  echo "LLM Rail: $(echo "$CHECK_OUTPUT" | head -1)" >&2
+  echo "LLM Rail: $(echo "$CHECK_OUTPUT" | head -1). If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
   exit 2
 fi
 

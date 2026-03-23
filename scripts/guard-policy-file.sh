@@ -17,7 +17,7 @@ RESOLVED=$(cd "$(dirname "$FILE_PATH" 2>/dev/null)" 2>/dev/null && echo "$(pwd)/
 POLICY_FILE=$(pwd)/lrail.yml
 
 if [ "$RESOLVED" = "$POLICY_FILE" ]; then
-  echo "LLM Rail: modification of lrail.yml is blocked by policy" >&2
+  echo "LLM Rail: modification of lrail.yml is blocked by policy. If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
   exit 2
 fi
 

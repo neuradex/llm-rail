@@ -4,7 +4,7 @@ import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
-import { checkCommand, loadProjectPolicy } from "../engine/gateway.js";
+import { checkCommand, loadLrailConfig } from "../engine/gateway.js";
 import { resolveAllSecrets, matchSecretFilePath, checkFileForSecrets } from "../engine/secrets.js";
 
 interface PolicyLogEntry {
@@ -98,8 +98,8 @@ export function runPolicyEval(command: string): void {
  * Exit code: 0 = env mediation is active (inject or secret_files), 1 = not configured.
  */
 export function runPolicyHasEnv(): void {
-  const policy = loadProjectPolicy();
-  const env = policy?.env;
+  const config = loadLrailConfig();
+  const env = config?.env;
   if (
     (env?.inject && env.inject.length > 0) ||
     (env?.secret_files && env.secret_files.length > 0)
@@ -113,20 +113,32 @@ export function runPolicyHasEnv(): void {
  * Check if a file is blocked by env policy (secret_files path match or content scan).
  * Exit code: 0 = allowed, 1 = blocked.
  */
+/**
+ * Check if lrail.yml is visible to agents.
+ * Exit code: 0 = visible (reading allowed), 1 = not visible (reading blocked).
+ */
+export function runPolicyVisible(): void {
+  const config = loadLrailConfig();
+  if (config?.visible === true) {
+    process.exit(0);
+  }
+  process.exit(1);
+}
+
 export function runPolicyCheckFile(filePath: string): void {
-  const policy = loadProjectPolicy();
-  if (!policy?.env) {
+  const config = loadLrailConfig();
+  if (!config?.env) {
     process.exit(0);
   }
 
   // Check secret_files path match
-  if (policy.env.secret_files && matchSecretFilePath(filePath, policy.env.secret_files)) {
+  if (config.env.secret_files && matchSecretFilePath(filePath, config.env.secret_files)) {
     console.error(JSON.stringify({ allowed: false, reason: `Path matches secret_files: ${filePath}` }));
     process.exit(1);
   }
 
   // Check file contents for secret values (inject + secret_files-derived)
-  const secrets = resolveAllSecrets(policy.env);
+  const secrets = resolveAllSecrets(config.env);
   if (secrets.size > 0) {
     const result = checkFileForSecrets(filePath, secrets);
     if (result.blocked) {

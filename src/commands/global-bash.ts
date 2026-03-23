@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { loadProjectPolicy } from "../engine/gateway.js";
+import { loadLrailConfig } from "../engine/gateway.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { appendCommandLog } from "../audit/command-log.js";
 import { buildSanitizedEnv, resolveAllSecrets, redactSecrets } from "../engine/secrets.js";
@@ -9,11 +9,11 @@ import { buildSanitizedEnv, resolveAllSecrets, redactSecrets } from "../engine/s
  * Runs without instance context. Applies project policy + env mediation.
  */
 export function runGlobalBash(command: string): void {
-  const projectPolicy = loadProjectPolicy();
+  const config = loadLrailConfig();
 
   // 1. Policy check
-  if (projectPolicy) {
-    const result = evaluatePolicy(projectPolicy, command);
+  if (config?.policy) {
+    const result = evaluatePolicy(config.policy, command);
     if (!result.allowed) {
       try { appendCommandLog([command], "hook", true); } catch { /* best-effort */ }
       console.error(`Policy denied: ${result.reason}`);
@@ -23,7 +23,7 @@ export function runGlobalBash(command: string): void {
   }
 
   // 2. Env mediation
-  const envPolicy = projectPolicy?.env;
+  const envPolicy = config?.env;
   const secretValues = envPolicy
     ? resolveAllSecrets(envPolicy)
     : new Map<string, string>();

@@ -7,7 +7,7 @@ import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
-import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyHasEnv, runPolicyCheckFile } from "./commands/policy.js";
+import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyHasEnv, runPolicyCheckFile, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
 import { runLog } from "./commands/log.js";
@@ -103,6 +103,8 @@ if (target === "init") {
   runPolicyEval(cmd);
 } else if (target === "policy" && args[1] === "has-env") {
   runPolicyHasEnv();
+} else if (target === "policy" && args[1] === "visible") {
+  runPolicyVisible();
 } else if (target === "policy" && args[1] === "check-file") {
   const filePath = args[2];
   if (!filePath) {

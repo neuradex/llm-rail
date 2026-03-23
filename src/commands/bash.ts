@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
-import { checkCommand, loadProjectPolicy } from "../engine/gateway.js";
+import { checkCommand, loadLrailConfig } from "../engine/gateway.js";
 import { appendCommandLog } from "../audit/command-log.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
 import { buildSanitizedEnv, resolveAllSecrets, redactSecrets, mergeEnvPolicies } from "../engine/secrets.js";
@@ -33,8 +33,8 @@ export function runBash(id: string, command: string): void {
   }
 
   // Env mediation: merge project + workflow env policies
-  const projectPolicy = loadProjectPolicy();
-  const envPolicy = mergeEnvPolicies(projectPolicy?.env, def.policy?.env);
+  const config = loadLrailConfig();
+  const envPolicy = mergeEnvPolicies(config?.env, def.policy?.env);
   const secretValues = envPolicy
     ? resolveAllSecrets(envPolicy)
     : new Map<string, string>();

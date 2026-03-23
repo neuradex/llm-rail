@@ -1,10 +1,5 @@
-# LLM Rail — Project Configuration
-# lrail docs concepts/policy   — modes, rules, pattern syntax
-# lrail docs concepts/secrets  — secret mediation
-
-mode: enforce # trail | enforce
-default: allow # allow (deny-list) | deny (allow-list)
-
+mode: enforce
+default: allow
 rules:
   - effect: deny
     commands:
@@ -14,9 +9,3 @@ rules:
       - "git push --force *"
       - "git push -f *"
       - "git reset --hard *"
-
-# Secret mediation — lrail docs concepts/secrets
-# env:
-#   secret_files: [.env, .env.local]
-#   inject: [CI_TOKEN]
-#   passthrough: [PATH, HOME, LANG]

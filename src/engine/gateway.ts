@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PolicyDef } from "../types.js";
+import type { LrailConfig, PolicyDef } from "../types.js";
 import { loadYaml } from "../util.js";
 import { evaluatePolicy, appendPolicyLog, type PolicyResult } from "./policy.js";
 import { appendCommandLog } from "../audit/command-log.js";
@@ -16,9 +16,9 @@ export function checkCommand(
   const source = instance ? "instance" as const : "hook" as const;
 
   // 1. Check project-level policy (lrail.yml)
-  const projectPolicy = loadProjectPolicy();
-  if (projectPolicy) {
-    const result = evaluatePolicy(projectPolicy, command);
+  const config = loadLrailConfig();
+  if (config?.policy) {
+    const result = evaluatePolicy(config.policy, command);
     if (!result.allowed) {
       try { appendCommandLog([command], source, true); } catch { /* best-effort */ }
       return result;
@@ -42,8 +42,47 @@ export function checkCommand(
   return { allowed: true, reason: "passed" };
 }
 
-export function loadProjectPolicy(): PolicyDef | null {
-  const p = path.resolve("lrail.yml");
-  if (!fs.existsSync(p)) return null;
-  return loadYaml<PolicyDef>(p);
+/**
+ * Walk up from cwd to find the nearest lrail.yml.
+ */
+export function findConfigFile(from?: string): string | null {
+  let dir = path.resolve(from || ".");
+  const root = path.parse(dir).root;
+
+  while (true) {
+    const candidate = path.join(dir, "lrail.yml");
+    if (fs.existsSync(candidate)) return candidate;
+    if (dir === root) return null;
+    dir = path.dirname(dir);
+  }
+}
+
+/**
+ * Load lrail.yml and normalize to LrailConfig.
+ * Supports both flat (legacy) and nested formats:
+ *
+ * Flat (legacy):     { mode, default, rules, env }
+ * Nested (current):  { policy: { mode, default, rules }, env }
+ */
+export function loadLrailConfig(): LrailConfig | null {
+  const p = findConfigFile();
+  if (!p) return null;
+  const raw = loadYaml<Record<string, unknown>>(p);
+  if (!raw) return null;
+
+  // Nested format: has `policy` key
+  if (raw.policy && typeof raw.policy === "object") {
+    return raw as unknown as LrailConfig;
+  }
+
+  // Flat (legacy) format: mode/rules at top level
+  if (raw.mode || raw.rules) {
+    const { env, ...rest } = raw;
+    return {
+      policy: rest as unknown as PolicyDef,
+      ...(env ? { env: env as LrailConfig["env"] } : {}),
+    };
+  }
+
+  return raw as unknown as LrailConfig;
 }

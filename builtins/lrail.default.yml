@@ -2,22 +2,24 @@
 # lrail docs concepts/policy   — modes, rules, pattern syntax
 # lrail docs concepts/secrets  — secret mediation
 
-mode: enforce       # trail | enforce
-default: allow      # allow (deny-list) | deny (allow-list)
+visible: false  # true: agents can read this file / false: blocked (default)
 
-rules:
-  - effect: deny
-    commands:
-      - "rm -rf *"
-      - "sudo *"
-      - "chmod 777 *"
-      - "git push --force *"
-      - "git push -f *"
-      - "git reset --hard *"
+policy:
+  mode: enforce       # trail | enforce
+  default: allow      # allow (deny-list) | deny (allow-list)
+  rules:
+    - effect: deny
+      commands:
+        - "rm -rf *"
+        - "sudo *"
+        - "chmod 777 *"
+        - "git push --force *"
+        - "git push -f *"
+        - "git reset --hard *"
 
-      # Regex patterns — precise matching (catches flag reordering, absolute paths, etc.)
-      - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
-      - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
+        # Regex patterns — precise matching (catches flag reordering, absolute paths, etc.)
+        - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
+        - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
 
 # Secret mediation — lrail docs concepts/secrets
 # env:

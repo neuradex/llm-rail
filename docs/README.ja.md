@@ -1,12 +1,12 @@
 <!-- AGENT NOTE: このファイルを変更した場合は、../README.md（英語）と docs/README.ko.md（韓国語）も更新してください。 -->
 
-<h1 align="center">LLM Rail</h1>
-
 <p align="center">
   <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license" />
 </p>
+
+<h1 align="center">LLM Rail</h1>
 
 <p align="center">
   <strong>AIエージェントのための統合ガードレール。</strong>

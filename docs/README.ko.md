@@ -1,12 +1,12 @@
 <!-- AGENT NOTE: 이 파일을 수정하면 ../README.md (영어)와 docs/README.ja.md (일본어)도 함께 업데이트하세요. -->
 
-<h1 align="center">LLM Rail</h1>
-
 <p align="center">
   <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license" />
 </p>
+
+<h1 align="center">LLM Rail</h1>
 
 <p align="center">
   <strong>AI 에이전트를 위한 통합 가드레일.</strong>

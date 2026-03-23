@@ -1,6 +1,6 @@
 {
   "name": "llm-rail",
-  "version": "0.2.4-beta",
+  "version": "0.2.5-beta",
   "description": "Deterministic workflow control CLI for LLM agents",
   "type": "module",
   "license": "MIT",

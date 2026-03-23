@@ -10,6 +10,8 @@
 
 <p align="center">
   <strong>AI 에이전트를 위한 통합 가드레일.</strong>
+  <br>
+  구조적 안전성. 워크플로우 제어. 완전한 감사.
 </p>
 
 <p align="center">

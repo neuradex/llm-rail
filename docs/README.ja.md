@@ -10,6 +10,8 @@
 
 <p align="center">
   <strong>AIエージェントのための統合ガードレール。</strong>
+  <br>
+  構造的安全性。ワークフロー制御。完全な監査。
 </p>
 
 <p align="center">

@@ -10,6 +10,8 @@
 
 <p align="center">
   <strong>Guardrails for AI agents that actually work.</strong>
+  <br>
+  Structural safety. Workflow control. Full audit.
 </p>
 
 <p align="center">

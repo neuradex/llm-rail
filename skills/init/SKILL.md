@@ -1,5 +1,5 @@
 ---
-description: Initialize lrail in the current project — set up workflows, directories, and register in CLAUDE.md
+description: Initialize LLM Rail in the current project — set up workflows, directories, and register in CLAUDE.md
 disable-model-invocation: true
 allowed-tools: Bash, Read, Write, Edit
 ---
@@ -40,11 +40,11 @@ If `ALREADY_EXISTS`, skip this step.
 If `NEEDS_INJECT` or `NO_FILE`, append the following block to `CLAUDE.md` (create the file if it doesn't exist). Use the Edit tool to append, or Write if the file is new.
 
 ```
-## lrail — Guardrails for Agentic Work
+## LLM Rail — Guardrails for Agentic Work
 
-This project uses [lrail](https://github.com/neuradex/llm-rail) to optimize complex agent tasks.
+This project uses [LLM Rail](https://github.com/neuradex/llm-rail) to optimize complex agent tasks. `lrail` is its CLI.
 
-LLMs have recency bias — long context leads to forgotten instructions and drift. lrail fixes this by decomposing tasks into validated steps, each running in a clean, narrow context. The result: speed (Haiku instead of Opus), safety (policy + validation), and transparency (full audit trail).
+LLMs have recency bias — long context leads to forgotten instructions and drift. LLM Rail fixes this by decomposing tasks into validated steps, each running in a clean, narrow context. The result: speed (Haiku instead of Opus), safety (policy + validation), and transparency (full audit trail).
 
 ### When to suggest lrail
 - User says a task failed or the output quality is poor

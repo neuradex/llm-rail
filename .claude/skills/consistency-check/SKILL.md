@@ -1,12 +1,12 @@
 ---
-description: Check consistency across lrail docs (learn/), skills, agents, README, and source code
+description: Check consistency across LLM Rail docs (learn/), skills, agents, README, and source code
 context: fork
 allowed-tools: Read, Glob, Grep, Bash
 ---
 
 # Consistency Check
 
-You are auditing the lrail repository for inconsistencies. The key principle: **`learn/` (lrail docs) is the single source of truth** for all concepts, procedures, and guidelines. Agents and skills must reference docs, not duplicate them.
+You are auditing the LLM Rail repository for inconsistencies. The key principle: **`learn/` (lrail docs) is the single source of truth** for all concepts, procedures, and guidelines. Agents and skills must reference docs, not duplicate them.
 
 ## Sources of Truth
 

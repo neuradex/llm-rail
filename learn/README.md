@@ -1,5 +1,5 @@
 ---
-name: lrail
+name: LLM Rail
 description: Deterministic workflow control for LLM agents
 ---
 

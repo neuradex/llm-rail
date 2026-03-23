@@ -1,5 +1,5 @@
 ---
-description: Design an lrail workflow — analyze intent, validate requirements, and generate optimized YAML
+description: Design an LLM Rail workflow — analyze intent, validate requirements, and generate optimized YAML
 context: fork
 agent: workflow-designer
 allowed-tools: Read, Glob, Grep, Write, Bash

@@ -1,6 +1,6 @@
 ---
 name: design-tips
-description: Design principles and tips for writing good lrail workflows
+description: Design principles and tips for writing good LLM Rail workflows
 ---
 
 ## Workflow Design Principles

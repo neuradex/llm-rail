@@ -1,4 +1,4 @@
-# lrail v2 Design Document
+# LLM Rail v2 Design Document
 
 > Status: **Implemented** · Date: 2026-03-21
 

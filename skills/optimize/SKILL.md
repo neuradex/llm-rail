@@ -1,5 +1,5 @@
 ---
-description: Optimize an existing lrail workflow — baseline, 3 sequential optimizations, 3-tier parallel verification, synthesize
+description: Optimize an existing LLM Rail workflow — baseline, 3 sequential optimizations, 3-tier parallel verification, synthesize
 context: fork
 allowed-tools: Bash, Read, Agent
 ---

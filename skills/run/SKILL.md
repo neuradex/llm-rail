@@ -1,5 +1,5 @@
 ---
-description: Execute an lrail workflow end-to-end — validate, create, and run all steps automatically
+description: Execute an LLM Rail workflow end-to-end — validate, create, and run all steps automatically
 context: fork
 allowed-tools: Bash, Read, Agent
 ---

@@ -1,10 +1,10 @@
-# lrail Benchmark Plan
+# LLM Rail Benchmark Plan
 
 > [English](./benchmark-plan.md) · [한국어](./benchmark-plan.ko.md)
 
 ## Objective
 
-Demonstrate that lrail delivers measurable improvements over single-pass LLM execution across two axes:
+Demonstrate that LLM Rail delivers measurable improvements over single-pass LLM execution across two axes:
 
 1. **Task Efficiency** — success rate, quality, cost, consistency
 2. **AI Safety** — auditability, controllability, transparency of agent actions
@@ -110,9 +110,9 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 - **No visibility** into intermediate reasoning or data sources used
 - **No enforcement** that the agent stayed within its intended scope
 
-### How lrail Addresses This
+### How LLM Rail Addresses This
 
-| Safety Property | Single-Pass Agent | lrail |
+| Safety Property | Single-Pass Agent | LLM Rail |
 |---|---|---|
 | **Auditability** | Black box. Only see final output. | Every step logged in `.llm-rail/{workflow}/{instance}/audit.jsonl`. Full event history. |
 | **Controllability** | All-or-nothing. Cancel = lose everything. | Pause/resume at any step. Reset individual steps. Gate hooks can block progression. |

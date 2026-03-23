@@ -1,5 +1,5 @@
 ---
-description: Review an lrail workflow — trial run, analyze results, and suggest concrete improvements
+description: Review an LLM Rail workflow — trial run, analyze results, and suggest concrete improvements
 context: fork
 allowed-tools: Bash, Read, Glob, Grep, Agent, Edit
 ---

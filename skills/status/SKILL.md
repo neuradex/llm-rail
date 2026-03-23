@@ -1,5 +1,5 @@
 ---
-description: Check lrail workflow instance status or list all instances
+description: Check LLM Rail workflow instance status or list all instances
 disable-model-invocation: true
 allowed-tools: Bash
 ---

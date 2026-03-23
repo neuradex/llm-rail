@@ -1,5 +1,5 @@
 ---
-description: Build a working lrail workflow from requirements — analyze feasibility, then generate and verify
+description: Build a working LLM Rail workflow from requirements — analyze feasibility, then generate and verify
 context: fork
 allowed-tools: Bash, Read, Agent
 ---

@@ -15,7 +15,7 @@ export function checkCommand(
 ): PolicyResult {
   const source = instance ? "instance" as const : "hook" as const;
 
-  // 1. Check project-level policy (.llm-rail/policy.yml)
+  // 1. Check project-level policy (lrail.yml)
   const projectPolicy = loadProjectPolicy();
   if (projectPolicy) {
     const result = evaluatePolicy(projectPolicy, command);
@@ -42,8 +42,8 @@ export function checkCommand(
   return { allowed: true, reason: "passed" };
 }
 
-function loadProjectPolicy(): PolicyDef | null {
-  const p = path.resolve(".llm-rail", "policy.yml");
+export function loadProjectPolicy(): PolicyDef | null {
+  const p = path.resolve("lrail.yml");
   if (!fs.existsSync(p)) return null;
   return loadYaml<PolicyDef>(p);
 }

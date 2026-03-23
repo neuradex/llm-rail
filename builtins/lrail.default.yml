@@ -21,6 +21,9 @@ policy:
         - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
         - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
 
+        # Protect this config file from agent manipulation
+        - regex: "lrail\\.yml"
+
 # Secret mediation — lrail docs concepts/secrets
 # env:
 #   secret_files: [.env, .env.local]

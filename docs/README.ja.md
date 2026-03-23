@@ -1,3 +1,7 @@
+<!-- AGENT NOTE: このファイルを変更した場合は、../README.md（英語）と docs/README.ko.md（韓国語）も更新してください。 -->
+
+<h1 align="center">LLM Rail</h1>
+
 <p align="center">
   <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
@@ -5,16 +9,16 @@
 </p>
 
 <p align="center">
-  <strong>AIエージェントのための構造的安全性。</strong>
+  <strong>AIエージェントのための統合ガードレール。</strong>
 </p>
 
 <p align="center">
-  <a href="#問題">問題</a> ·
-  <a href="#仕組み">仕組み</a> ·
+  <a href="#インストールして忘れる">インストールして忘れる</a> ·
+  <a href="#ポリシーとシークレット">ポリシーとシークレット</a> ·
+  <a href="#ワークフローエンジン">ワークフローエンジン</a> ·
   <a href="#セキュリティモデル">セキュリティ</a> ·
   <a href="#はじめに">はじめに</a> ·
-  <a href="#claude-codeプラグイン">プラグイン</a> ·
-  <a href="./CONTRIBUTING.ja.md">コントリビューション</a>
+  <a href="../CONTRIBUTING.md">コントリビューション</a>
 </p>
 
 <p align="center">
@@ -23,173 +27,212 @@
   <strong>日本語</strong>
 </p>
 
-> **ベータ版 (0.x.x)** — 現在開発が活発に進行中です。API、CLIコマンド、ワークフロースキーマは予告なく変更される場合があります。安定性が必要な場合はバージョンを固定してください。
+> **ベータ版 (0.x.x)** — 現在開発が活発に進行中です。APIやスキーマは変更される場合があります。安定性が必要な場合はバージョンを固定してください。
 
 ---
 
-LLMエージェントはステップを飛ばし、データをでっち上げ、実行すべきでないコマンドを実行します。**LLM Railはこれらの失敗を構造的に不可能にします** — モデルに注意を求めるのではなく、悪いことが起こり得ない実行構造を構築します。
+あなたのAIエージェントがプロジェクトで`rm -rf`を実行しました。またはAPIキーを出力に漏洩させました。またはmainにforce-pushしました。
 
-既存のエージェントフレームワークはオーケストレーションを扱いますが、安全性はプロンプトに委ねています。「注意して。」「間違えないで。」これは**ダッシュボードに貼ったステッカー**にすぎません。LLM Railは異なるアプローチを取ります：**フレームワークレベルの構造的安全性**です。
+プロンプトレベルの安全性（「注意してください」）は機能しません。コンテキストが長くなるほどエージェントは指示を無視します。**構造的な強制が必要です。**
 
-| レイヤー | 強制する内容 |
-|---|---|
-| **ワークフロー** | タスクを検証可能なステップに分解します。各ステップは狭いコンテキストで実行されるため、OpusではなくHaikuで十分です。 |
-| **ポリシー** | すべてのコマンドがbashプロキシ（`lrail <id> bash`）を通過します。IAMスタイルのallow/denyルール。明示的に許可されたことだけが実行可能です。 |
-| **監査** | すべてのアクション、コマンド、ポリシー判定がインスタンスごとに記録されます。完全なトレーサビリティを提供します。 |
+LLM Railは2つのレベルで動作します：
 
-AIエージェントが複雑なコードレビューに失敗しましたか？ 検証可能な3ステップに分割して、それぞれHaikuで実行してみてください。総コストは$2から$0.08に下がります。すべての出力が検証され、完全な監査ログが残ります。
+- **即時保護** — プラグインをインストールするだけで、ポリシー強制・シークレット保護・コマンド監査が自動的に開始されます
+- **ワークフロー制御** — 複雑なタスクを検証されたステップに分解し、各ステップのコンテキストと権限を制御します
 
----
+```bash
+# プラグインをインストール。それだけです。
+/plugin marketplace add neuradex/llm-rail
+/plugin install llm-rail@llm-rail
+```
 
-## 問題
-
-LLMには**最新性バイアス（recency bias）**があります — コンテキストが長くなるほど、元の指示をより多く忘れてしまいます（[Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427)、[Liu et al. 2023](https://arxiv.org/abs/2307.03172)）。これが複雑なエージェントタスクの根本的な失敗パターンです。
-
-LangChainやCrewAIのような既存フレームワークはエージェントに*何を*するかは伝えますが、*どこまでやっていいか*は制御しません。オーケストレーションは扱いますが、フレームワークレベルの**実行制御と監査**は持っていません。LLM Railがこのギャップを埋めます。
-
-LLM Railは**各ステップのコンテキストを小さく集中的に保つ**ことで、最新性バイアスの問題を解決します：
-
-- 各ステップは`context_in`で必要なデータだけを受け取る、クリーンなエージェントを使用します
-- 前のステップからのコンテキスト汚染がありません
-- エージェントが賢い必要はありません — 狭い指示を正確に実行するだけで十分です
-
-これが**HaikuがOpusを代替できる**理由です。モデルの能力ではなく、スコープの問題です。小さなコンテキストの小さなモデルは、大きなコンテキストに埋もれた大きなモデルに勝ります。
-
-ワークフローエンジンが — LLMではなく — 進捗を管理するので、**数百ステップのワークフローでも一つ残らずすべて実行されます。** 長いコンテキストのLLMエージェントは必然的にステップを飛ばしますが、ワークフローエンジンは決して忘れません。
-
-エンタープライズへの回答：**「制御できますか？」** — フレームワークレベルでポリシーを強制します。**「追跡できますか？」** — 完全な監査ログ。**「複雑なプロセスを処理できますか？」** — エンジンが全ステップの完了を保証します。すべてプロンプトレベルの約束ではなく、構造的に回答します。
+次のセッションから、すべてのClaude Codeコマンドが保護されます。設定は不要です。
 
 ---
 
-## 仕組み
+## インストールして忘れる
+
+LLM Railはインストールした瞬間から動作します。次のClaude Codeセッションで：
+
+1. `lrail.yml`が合理的なデフォルトで自動生成されます
+2. 危険なコマンドがブロックされます（`rm -rf`、`sudo`、`git push --force`、...）
+3. エージェントが実行するすべてのコマンドが記録されます
+4. 設定ファイル自体がエージェントの改ざんから保護されます
+
+**ファイル1つ。セットアップゼロ。毎セッション保護。**
+
+```yaml
+# lrail.yml — 自動生成、いつでも編集可能
+visible: false          # エージェントがこのファイルを読み取り・変更できません
+
+policy:
+  mode: enforce
+  default: allow        # deny-listアプローチ：特定のコマンドだけをブロック
+  rules:
+    - effect: deny
+      commands:
+        - "rm -rf *"
+        - "sudo *"
+        - "chmod 777 *"
+        - "git push --force *"
+        - "git reset --hard *"
+        - regex: "curl.*\\|\\s*(bash|sh)"   # シェルへのパイプ
+        - regex: "lrail\\.yml"              # この設定を保護
+```
+
+ホームディレクトリに`lrail.yml`を1つ置けば — 配下のすべてのプロジェクトに適用されます。
+
+---
+
+## ポリシーとシークレット
+
+### ポリシー強制
+
+シンプルなルールにはグロブパターン。精密さが必要なときは正規表現：
+
+```yaml
+rules:
+  - effect: deny
+    commands:
+      - "sudo *"                                    # グロブ — シンプル
+      - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f"     # 正規表現 — rm -r -f、rm -rfなどを捕捉
+      - regex: "git\\s+push\\s+.*(--force|\\s-f)"   # 正規表現 — すべてのforce-pushバリエーションを捕捉
+```
+
+エージェントがフラグの順序を変えたり絶対パスを使っても、正規表現ルールをバイパスすることはできません。
+
+### シークレット保護
+
+`.env`ファイルを指定するだけ。シークレットが自動注入・自動リダクトされます：
+
+```yaml
+env:
+  secret_files: [.env, .env.local]
+```
+
+- エージェントが`curl -H "Authorization: Bearer $API_KEY" ...`を実行 — 正常に動作
+- ただし`$API_KEY`の値はエージェント出力に**一切表示されません** — `[REDACTED]`に置換
+- エージェントが`cat .env`やシークレットファイルの`grep`はできません — フックがブロック
+
+### コマンド監査
+
+すべてのコマンドが記録されます。エージェントが実際に何をしたか確認できます：
+
+```bash
+lrail log              # 最近のコマンド
+lrail log -n 50        # 直近50件
+lrail log -f           # リアルタイムフォロー
+lrail log --raw        # マシンリーダブルなTSV
+```
+
+### 設定の自己保護
+
+デフォルトではエージェントが`lrail.yml`を読み取り・編集・書き込みすることはできません。自分を制約するルールを削除することはできません。
+
+エージェントが設定を読んで適応できるようにするには、`visible: true`を設定してください（例：「このコマンドは拒否されるな、別の方法を試そう」）：
+
+```yaml
+visible: true   # エージェントがこの設定を読み取り・変更できます
+```
+
+---
+
+## ワークフローエンジン
+
+ガードレール以上のものが必要なタスクに — 複雑な作業を検証されたステップに分解し、各ステップのコンテキスト、権限、出力を制御します。
+
+```yaml
+name: code-review
+steps:
+  - id: fetch-diff
+    type: programmatic
+    actions:
+      - shell: "git diff {{base_branch}}...HEAD"
+        extract: { diff: "." }
+
+  - id: review
+    description: "diffの問題点をレビュー"
+    depends_on: fetch-diff
+    context_in:
+      diff: "{fetch-diff.diff}"
+    required_output: [issues, severity]
+    validation:
+      - field: issues
+        op: type
+        value: array
+      - field: severity
+        op: one_of
+        value: [low, medium, high, critical]
+```
+
+### なぜ重要か
+
+LLMには**最新性バイアス（recency bias）**があります — コンテキストが長くなるほど、より多くのことを忘れます。200ステップのタスクでは、エージェントは必然的にステップを飛ばします。ワークフローエンジンは決して忘れません。
+
+各ステップは必要なデータだけを含む**狭いコンテキスト**を受け取ります。小さなモデル、小さなコンテキスト、正確な出力。**HaikuがOpusを代替します。**コストは$2から$0.08に下がります。
 
 ### ステップタイプ
 
-LLM Railは1つのワークフロー内で2種類のステップタイプをサポートします：
+| | Programmatic | Agentic |
+|---|---|---|
+| 実行 | CLIが直接実行 | LLMエージェントが作業 |
+| コスト | トークンゼロ | 最小（スコープが限定的） |
+| 速度 | ミリ秒 | 秒 |
+| 使用場面 | 決定的な操作 | 判断が必要な場面 |
+
+1つのワークフロー内で混在させて使用できます。データはprogrammaticで取得し、エージェントで分析し、結果はprogrammaticで送信します。
+
+### 検証ゲート
+
+22の組み込み演算子。2つのティア：
+
+- **validation** — 完了前のガード。ステップが完了する前に不適切な出力を拒否します。
+- **assertions** — 完了後のチェック。失敗時にステップを差し戻し、エージェントが自動的にリトライします。
 
 ```yaml
-steps:
-  # Programmatic: LLMは不要です。CLIが直接実行します。
-  - id: fetch-data
-    type: programmatic
-    actions:
-      - shell: "curl -s {{api_url}}/data"
-        extract: { records: "data", count: "total" }
-
-  # Agentic: LLMエージェントが作業し、出力が検証されます。
-  - id: analyze
-    description: "{{count}}件のレコードの異常を分析"
-    instruction: "レコードを分析し、リスクスコア付きで異常を特定してください"
-    depends_on: fetch-data
-    context_in:
-      records: "{fetch-data.records}"
-    required_output: [anomalies, risk_score]
-    validation:
-      - field: anomalies
-        op: type
-        value: array
-      - field: risk_score
-        op: between
-        value: [0, 100]
-
-  # Programmatic: LLMなしの後処理です。
-  - id: notify
-    type: programmatic
-    depends_on: analyze
-    actions:
-      - shell: "curl -X POST {{webhook}} -d '{\"score\": {{risk_score}}}'"
+validation:
+  - field: score
+    op: between
+    value: [0, 100]
+  - field: sources
+    op: each_has
+    value: url
+    message: "すべてのソースにURLが必要です"
+assertions:
+  - field: sources
+    op: verify_source          # URLを取得し、データの存在を確認
+    value: { field: "snippet", sample_size: 3 }
 ```
 
-**Programmaticステップ**はミリ秒単位で実行され、トークンコストはゼロです。**Agenticステップ**は集中的で検証されたスコープを受け取り、Haikuが安定して処理します。
+`script`演算子でシェルベースのカスタム検証も可能です — スクリプト化できるあらゆるチェックを実行できます。
 
-### ポリシーシステム
+### ワークフローごとのポリシー
 
-エージェントが実行できるコマンドを制御します — AWS IAMからインスパイアされました：
+プロジェクトレベルのポリシーはすべてを保護します。ワークフローレベルのポリシーはタスクごとの制限を追加します：
 
 ```yaml
 policy:
   mode: enforce
   rules:
     - effect: allow
-      commands: ["curl *", "jq *", "node *"]
+      commands: ["curl -s https://api.example.com/*", "jq *"]
     - effect: deny
-      commands: ["rm *", "sudo *"]
+      commands: ["curl *", "rm *"]
 ```
 
-- **Trailモード**: すべてを許可し、すべてを記録します。開発やポリシー発見に使用します。
-- **Enforceモード**: deny-firstのルール評価です。本番環境に使用します。
-- **ポリシー生成**: trailログから最小限のallow-listを自動生成します。
+許可した特定のAPIエンドポイントだけがアクセス可能。それ以外はすべて拒否。
 
-すべてのコマンドはbashプロキシ（`lrail <id> bash "<cmd>"`）を経由し、ポリシーを適用してすべての実行を記録します。
+### ライフサイクルとバリアント
 
-### 検証ゲート
+ワークフローはフェーズを経て成熟します：`draft` → `dev` → `stable`
 
-22の組み込み演算子が、各ステップの出力を検査してから次へ進めます：
+複数の設計アプローチがバリアントとして共存し、比較後、勝者がベースにマージされます：
 
-```yaml
-validation:
-  - field: file_list
-    op: type
-    value: array
-  - field: complexity_score
-    op: between
-    value: [1, 10]
-assertions:
-  - field: comments
-    op: each_has
-    value: file
-    message: すべてのコメントにファイル参照が必要です
+```bash
+lrail wf code-review variants           # バリアント一覧
+lrail wf code-review merge api-driven   # 優秀なバリアントをマージ
+lrail wf code-review promote            # 次のフェーズへの準備を確認
 ```
-
-2段階に分かれています：**validation**（事前検証ガード）は不適切な送信を拒否します。**assertions**（事後検証チェック）は失敗時にステップを差し戻します。エージェントがエラーメッセージを受け取って自動的にリトライするため、人間の介入は不要です。
-
-`verify_source`（URLを取得して、データスニペットが実際にページ上に存在するか確認する捏造防止機能）や`script`（シェルベースのカスタム検証ロジック）も含まれています。
-
-### ワークフローライフサイクル
-
-すべてのワークフローは成熟度フェーズを経て進化します：
-
-```
-draft → dev → stable
-```
-
-- **draft**: 探索段階です。制約なしに実行して、結果を観察し、改善を繰り返します。
-- **dev**: 動作するワークフローです。検証を洗練させ、agenticステップをprogrammaticに変換していきます。
-- **stable**: 本番準備完了です。ポリシーが`enforce`モードである必要があります。
-
-`lrail wf <name> promote`で実行履歴を分析し、フェーズ昇格の推奨を確認できます。
-
-### バリアント
-
-複数の設計アプローチが共存し、比較し、マージできます：
-
-```
-workflows/stock-screening/
-  workflow.yml              # ベース（実行対象）
-  api-driven.workflow.yml   # 直接APIアプローチ
-  programmatic.workflow.yml # 完全に決定的なアプローチ
-```
-
-バリアントは`extends: base`でベースを継承し、差分だけを定義します。ステップはIDベースでマージされます — 同じIDならオーバーライド、新しいIDなら追加、バリアントに含まれないIDはベースのまま保持されます。`lrail wf <name> merge <variant>`で優秀なバリアントをベースにマージできます。
-
-### Accumulateモード
-
-データを段階的に収集するステップに使用します：
-
-```yaml
-- id: collect
-  instruction: "企業データをバッチ単位で収集してください"
-  required_output: [companies]
-  accumulate:
-    companies:
-      key: ticker
-  validation:
-    - field: companies
-      op: min_length
-      value: 20
-```
-
-エージェントがバッチ単位で送信すると、各バッチがキーによる重複排除でプールにマージされます。検証は蓄積されたプール全体に対して実行され、品質基準を満たすまでステップは開いたままになります。
 
 ### 監査証跡
 
@@ -199,267 +242,98 @@ workflows/stock-screening/
 .llm-rail/{workflow}/{instance}/
   ├── state.yaml      # インスタンス状態
   ├── audit.jsonl      # 全ライフサイクルイベント
-  └── proxy.jsonl     # 全コマンド実行記録
+  └── proxy.jsonl     # 全コマンド実行 + ポリシー判定
 ```
-
----
-
-## 機能一覧
-
-| | |
-|---|---|
-| **ステップタイプ** | `programmatic`（LLMなしで直接実行）と`agentic`（LLMエージェント＋検証）を1つのワークフローで使用できます。 |
-| **アクション** | `js:`（コンテキストが自動注入されるJavaScript）と`shell:`（テンプレート展開＋JSON抽出）。チェーンされたアクション間でパイプスタイルのデータフローをサポートします。 |
-| **ポリシー** | AWS IAMスタイルのallow/denyルール。trailとenforceモード。全エージェントコマンドにbashプロキシを適用します。Secret Mediationによる出力リダクション。 |
-| **検証ゲート** | 22の組み込み演算子。構造バリデーション＋ビジネスロジックアサーション＋`verify_source`捏造防止＋`script`カスタムロジック。 |
-| **明示的データフロー** | `context_in`で必要なデータのみを受け渡します — 暗黙のマージもコンテキスト汚染もありません。 |
-| **Accumulateモード** | キーによる重複排除マージで段階的にデータを収集します。品質ゲートを満たすまでステップは開いたままです。 |
-| **バリアント** | 複数のワークフロー設計が共存し、比較し、マージできます。`extends: base`でIDベースのステップマージ。 |
-| **ライフサイクルフェーズ** | `draft` → `dev` → `stable`の進行、昇格分析を支援します。 |
-| **ライフサイクルフック** | 全段階でgate/eventフック（`step:before_start`、`step:completed`、`policy:denied`など）。 |
-| **監査ログ** | 全イベントをJSONLで記録。インスタンスごとにaudit＋policyログで完全なトレーサビリティを提供します。 |
-| **Claude Codeプラグイン** | 組み込みスキル＆エージェント — エディタを離れずにワークフローの設計・実行・監査が行えます。 |
 
 ---
 
 ## セキュリティモデル
 
-LLM Railは**構造的な安全性**を提供します — プロンプトレベルの「注意してください」という警告ではありません。
-
-ポリシー適用は**2つのレイヤー**で動作します。プロジェクトポリシー（`lrail.yml`）はプロジェクト全体のすべてのコマンドに適用されます。ワークフローポリシー（workflow YAMLの`policy:`）はその上にワークフローごとのルールを追加します。
+LLM Railは安全性を**構造的に**強制します — プロンプトではなく。
 
 ```
-┌─ プロジェクト設定 (lrail.yml) ───────────────────────────────┐
-│                                                               │
-│  メインエージェント（フック）    サブエージェント（プロキシ）   │
-│  ┌──────────────────┐          ┌──────────────────┐          │
-│  │ PreToolUseフック   │          │ lrail <id> bash   │          │
-│  │ → ポリシー評価    │          │ → ポリシー評価    │          │
-│  │ → コマンドログ    │          │ → ワークフローポリシー │      │
-│  └──────────────────┘          │ → コマンドログ    │          │
-│                                 └──────────────────┘          │
-└───────────────────────────────────────────────────────────────┘
+┌─ プロジェクトポリシー (lrail.yml) ───────────────────────┐
+│                                                           │
+│  メインエージェント（フック）    サブエージェント（プロキシ）│
+│  ┌──────────────────┐          ┌──────────────────┐      │
+│  │ PreToolUseフック   │          │ lrail <id> bash   │      │
+│  │ → ポリシー評価    │          │ → プロジェクトポリシー│    │
+│  │ → コマンドログ    │          │ → ワークフローポリシー│    │
+│  └──────────────────┘          │ → コマンドログ    │      │
+│                                 └──────────────────┘      │
+└───────────────────────────────────────────────────────────┘
 ```
 
-メインエージェントのコマンドは**PreToolUseフック**でインターセプトされます — すべてのBash呼び出しが実行前にプロジェクトポリシーでチェックされます。サブエージェントのコマンドは`lrail <id> bash`を経由し、プロジェクトポリシーとワークフローポリシーの両方がチェックされます。すべてのコマンドはグローバルコマンド履歴（`lrail log`）に記録されます。
+| レイヤー | 強制方法 |
+|---|---|
+| **Bash** | PreToolUseフックがすべてのコマンドをポリシーに対してチェック |
+| **Read/Edit/Write** | フックがシークレットファイルと`lrail.yml`を保護 |
+| **Config** | `visible: false`でエージェントのルール閲覧をブロック |
+| **Bash（プロキシ）** | `lrail <id> bash`がワークフローレベルのポリシーを追加 |
+| **シークレット** | 自動注入、自動リダクト、ファイルアクセスのブロック |
 
-### 構造的な強制
+フックプロトコルは**exit 2**（ブロッキングエラー）を使用します — Claude Codeの許可リストをオーバーライドし、`bypassPermissions`を含むすべての権限モードで機能します。
 
-Custom agentの`allowed-tools`を`Bash(lrail *)`に制限すると、**lrail bashプロキシ経由のコマンドのみ実行可能**になります — 直接のシェルアクセスは不可。これにより、ポリシーレイヤーがプロンプト依存ではなく構造的に強制されます。
+### カスタムエージェントのための構造的強制
 
-| | Custom Agent（例：`step-runner`） | General-Purpose Agent |
-|---|---|---|
-| ツール制限（`allowed-tools`） | 可能 — ホワイトリストのみ許可 | 不可 — 全ツール利用可能 |
-| Bash制限 | `Bash(lrail *)` — プロキシのみ | 制限なし |
-| ポリシー適用 | 構造的（バイパス不可） | フックベース（プロジェクトポリシー） |
-| WebSearch / WebFetch | 利用不可 | 利用可能 |
-| プロジェクトポリシー | 適用（プロキシ経由） | 適用（PreToolUseフック経由） |
-
-### 2つのポリシーレイヤー
-
-**プロジェクトポリシー**（`lrail.yml`）— すべてのソースからのコマンドに適用：
-
-```yaml
-# lrail.yml
-mode: enforce
-default: allow
-rules:
-  - effect: deny
-    commands: ["rm -rf *", "sudo *"]
-```
-
-**ワークフローポリシー**（workflow YAMLの`policy:`）— プロジェクトポリシーの上にワークフローごとの追加ルール：
-
-```yaml
-policy:
-  mode: enforce
-  rules:
-    - effect: allow
-      commands: ["curl -s https://api.example.com/*", "jq *"]
-    - effect: deny
-      commands: ["curl *", "rm *", "sudo *"]
-```
-
-どのURLにアクセスできるか、どのバイナリを実行できるか、どの引数が許可されるかを、フレームワークレベルで**ドメイン単位で制御**できます。
-
-### 監査ログ
-
-すべてのコマンドはソース追跡付きでグローバルコマンド履歴に記録されます：
-
-```bash
-lrail log                # ソースタグが色分けされた表示
-lrail log --raw          # マシンパース用TSV出力
-lrail log -f             # フォローモード
-```
-
-インスタンスごとのポリシー判定は`proxy.jsonl`にも記録されます。`trail`モード（全許可）でもすべてのアクションが記録され、事後レビューが可能です。
-
-### 制御を失わないウェブアクセス
-
-制限のない`WebFetch`/`WebSearch`の代わりに、bashプロキシ経由の`curl`を使用します：
-
-```yaml
-- id: search
-  type: programmatic
-  actions:
-    - shell: "curl -s https://google.serper.dev/search -H 'X-API-KEY: {{serper_key}}' -d '{\"q\": \"{{query}}\"}'"
-      extract: { results: "organic" }
-```
-
-Programmaticステップは自動的にプロキシを経由します。Agenticステップでは、エージェントが`lrail <id> bash 'curl ...'`を呼び出します — 同じポリシー、同じ監査。
-
-### Secret Mediation（Secret Mediation）
-
-エージェントがAPIキーや認証情報をコマンドで使用しつつ、実際の値を見えなくします。`.env`ファイルを指定するだけです：
-
-```yaml
-# lrail.yml
-env:
-  secret_files: [.env, .env.local]
-```
-
-これだけで十分です。`.env`ファイルが自動パースされ、すべてのキー・バリューペアがプロキシサブプロセスに注入され、出力からリダクトされます。エージェントは通常通り`$VAR`構文を使用し、実際の値を見ることはありません。
-
-```bash
-# エージェントは通常のシェル構文を使用 — プロキシが残りを処理
-lrail bash 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com/data'
-# → API呼び出し成功、$API_KEY値はエージェント出力に表示されない
-```
-
-env mediationが有効な場合：
-- すべてのBash呼び出しが`lrail bash`を経由 — 素のbashはフックにより拒否
-- `secret_files`が自動パースされ、値がサブプロセスに注入＋出力からリダクト
-- Read/Grepフックがシークレットファイルへのアクセスをブロック
-- `inject`でCI/ランタイムシークレットを`process.env`から追加（ファイルにない変数用）
-- `passthrough`でサブプロセスのenv変数を指定されたもののみに制限（任意）
-
-### クイックスタート
-
-`lrail init`はデフォルトポリシーを含むプロジェクト設定を即座に生成します：
-
-```bash
-lrail init
-# → rm -rf, sudo, chmod 777, git push --force, git reset --hardを
-#   ブロックするdenyルールを含むlrail.ymlを生成します。すぐに使用可能。
-```
-
-`env.secret_files`を追加すれば、シークレットまで保護されるセキュリティ設定が完成します。
-
-### 推奨構成
-
-構造的な安全性を最大化するには：
-1. **`lrail init`**を実行してデフォルトdenyルールを含むプロジェクトポリシーを生成
-2. `lrail.yml`に**`env.secret_files`**を追加して`.env`ファイルを保護
-3. **Custom agent**を使用し、`allowed-tools: Bash(lrail *), Read, Glob, Grep`に制限
-4. **ワークフローポリシー**を**enforceモード**に設定し、明示的な許可リストを作成
-5. `WebFetch`/`WebSearch`の代わりに、bashプロキシ経由の`curl`でウェブにアクセス
-6. 監査ログをレビュー：`lrail log`（グローバル）および`proxy.jsonl`（インスタンスごと）
-
-> **この領域は現在活発に開発中です。** 構造的セキュリティモデルを強化する方法を継続的に模索しています。貢献やアイデアを歓迎します。[Contributing](./CONTRIBUTING.ja.md)をご参照ください。
+エージェントを`Bash(lrail *)`の`allowed-tools`に制限してください。プロキシ経由でのみ実行可能になります — 直接のシェルアクセスは不可。ポリシーが構造的にバイパス不可能になります。
 
 ---
 
 ## はじめに
 
-### インストール
+### Claude Codeプラグイン（推奨）
 
 ```bash
-npm install llm-rail
-```
-
-### Claude Codeプラグインとして
-
-```bash
-# マーケットプレイスの追加
 /plugin marketplace add neuradex/llm-rail
-
-# プラグインのインストール
 /plugin install llm-rail@llm-rail
 ```
 
-プロジェクト内で`/llm-rail:init`を実行すると、ワークフローのセットアップと`CLAUDE.md`への登録が完了します。
+新しいセッションを開始してください。保護が適用されます。
+
+### CLIツールとして
+
+```bash
+npm install llm-rail
+lrail init
+```
 
 ### CLIリファレンス
 
 ```bash
-# グローバル
-lrail init                                            # プロジェクト初期化 (lrail.yml, workflows/, .gitignore)
-lrail docs [topic]                                    # ドキュメントの閲覧
-lrail log [-n <count>] [-f] [--raw]                   # コマンド履歴の表示
-lrail policy eval --command '<cmd>'                   # プロジェクトポリシーの評価
+# ガードレール
+lrail init                                            # 初期化（プラグインインストール時は自動）
+lrail policy eval --command '<cmd>'                   # ポリシーに対してコマンドをテスト
+lrail log [-n <count>] [-f] [--raw]                   # コマンド履歴
 lrail bash '<command>'                                # グローバルプロキシ経由で実行
-lrail policy has-env                                  # env mediationの有効確認
-lrail policy check-file <path>                        # ファイルのenv ポリシー検査
 
 # ワークフロー管理
-lrail wf list                                         # 全ワークフロー一覧
-lrail wf instances [--status <status>]                # 全インスタンス一覧
+lrail wf list                                         # ワークフロー一覧
 lrail wf <name> create [--variant <v>] [--param k=v]  # インスタンス作成
-lrail wf <name> validate [--variant <v>]              # ワークフローYAMLの検証
-lrail wf <name> show [--variant <v>]                  # ワークフローYAMLの表示
-lrail wf <name> summary [--variant <v>] [--param k=v] # ワークフロー概要と警告
-lrail wf <name> variants                              # バリアント一覧
-lrail wf <name> merge <variant> [--backup <name>]     # バリアントをベースにマージ
-lrail wf <name> list [--status <status>]              # インスタンス一覧
-lrail wf <name> promote                               # フェーズ昇格の分析
-lrail wf <name> policy check --command '<cmd>'        # ポリシーのドライランチェック
+lrail wf <name> validate [--variant <v>]              # YAMLの検証
+lrail wf <name> promote                               # 昇格準備の確認
 
 # インスタンス実行
 lrail <id> start                                      # 実行開始
 lrail <id> next --result '<json>'                     # ステップ結果の送信
 lrail <id> status                                     # 進捗確認
-lrail <id> query [--step <stepId>]                    # インスタンス状態の照会
-lrail <id> reset <step-id>                            # ステップのリセット
-lrail <id> log [step-id] [-f]                         # 監査ログの表示
-lrail <id> bash '<command>'                           # ポリシープロキシ経由のコマンド実行
+lrail <id> bash '<command>'                           # プロキシ経由で実行
 lrail <id> policy generate                            # trailからポリシーを生成
-
-# バリアント管理
-lrail wf <name> save-variant <v> --yaml '<content>'  # バリアントYAMLの保存
 ```
 
 ---
 
 ## Claude Codeプラグイン
 
-Claude Codeプラグインとしてインストールすれば、CLIを直接操作する必要はありません。
-
 | スキル | 説明 |
 |---|---|
-| `/llm-rail:init` | プロジェクトにLLM Railをセットアップします |
-| `/llm-rail:design` | 自然言語でタスクを説明すると、検証済みのYAMLワークフローを生成します |
-| `/llm-rail:build` | ビルトインのメタワークフローを使ってワークフローを生成・最適化します |
-| `/llm-rail:run` | エンドツーエンドで実行 — 1つのエージェントが全ステップを順次実行します |
-| `/llm-rail:review` | 試行実行＋分析 — 問題検出、修正提案、ポリシー生成 |
-| `/llm-rail:status` | 実行中のワークフローの状態を確認します |
-| `/llm-rail:optimize` | 既存ワークフローを最適化します（ベースライン、3段階の最適化、3ティア検証） |
+| `/llm-rail:design` | タスクを説明 → 検証済みワークフローを生成 |
+| `/llm-rail:build` | ワークフローを自動で生成、最適化、テスト |
+| `/llm-rail:run` | ワークフローをエンドツーエンドで実行 |
+| `/llm-rail:review` | 試行実行 + 分析 — 問題検出、修正提案 |
+| `/llm-rail:optimize` | 7段階の最適化パイプラインでバリアントを出力 |
 
-### 自動ワークフロー生成
-
-YAMLを手書きしたくないですか？ フレームワークに任せましょう：
-
-- **`/llm-rail:build`** — 自然言語でタスクを説明してください。フレームワークが実現可能性を分析し、ワークフローを生成し、検証し、テスト実行まで自動で行います。
-- **`/llm-rail:optimize`** — 既存のワークフローを受け取り、7段階の最適化パイプラインを実行します：ベースライン測定 → programmatic比率の改善 → 実行時間の短縮 → 検証失敗の削減 → 3ティアモデル検証 → 総合レポート。結果はバリアントファイルとして保存され、オリジナルは変更しません。
-
-これらのメタワークフローは、LLM Rail自身を使ってLLM Railワークフローを構築・改善します — フレームワークのセルフホスティングです。
-
-### `/llm-rail:run`の実行フロー
-
-```
-オーケストレーター（メインエージェント）
-  │
-  ├── ワークフロー検証 → インスタンス作成
-  │
-  └── インスタンス全体に1つのエージェントをspawn
-        │
-        ├── start → [programmaticステップの自動実行] → agenticステップのプロンプト
-        ├── 作業 → next → [programmaticステップの自動実行] → agenticステップのプロンプト
-        ├── 作業 → next → ...
-        │
-        └── ワークフロー完了。全ステップ検証済み。完全な監査ログ。
-```
-
-1つのエージェント、1つのインスタンス、最初から最後まで。各ステップは狭く検証されたスコープを受け取ります。最小限のコンテキスト、最小限のコスト。
+フレームワークが自身のワークフローを構築・改善します — セルフホスティングです。
 
 ---
 

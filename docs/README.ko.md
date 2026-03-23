@@ -1,3 +1,7 @@
+<!-- AGENT NOTE: 이 파일을 수정하면 ../README.md (영어)와 docs/README.ja.md (일본어)도 함께 업데이트하세요. -->
+
+<h1 align="center">LLM Rail</h1>
+
 <p align="center">
   <img src="https://img.shields.io/npm/v/llm-rail?style=flat-square&color=blue" alt="npm" />
   <img src="https://img.shields.io/badge/Claude_Code-plugin-blueviolet?style=flat-square" alt="Claude Code plugin" />
@@ -5,16 +9,16 @@
 </p>
 
 <p align="center">
-  <strong>AI 에이전트를 위한 구조적 안전성.</strong>
+  <strong>AI 에이전트를 위한 통합 가드레일.</strong>
 </p>
 
 <p align="center">
-  <a href="#문제">문제</a> ·
-  <a href="#작동-방식">작동 방식</a> ·
+  <a href="#설치하고-잊기">설치하고 잊기</a> ·
+  <a href="#정책--시크릿">정책 & 시크릿</a> ·
+  <a href="#워크플로우-엔진">워크플로우 엔진</a> ·
   <a href="#보안-모델">보안</a> ·
   <a href="#시작하기">시작하기</a> ·
-  <a href="#claude-code-플러그인">플러그인</a> ·
-  <a href="./CONTRIBUTING.ko.md">기여 가이드</a>
+  <a href="../CONTRIBUTING.md">기여 가이드</a>
 </p>
 
 <p align="center">
@@ -23,173 +27,212 @@
   <a href="./README.ja.md">日本語</a>
 </p>
 
-> **베타 (0.x.x)** — 현재 활발히 개발 중입니다. API, CLI 커맨드, 워크플로우 스키마가 예고 없이 변경될 수 있습니다. 안정성이 필요하다면 버전을 고정해 주세요.
+> **베타 (0.x.x)** — 활발히 개발 중입니다. API와 스키마가 변경될 수 있습니다. 안정성이 필요하다면 버전을 고정해 주세요.
 
 ---
 
-LLM 에이전트는 단계를 건너뛰고, 데이터를 날조하고, 실행해서는 안 되는 명령을 실행합니다. **LLM Rail은 이런 실패를 구조적으로 불가능하게 만듭니다** — 모델에게 조심하라고 부탁하는 것이 아니라, 나쁜 일이 발생할 수 없는 실행 구조를 만듭니다.
+AI 에이전트가 프로젝트에 `rm -rf`를 실행했습니다. 또는 출력에 API 키를 노출했습니다. 또는 main에 force-push를 했습니다.
 
-기존 에이전트 프레임워크는 오케스트레이션을 다루지만, 안전성은 프롬프트에 맡깁니다. "조심해." "실수하지 마." 이것은 **대시보드에 붙인 스티커**입니다. LLM Rail은 다른 접근을 취합니다: **프레임워크 수준의 구조적 안전성**.
+프롬프트 수준의 안전성("조심해 주세요")은 작동하지 않습니다. 컨텍스트가 길어지면 에이전트는 지시를 무시합니다. **구조적 강제가 필요합니다.**
 
-| 레이어 | 강제하는 것 |
-|---|---|
-| **워크플로우** | 작업을 검증 가능한 스텝으로 분해합니다. 각 스텝은 좁은 컨텍스트에서 실행되어, Opus 대신 Haiku로도 충분합니다. |
-| **정책** | 모든 명령이 bash 프록시(`lrail <id> bash`)를 거칩니다. IAM 스타일 allow/deny 규칙. 명시적으로 허가된 것만 실행 가능합니다. |
-| **감사** | 모든 액션, 명령, 정책 판정이 인스턴스별로 기록됩니다. 완전한 추적이 가능합니다. |
+LLM Rail은 두 가지 레벨에서 작동합니다:
 
-AI 에이전트가 복잡한 코드 리뷰에 실패했나요? 검증 가능한 3개 스텝으로 나누어 각각 Haiku로 실행하세요. 총 비용은 $2에서 $0.08로 줄어듭니다. 모든 출력이 검증되고, 전체 감사 로그가 남습니다.
+- **즉시 보호** — 플러그인을 설치하면 정책 강제, 시크릿 보호, 명령 감사가 자동으로 시작됩니다
+- **워크플로우 제어** — 복잡한 작업을 검증된 스텝으로 분해하고, 각 스텝의 컨텍스트와 권한을 통제합니다
 
----
+```bash
+# 플러그인을 설치하세요. 그게 전부입니다.
+/plugin marketplace add neuradex/llm-rail
+/plugin install llm-rail@llm-rail
+```
 
-## 문제
-
-LLM에는 **최신성 편향(recency bias)** 이 있습니다 — 컨텍스트가 길어질수록 원래 지시를 더 많이 잊어버립니다 ([Peysakhovich & Lerer 2023](https://arxiv.org/abs/2310.01427), [Liu et al. 2023](https://arxiv.org/abs/2307.03172)). 이것이 복잡한 에이전트 작업의 근본적인 실패 패턴입니다.
-
-LangChain이나 CrewAI 같은 기존 프레임워크는 에이전트에게 *무엇을* 하라고는 알려주지만, *어디까지 할 수 있는지*는 제어하지 않습니다. 오케스트레이션은 다루지만, 프레임워크 수준의 **실행 제어와 감사**는 제공하지 않습니다. LLM Rail이 이 공백을 채웁니다.
-
-LLM Rail은 **각 스텝의 컨텍스트를 작고 집중적으로 유지**하여 recency 문제를 해결합니다:
-
-- 각 스텝은 `context_in`으로 필요한 데이터만 받는 깨끗한 에이전트를 사용합니다
-- 이전 스텝에서 누적된 컨텍스트 오염이 없습니다
-- 에이전트가 똑똑할 필요 없이, 좁은 지시를 정확히 따르기만 하면 됩니다
-
-이것이 **Haiku가 Opus를 대체할 수 있는** 이유입니다. 모델의 능력이 아니라 범위의 문제입니다. 작은 컨텍스트의 작은 모델이 큰 컨텍스트에 파묻힌 큰 모델보다 낫습니다.
-
-워크플로우 엔진이 — LLM이 아니라 — 진행 상황을 추적하기 때문에, **수백 개의 스텝이 있어도 빠짐없이 전부 실행됩니다.** 긴 컨텍스트의 LLM 에이전트는 필연적으로 스텝을 빼먹지만, 워크플로우 엔진은 절대 빠뜨리지 않습니다.
-
-엔터프라이즈를 위한 답: **"통제할 수 있나요?"** — 프레임워크 수준에서 정책을 강제합니다. **"추적할 수 있나요?"** — 전체 감사 로그. **"복잡한 프로세스를 처리할 수 있나요?"** — 엔진이 모든 스텝의 완료를 보장합니다. 전부 프롬프트 수준의 약속이 아니라 구조적으로 답합니다.
+다음 세션부터 모든 Claude Code 명령이 보호됩니다. 설정 불필요.
 
 ---
 
-## 작동 방식
+## 설치하고 잊기
+
+LLM Rail은 설치하는 순간 작동합니다. 다음 Claude Code 세션에서:
+
+1. `lrail.yml`이 합리적인 기본값으로 자동 생성됩니다
+2. 위험한 명령이 차단됩니다 (`rm -rf`, `sudo`, `git push --force`, ...)
+3. 에이전트가 실행하는 모든 명령이 기록됩니다
+4. 설정 파일 자체가 에이전트의 변조로부터 보호됩니다
+
+**파일 하나. 설정 제로. 매 세션 보호.**
+
+```yaml
+# lrail.yml — 자동 생성, 언제든 수정 가능
+visible: false          # 에이전트가 이 파일을 읽거나 수정할 수 없습니다
+
+policy:
+  mode: enforce
+  default: allow        # deny-list 방식: 특정 명령만 차단
+  rules:
+    - effect: deny
+      commands:
+        - "rm -rf *"
+        - "sudo *"
+        - "chmod 777 *"
+        - "git push --force *"
+        - "git reset --hard *"
+        - regex: "curl.*\\|\\s*(bash|sh)"   # 셸로 파이프
+        - regex: "lrail\\.yml"              # 이 설정 보호
+```
+
+홈 디렉토리에 `lrail.yml` 하나를 두면 — 하위 모든 프로젝트에 적용됩니다.
+
+---
+
+## 정책 & 시크릿
+
+### 정책 강제
+
+간단한 규칙에는 글로브 패턴. 정밀함이 필요할 때는 정규표현식:
+
+```yaml
+rules:
+  - effect: deny
+    commands:
+      - "sudo *"                                    # 글로브 — 간단
+      - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f"     # 정규표현식 — rm -r -f, rm -rf 등을 포착
+      - regex: "git\\s+push\\s+.*(--force|\\s-f)"   # 정규표현식 — 모든 force-push 변형을 포착
+```
+
+에이전트가 플래그 순서를 바꾸거나 절대 경로를 사용해도 정규표현식 규칙을 우회할 수 없습니다.
+
+### 시크릿 보호
+
+`.env` 파일을 지정하세요. 시크릿이 자동 주입되고 자동 리댁트됩니다:
+
+```yaml
+env:
+  secret_files: [.env, .env.local]
+```
+
+- 에이전트가 `curl -H "Authorization: Bearer $API_KEY" ...` 실행 — 정상 작동
+- 하지만 `$API_KEY` 값은 에이전트 출력에 **절대 노출되지 않습니다** — `[REDACTED]`로 대체
+- 에이전트가 `cat .env`나 시크릿 파일을 `grep`할 수 없습니다 — 훅이 차단
+
+### 명령 감사
+
+모든 명령이 기록됩니다. 에이전트가 실제로 무엇을 했는지 확인하세요:
+
+```bash
+lrail log              # 최근 명령
+lrail log -n 50        # 최근 50개
+lrail log -f           # 실시간 팔로우
+lrail log --raw        # 머신 판독 가능한 TSV
+```
+
+### 설정 자체 보호
+
+기본적으로 에이전트는 `lrail.yml`을 읽거나, 편집하거나, 쓸 수 없습니다. 자신을 제어하는 규칙을 제거할 수 없습니다.
+
+에이전트가 설정을 읽고 적응할 수 있게 하려면 `visible: true`로 설정하세요 (예: "이 명령은 거부되겠구나, 다른 방법을 시도하자"):
+
+```yaml
+visible: true   # 에이전트가 이 설정을 보고 수정할 수 있습니다
+```
+
+---
+
+## 워크플로우 엔진
+
+가드레일 이상이 필요한 작업에 — 복잡한 작업을 검증된 스텝으로 분해하여 각 스텝의 컨텍스트, 권한, 출력을 제어합니다.
+
+```yaml
+name: code-review
+steps:
+  - id: fetch-diff
+    type: programmatic
+    actions:
+      - shell: "git diff {{base_branch}}...HEAD"
+        extract: { diff: "." }
+
+  - id: review
+    description: "diff에서 이슈를 리뷰"
+    depends_on: fetch-diff
+    context_in:
+      diff: "{fetch-diff.diff}"
+    required_output: [issues, severity]
+    validation:
+      - field: issues
+        op: type
+        value: array
+      - field: severity
+        op: one_of
+        value: [low, medium, high, critical]
+```
+
+### 왜 중요한가
+
+LLM에는 **최신성 편향(recency bias)** 이 있습니다 — 컨텍스트가 길어질수록 더 많이 잊어버립니다. 200스텝 작업에서 에이전트는 필연적으로 스텝을 건너뜁니다. 워크플로우 엔진은 절대 잊지 않습니다.
+
+각 스텝은 필요한 데이터만 담은 **좁은 컨텍스트**를 받습니다. 작은 모델, 작은 컨텍스트, 정확한 출력. **Haiku가 Opus를 대체합니다.** 비용이 $2에서 $0.08로 줄어듭니다.
 
 ### 스텝 타입
 
-LLM Rail은 하나의 워크플로우 안에서 두 가지 스텝 타입을 지원합니다:
+| | Programmatic | Agentic |
+|---|---|---|
+| 실행 | CLI가 직접 실행 | LLM 에이전트가 작업 |
+| 비용 | 토큰 제로 | 최소 (범위가 좁음) |
+| 속도 | 밀리초 | 초 |
+| 사용 시점 | 결정적 작업 | 판단이 필요한 작업 |
+
+하나의 워크플로우에서 혼합하여 사용하세요. 데이터는 programmatic으로 가져오고, 에이전트로 분석하고, 결과는 programmatic으로 전송합니다.
+
+### 검증 게이트
+
+22개 내장 연산자. 두 단계:
+
+- **validation** — 사전 완료 가드. 스텝이 완료되기 전에 잘못된 출력을 거부합니다.
+- **assertions** — 사후 완료 검사. 실패 시 스텝을 되돌리고, 에이전트가 자동으로 재시도합니다.
 
 ```yaml
-steps:
-  # Programmatic: LLM이 필요 없습니다. CLI가 직접 실행합니다.
-  - id: fetch-data
-    type: programmatic
-    actions:
-      - shell: "curl -s {{api_url}}/data"
-        extract: { records: "data", count: "total" }
-
-  # Agentic: LLM 에이전트가 작업하고, 출력이 검증됩니다.
-  - id: analyze
-    description: "{{count}}개 레코드의 이상 징후 분석"
-    instruction: "레코드를 분석하고 위험 점수와 함께 이상 징후를 식별하세요"
-    depends_on: fetch-data
-    context_in:
-      records: "{fetch-data.records}"
-    required_output: [anomalies, risk_score]
-    validation:
-      - field: anomalies
-        op: type
-        value: array
-      - field: risk_score
-        op: between
-        value: [0, 100]
-
-  # Programmatic: LLM 없이 후처리합니다.
-  - id: notify
-    type: programmatic
-    depends_on: analyze
-    actions:
-      - shell: "curl -X POST {{webhook}} -d '{\"score\": {{risk_score}}}'"
+validation:
+  - field: score
+    op: between
+    value: [0, 100]
+  - field: sources
+    op: each_has
+    value: url
+    message: "모든 소스에 URL이 있어야 합니다"
+assertions:
+  - field: sources
+    op: verify_source          # URL을 가져와 데이터 존재 여부를 확인
+    value: { field: "snippet", sample_size: 3 }
 ```
 
-**Programmatic 스텝**은 밀리초 단위로 실행되며 토큰 비용이 0입니다. **Agentic 스텝**은 집중된 검증 범위를 받아 Haiku가 안정적으로 처리합니다.
+`script` 연산자로 셸 기반 커스텀 검증도 가능합니다 — 스크립트할 수 있는 모든 검사를 실행할 수 있습니다.
 
-### 정책 시스템
+### 워크플로우별 정책
 
-에이전트가 실행할 수 있는 명령을 제어합니다 — AWS IAM에서 영감을 받았습니다:
+프로젝트 수준 정책은 전체를 보호합니다. 워크플로우 수준 정책은 작업별 제한을 추가합니다:
 
 ```yaml
 policy:
   mode: enforce
   rules:
     - effect: allow
-      commands: ["curl *", "jq *", "node *"]
+      commands: ["curl -s https://api.example.com/*", "jq *"]
     - effect: deny
-      commands: ["rm *", "sudo *"]
+      commands: ["curl *", "rm *"]
 ```
 
-- **Trail 모드**: 전부 허용, 전부 기록. 개발 및 정책 발견에 사용합니다.
-- **Enforce 모드**: deny-first 규칙 평가. 프로덕션에 사용합니다.
-- **정책 생성**: trail 로그에서 최소한의 allow-list를 자동 생성합니다.
+허용하는 특정 API 엔드포인트만 접근 가능. 나머지는 모두 거부.
 
-모든 명령은 bash 프록시(`lrail <id> bash "<cmd>"`)를 거치며, 정책을 적용하고 모든 실행을 기록합니다.
+### 라이프사이클 & 배리언트
 
-### 검증 게이트
+워크플로우는 단계를 거쳐 성숙합니다: `draft` → `dev` → `stable`
 
-22개의 내장 연산자가 각 스텝의 출력을 검사한 뒤 다음으로 진행합니다:
+여러 설계 방식이 배리언트로 공존하고, 비교 후 우수한 배리언트를 베이스에 병합합니다:
 
-```yaml
-validation:
-  - field: file_list
-    op: type
-    value: array
-  - field: complexity_score
-    op: between
-    value: [1, 10]
-assertions:
-  - field: comments
-    op: each_has
-    value: file
-    message: 모든 코멘트에 파일 참조가 있어야 합니다
+```bash
+lrail wf code-review variants           # 배리언트 목록
+lrail wf code-review merge api-driven   # 우수 배리언트 병합
+lrail wf code-review promote            # 다음 단계 준비 여부 확인
 ```
-
-두 단계로 나뉩니다: **validation**(사전 검증 가드)은 부적절한 제출을 거부합니다. **assertions**(사후 검증)는 실패 시 해당 스텝을 되돌립니다. 에이전트가 에러 메시지를 받고 자동으로 재시도하므로, 사람이 개입할 필요가 없습니다.
-
-`verify_source`(URL을 가져와서 데이터 스니펫이 실제로 존재하는지 확인하는 날조 방지)와 `script`(셸 기반 커스텀 검증 로직)도 포함됩니다.
-
-### 워크플로우 라이프사이클
-
-모든 워크플로우는 성숙도 단계를 거쳐 발전합니다:
-
-```
-draft → dev → stable
-```
-
-- **draft**: 탐색 단계입니다. 제약 없이 실행해보고, 결과를 관찰하고, 반복합니다.
-- **dev**: 작동하는 워크플로우입니다. 검증을 다듬고, agentic 스텝을 programmatic으로 전환합니다.
-- **stable**: 프로덕션 준비 완료입니다. 정책이 `enforce` 모드여야 합니다.
-
-`lrail wf <name> promote`으로 실행 이력을 분석하고 승격 권장 사항을 확인할 수 있습니다.
-
-### 배리언트
-
-여러 설계 방식이 공존하고, 비교하고, 병합할 수 있습니다:
-
-```
-workflows/stock-screening/
-  workflow.yml              # 베이스 (실행 대상)
-  api-driven.workflow.yml   # 직접 API 방식
-  programmatic.workflow.yml # 완전 결정적 방식
-```
-
-배리언트는 `extends: base`로 베이스를 상속하고 차이점만 정의합니다. 스텝은 ID 기준으로 병합됩니다 — 같은 ID면 오버라이드, 새 ID면 추가, 배리언트에 없는 ID는 베이스 그대로 유지됩니다. `lrail wf <name> merge <variant>`로 우수한 배리언트를 베이스에 병합할 수 있습니다.
-
-### Accumulate 모드
-
-데이터를 점진적으로 수집하는 스텝에 사용합니다:
-
-```yaml
-- id: collect
-  instruction: "기업 데이터를 배치 단위로 수집하세요"
-  required_output: [companies]
-  accumulate:
-    companies:
-      key: ticker
-  validation:
-    - field: companies
-      op: min_length
-      value: 20
-```
-
-에이전트가 배치 단위로 제출하면, 각 배치가 키 기준 중복 제거와 함께 풀에 병합됩니다. 검증은 누적된 풀을 대상으로 실행되며, 품질 기준을 충족할 때까지 스텝이 열린 상태로 유지됩니다.
 
 ### 감사 추적
 
@@ -199,267 +242,98 @@ workflows/stock-screening/
 .llm-rail/{workflow}/{instance}/
   ├── state.yaml      # 인스턴스 상태
   ├── audit.jsonl      # 전체 라이프사이클 이벤트
-  └── proxy.jsonl     # 전체 명령 실행 기록
+  └── proxy.jsonl     # 전체 명령 실행 + 정책 판정
 ```
-
----
-
-## 기능 요약
-
-| | |
-|---|---|
-| **스텝 타입** | `programmatic`(LLM 없이 직접 실행)과 `agentic`(LLM 에이전트 + 검증)을 하나의 워크플로우에서 사용합니다. |
-| **액션** | `js:`(컨텍스트가 자동 주입되는 JavaScript)와 `shell:`(템플릿 보간 + JSON 추출). 체이닝된 액션 간 파이프 스타일 데이터 흐름을 지원합니다. |
-| **정책** | AWS IAM 스타일 allow/deny 규칙. trail과 enforce 모드. 모든 에이전트 명령에 bash 프록시를 적용합니다. Secret Mediation를 통한 출력 리댁션. |
-| **검증 게이트** | 22개 내장 연산자. 구조적 검증 + 비즈니스 로직 어서션 + `verify_source` 날조 방지 + `script` 커스텀 로직. |
-| **명시적 데이터 플로우** | `context_in`으로 필요한 데이터만 전달합니다 — 암묵적 병합이나 컨텍스트 오염이 없습니다. |
-| **Accumulate 모드** | 키 기준 중복 제거 병합으로 점진적 데이터 수집. 품질 게이트를 충족할 때까지 스텝이 열려 있습니다. |
-| **배리언트** | 여러 워크플로우 설계가 공존하고, 비교하고, 병합됩니다. `extends: base`로 ID 기준 스텝 병합. |
-| **라이프사이클 단계** | `draft` → `dev` → `stable` 진행, 승격 분석 지원. |
-| **라이프사이클 훅** | 모든 단계에서 gate/event 훅 (`step:before_start`, `step:completed`, `policy:denied` 등). |
-| **감사 로그** | 모든 이벤트를 JSONL로 기록. 인스턴스별 audit + policy 로그로 완전한 추적이 가능합니다. |
-| **Claude Code 플러그인** | 내장 스킬 & 에이전트 — 에디터를 떠나지 않고 워크플로우를 설계, 실행, 감사할 수 있습니다. |
 
 ---
 
 ## 보안 모델
 
-LLM Rail은 **구조적 안전성**을 제공합니다 — 프롬프트 수준의 "조심하세요" 경고가 아닙니다.
-
-정책 적용은 **2개 레이어**로 동작합니다. 프로젝트 정책(`lrail.yml`)은 프로젝트 전체의 모든 명령에 적용됩니다. 워크플로우 정책(workflow YAML의 `policy:`)은 그 위에 워크플로우별 규칙을 추가합니다.
+LLM Rail은 **구조적으로** 안전성을 강제합니다 — 프롬프트가 아닙니다.
 
 ```
-┌─ 프로젝트 정책 (lrail.yml) ──────────────────────┐
-│                                                               │
-│  메인 에이전트 (훅)              서브에이전트 (프록시)          │
-│  ┌──────────────────┐          ┌──────────────────┐          │
-│  │ PreToolUse 훅     │          │ lrail <id> bash   │          │
-│  │ → 정책 평가       │          │ → 정책 평가       │          │
-│  │ → 커맨드 로그     │          │ → 워크플로우 정책 │          │
-│  └──────────────────┘          │ → 커맨드 로그     │          │
-│                                 └──────────────────┘          │
-└───────────────────────────────────────────────────────────────┘
+┌─ 프로젝트 정책 (lrail.yml) ─────────────────────────────┐
+│                                                           │
+│  메인 에이전트 (훅)              서브에이전트 (프록시)     │
+│  ┌──────────────────┐          ┌──────────────────┐      │
+│  │ PreToolUse 훅     │          │ lrail <id> bash   │      │
+│  │ → 정책 평가       │          │ → 프로젝트 정책   │      │
+│  │ → 커맨드 로그     │          │ → 워크플로우 정책  │      │
+│  └──────────────────┘          │ → 커맨드 로그     │      │
+│                                 └──────────────────┘      │
+└───────────────────────────────────────────────────────────┘
 ```
 
-메인 에이전트의 명령은 **PreToolUse 훅**으로 인터셉트됩니다 — 모든 Bash 호출이 실행 전에 프로젝트 정책으로 검사됩니다. 서브에이전트 명령은 `lrail <id> bash`를 통과하며, 프로젝트 정책과 워크플로우 정책 모두 검사됩니다. 모든 명령은 글로벌 커맨드 이력(`lrail log`)에 기록됩니다.
+| 레이어 | 강제 방식 |
+|---|---|
+| **Bash** | PreToolUse 훅이 모든 명령을 정책에 대해 검사 |
+| **Read/Edit/Write** | 훅이 시크릿 파일과 `lrail.yml`을 보호 |
+| **Config** | `visible: false`가 에이전트의 규칙 열람을 차단 |
+| **Bash (프록시)** | `lrail <id> bash`가 워크플로우 수준 정책을 추가 |
+| **시크릿** | 자동 주입, 자동 리댁트, 파일 접근 차단 |
 
-### 구조적 강제
+훅 프로토콜은 **exit 2**(차단 에러)를 사용합니다 — Claude Code 허용 목록을 오버라이드하며, `bypassPermissions`를 포함한 모든 권한 모드에서 작동합니다.
 
-Custom agent의 `allowed-tools`를 `Bash(lrail *)`로 제한하면, **lrail bash 프록시를 통한 명령만 실행 가능**해집니다 — 직접 셸 접근 불가. 이로써 정책 레이어가 프롬프트 의존이 아닌 구조적으로 강제됩니다.
+### 커스텀 에이전트를 위한 구조적 강제
 
-| | Custom Agent (e.g. `step-runner`) | General-Purpose Agent |
-|---|---|---|
-| 도구 제한 (`allowed-tools`) | 가능 — 화이트리스트만 허용 | 불가 — 모든 도구 사용 가능 |
-| Bash 제한 | `Bash(lrail *)` — 프록시만 허용 | 제한 없음 |
-| 정책 적용 | 구조적 (우회 불가) | 훅 기반 (프로젝트 정책) |
-| WebSearch / WebFetch | 사용 불가 | 사용 가능 |
-| 프로젝트 정책 | 적용 (프록시 경유) | 적용 (PreToolUse 훅 경유) |
-
-### 2개 정책 레이어
-
-**프로젝트 정책** (`lrail.yml`) — 모든 소스의 명령에 적용:
-
-```yaml
-# lrail.yml
-mode: enforce
-default: allow
-rules:
-  - effect: deny
-    commands: ["rm -rf *", "sudo *"]
-```
-
-**워크플로우 정책** (workflow YAML의 `policy:`) — 프로젝트 정책 위에 워크플로우별 추가 규칙:
-
-```yaml
-policy:
-  mode: enforce
-  rules:
-    - effect: allow
-      commands: ["curl -s https://api.example.com/*", "jq *"]
-    - effect: deny
-      commands: ["curl *", "rm *", "sudo *"]
-```
-
-어떤 URL에 접근할 수 있는지, 어떤 바이너리를 실행할 수 있는지, 어떤 인자가 허용되는지를 프레임워크 수준에서 **도메인 단위로 제어**할 수 있습니다.
-
-### 감사 로그
-
-모든 명령은 소스 추적과 함께 글로벌 커맨드 이력에 기록됩니다:
-
-```bash
-lrail log                # 소스 태그가 색상 구분된 표시
-lrail log --raw          # 머신 파싱용 TSV 출력
-lrail log -f             # 팔로우 모드
-```
-
-인스턴스별 정책 판정은 `proxy.jsonl`에도 기록됩니다. `trail` 모드(전부 허용)에서도 모든 행위가 기록되어 사후 검토가 가능합니다.
-
-### 제어를 잃지 않는 웹 접근
-
-제한 없는 `WebFetch`/`WebSearch` 대신, bash 프록시를 통한 `curl`을 사용합니다:
-
-```yaml
-- id: search
-  type: programmatic
-  actions:
-    - shell: "curl -s https://google.serper.dev/search -H 'X-API-KEY: {{serper_key}}' -d '{\"q\": \"{{query}}\"}'"
-      extract: { results: "organic" }
-```
-
-Programmatic 스텝은 자동으로 프록시를 경유합니다. Agentic 스텝에서는 에이전트가 `lrail <id> bash 'curl ...'`을 호출합니다 — 동일한 정책, 동일한 감사.
-
-### Secret Mediation (Secret Mediation)
-
-에이전트가 API 키와 자격증명을 커맨드에서 사용하되, 실제 값은 보지 못하게 합니다. `.env` 파일을 지정하면 됩니다:
-
-```yaml
-# lrail.yml
-env:
-  secret_files: [.env, .env.local]
-```
-
-이것만으로 충분합니다. `.env` 파일이 자동 파싱되어 모든 키-값 쌍이 프록시 서브프로세스에 주입되고 출력에서 리댁트됩니다. 에이전트는 평소처럼 `$VAR` 문법을 사용하며, 실제 값은 볼 수 없습니다.
-
-```bash
-# 에이전트는 일반 셸 문법 사용 — 프록시가 나머지를 처리
-lrail bash 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com/data'
-# → API 호출 성공, $API_KEY 값은 에이전트 출력에 나타나지 않음
-```
-
-env mediation 활성화 시:
-- 모든 Bash 호출이 `lrail bash`를 경유 — bare bash는 훅에 의해 블록
-- `secret_files`가 자동 파싱되어 값이 서브프로세스에 주입 + 출력에서 리댁트
-- Read/Grep 훅이 시크릿 파일 액세스 블록
-- `inject`로 CI/런타임 시크릿을 `process.env`에서 추가 (파일에 없는 변수용)
-- `passthrough`로 서브프로세스의 env 변수를 지정된 것만으로 제한 (선택)
-
-### 빠른 시작
-
-`lrail init`은 기본 정책이 포함된 프로젝트 설정을 즉시 생성합니다:
-
-```bash
-lrail init
-# → rm -rf, sudo, chmod 777, git push --force, git reset --hard를
-#   차단하는 deny 규칙이 포함된 lrail.yml을 생성합니다. 바로 사용 가능.
-```
-
-`env.secret_files`를 추가하면 시크릿까지 보호되는 보안 설정이 완성됩니다.
-
-### 권장 구성
-
-구조적 안전성을 극대화하려면:
-1. **`lrail init`**을 실행하여 기본 deny 규칙이 포함된 프로젝트 정책 생성
-2. `lrail.yml`에 **`env.secret_files`**를 추가하여 `.env` 파일 보호
-3. **Custom agent**를 사용하고 `allowed-tools: Bash(lrail *), Read, Glob, Grep`으로 제한
-4. **워크플로우 정책**을 **enforce 모드**로 설정하고 명시적 허용 목록 작성
-5. `WebFetch`/`WebSearch` 대신 bash 프록시를 통한 `curl`로 웹 접근
-6. 감사 로그 검토: `lrail log`(글로벌) 및 `proxy.jsonl`(인스턴스별)
-
-> **이 영역은 현재 활발히 개발 중입니다.** 구조적 보안 모델을 강화하는 방법을 지속적으로 탐구하고 있습니다. 기여와 아이디어를 환영합니다. [Contributing](./CONTRIBUTING.ko.md)을 참고해 주세요.
+에이전트를 `Bash(lrail *)`의 `allowed-tools`로 제한하세요. 프록시를 통해서만 실행할 수 있습니다 — 직접 셸 접근 불가. 정책이 구조적으로 우회 불가능해집니다.
 
 ---
 
 ## 시작하기
 
-### 설치
+### Claude Code 플러그인 (권장)
 
 ```bash
-npm install llm-rail
-```
-
-### Claude Code 플러그인으로
-
-```bash
-# 마켓플레이스 추가
 /plugin marketplace add neuradex/llm-rail
-
-# 플러그인 설치
 /plugin install llm-rail@llm-rail
 ```
 
-프로젝트에서 `/llm-rail:init`을 실행하면 워크플로우 세팅과 `CLAUDE.md` 등록이 완료됩니다.
+새 세션을 시작하세요. 보호가 적용됩니다.
+
+### CLI 도구로
+
+```bash
+npm install llm-rail
+lrail init
+```
 
 ### CLI 레퍼런스
 
 ```bash
-# 글로벌
-lrail init                                            # 프로젝트 초기화 (lrail.yml, workflows/, .gitignore)
-lrail docs [topic]                                    # 문서 탐색
-lrail log [-n <count>] [-f] [--raw]                   # 커맨드 이력 조회
+# 가드레일
+lrail init                                            # 초기화 (플러그인 설치 시 자동)
+lrail policy eval --command '<cmd>'                   # 정책에 대해 명령 테스트
+lrail log [-n <count>] [-f] [--raw]                   # 명령 이력
 lrail bash '<command>'                                # 글로벌 프록시를 통해 실행
-lrail policy eval --command '<cmd>'                   # 프로젝트 레벨 정책 평가
-lrail policy has-env                                  # env mediation 활성화 여부 확인
-lrail policy check-file <path>                        # 파일의 env 정책 검사
 
 # 워크플로우 관리
-lrail wf list                                         # 전체 워크플로우 목록
-lrail wf instances [--status <status>]                # 전체 인스턴스 목록
+lrail wf list                                         # 워크플로우 목록
 lrail wf <name> create [--variant <v>] [--param k=v]  # 인스턴스 생성
-lrail wf <name> validate [--variant <v>]              # 워크플로우 YAML 검증
-lrail wf <name> show [--variant <v>]                  # 워크플로우 YAML 표시
-lrail wf <name> summary [--variant <v>] [--param k=v] # 워크플로우 요약 및 경고
-lrail wf <name> variants                              # 배리언트 목록
-lrail wf <name> merge <variant> [--backup <name>]     # 배리언트를 베이스에 병합
-lrail wf <name> list [--status <status>]              # 인스턴스 목록
-lrail wf <name> promote                               # 단계 승격 분석
-lrail wf <name> policy check --command '<cmd>'        # 정책 드라이런 체크
+lrail wf <name> validate [--variant <v>]              # YAML 검증
+lrail wf <name> promote                               # 승격 준비 여부 확인
 
 # 인스턴스 실행
 lrail <id> start                                      # 실행 시작
 lrail <id> next --result '<json>'                     # 스텝 결과 제출
 lrail <id> status                                     # 진행 상황 확인
-lrail <id> query [--step <stepId>]                    # 인스턴스 상태 조회
-lrail <id> reset <step-id>                            # 스텝 초기화
-lrail <id> log [step-id] [-f]                         # 감사 로그 조회
-lrail <id> bash '<command>'                           # 정책 프록시를 통한 명령 실행
+lrail <id> bash '<command>'                           # 프록시를 통해 실행
 lrail <id> policy generate                            # trail에서 정책 생성
-
-# 배리언트 관리
-lrail wf <name> save-variant <v> --yaml '<content>'  # 배리언트 YAML 저장
 ```
 
 ---
 
 ## Claude Code 플러그인
 
-Claude Code 플러그인으로 설치하면 CLI를 직접 다룰 필요 없이 모든 것을 처리할 수 있습니다.
-
 | 스킬 | 설명 |
 |---|---|
-| `/llm-rail:init` | 프로젝트에 LLM Rail 세팅 |
-| `/llm-rail:design` | 자연어로 작업을 설명하면 검증된 YAML 워크플로우를 생성합니다 |
-| `/llm-rail:build` | 빌트인 메타 워크플로우를 사용해 워크플로우를 생성하고 최적화합니다 |
-| `/llm-rail:run` | 엔드투엔드 실행 — 단일 에이전트가 전체 스텝을 순차 실행합니다 |
-| `/llm-rail:review` | 시험 실행 + 분석 — 문제 검출, 수정 제안, 정책 생성 |
-| `/llm-rail:status` | 실행 중인 워크플로우의 상태를 확인합니다 |
-| `/llm-rail:optimize` | 기존 워크플로우를 최적화합니다 (베이스라인, 3단계 최적화, 3티어 검증) |
+| `/llm-rail:design` | 작업을 설명하면 → 검증된 워크플로우 생성 |
+| `/llm-rail:build` | 워크플로우를 자동으로 생성, 최적화, 테스트 |
+| `/llm-rail:run` | 워크플로우를 처음부터 끝까지 실행 |
+| `/llm-rail:review` | 시험 실행 + 분석 — 문제 감지, 수정 제안 |
+| `/llm-rail:optimize` | 7단계 최적화 파이프라인으로 배리언트 출력 |
 
-### 자동 워크플로우 생성
-
-YAML을 직접 작성하고 싶지 않으신가요? 프레임워크가 대신 만들어 드립니다:
-
-- **`/llm-rail:build`** — 자연어로 작업을 설명하세요. 프레임워크가 실현 가능성을 분석하고, 워크플로우를 생성하고, 검증하고, 테스트 실행까지 자동으로 수행합니다.
-- **`/llm-rail:optimize`** — 기존 워크플로우를 받아 7단계 최적화 파이프라인을 실행합니다: 베이스라인 측정 → programmatic 비율 개선 → 실행 시간 단축 → 검증 실패 감소 → 3티어 모델 검증 → 종합 리포트. 결과는 배리언트 파일로 저장되며 원본은 수정하지 않습니다.
-
-이 메타 워크플로우들은 LLM Rail 자체를 사용하여 LLM Rail 워크플로우를 만들고 개선합니다 — 프레임워크의 셀프 호스팅입니다.
-
-### `/llm-rail:run` 실행 시
-
-```
-오케스트레이터 (메인 에이전트)
-  │
-  ├── 워크플로우 검증 → 인스턴스 생성
-  │
-  └── 인스턴스 전체에 에이전트 1개 spawn
-        │
-        ├── start → [programmatic 스텝 자동 실행] → agentic 스텝 프롬프트
-        ├── 작업 → next → [programmatic 스텝 자동 실행] → agentic 스텝 프롬프트
-        ├── 작업 → next → ...
-        │
-        └── 워크플로우 완료. 모든 스텝 검증됨. 전체 감사 로그.
-```
-
-하나의 에이전트, 하나의 인스턴스, 처음부터 끝까지. 각 스텝은 좁고 검증된 범위를 받습니다. 최소한의 컨텍스트, 최소한의 비용.
+프레임워크가 자체 워크플로우를 만들고 개선합니다 — 셀프 호스팅입니다.
 
 ---
 

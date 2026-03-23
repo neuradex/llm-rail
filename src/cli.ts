@@ -7,7 +7,7 @@ import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
-import { runPolicyGenerate, runPolicyCheck, runPolicyEval } from "./commands/policy.js";
+import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyHasEnv, runPolicyCheckFile } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
 import { runLog } from "./commands/log.js";
@@ -18,12 +18,19 @@ import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
 import { resolveInstanceId } from "./engine/state.js";
 import { runGlobalLog } from "./commands/global-log.js";
+import { runGlobalBash } from "./commands/global-bash.js";
+import { runInit } from "./commands/init.js";
 const args = process.argv.slice(2);
 
 function usage(): never {
   console.error(`Usage:
+  lrail init                                          Initialize project (lrail.yml, workflows/, .gitignore)
   lrail docs [topic]                                  Browse documentation
   lrail log [-n <count>] [-f] [--raw]                  Show command history
+  lrail bash '<command>'                              Execute through global proxy
+  lrail policy eval --command '<cmd>'                 Evaluate project policy
+  lrail policy has-env                                Check if env mediation is active
+  lrail policy check-file <path>                      Check file against env policy
   lrail wf list                                       List all workflows
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
@@ -53,6 +60,7 @@ function banner(): void {
   ───── LLM Rail ─────
    Track & Guardrail  v${v}
 
+  lrail init                   Initialize project
   lrail docs [topic]           Browse documentation
   lrail log [-n N] [-f] [--raw] Command history
   lrail wf list                List workflows
@@ -72,10 +80,19 @@ if (args.length < 1) {
 const target = args[0];
 
 // --- Global commands ---
-if (target === "docs") {
+if (target === "init") {
+  runInit();
+} else if (target === "docs") {
   runDocs(args.slice(1).join("/"));
 } else if (target === "help" || target === "--help") {
   usage();
+} else if (target === "bash") {
+  const bashCmd = args.slice(1).join(" ");
+  if (!bashCmd) {
+    console.error("Usage: lrail bash '<command>'");
+    process.exit(1);
+  }
+  runGlobalBash(bashCmd);
 } else if (target === "policy" && args[1] === "eval") {
   const cmdIdx = args.indexOf("--command");
   const cmd = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
@@ -84,6 +101,15 @@ if (target === "docs") {
     process.exit(1);
   }
   runPolicyEval(cmd);
+} else if (target === "policy" && args[1] === "has-env") {
+  runPolicyHasEnv();
+} else if (target === "policy" && args[1] === "check-file") {
+  const filePath = args[2];
+  if (!filePath) {
+    console.error("Usage: lrail policy check-file <path>");
+    process.exit(1);
+  }
+  runPolicyCheckFile(filePath);
 } else if (target === "log") {
   const followFlag = args.includes("-f") || args.includes("--follow");
   const rawFlag = args.includes("--raw");
@@ -336,7 +362,7 @@ Commands:
     }
 
     case "bash": {
-      const bashCmd = args[2];
+      const bashCmd = args.slice(2).join(" ");
       if (!bashCmd) {
         console.error(`Usage: lrail ${target} bash '<command>'`);
         process.exit(1);

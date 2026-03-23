@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PolicyDef } from "../types.js";
+import type { PolicyDef, CommandPattern } from "../types.js";
 import { instanceDir } from "../audit/logger.js";
 import { ensureDir, nowISO } from "../util.js";
 
@@ -33,8 +33,8 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
   for (const rule of policy.rules) {
     if (rule.effect === "deny") {
       for (const pattern of rule.commands) {
-        if (matchGlob(pattern, command)) {
-          return { allowed: false, reason: `denied by rule: ${pattern}` };
+        if (matchCommand(pattern, command)) {
+          return { allowed: false, reason: `denied by rule: ${patternLabel(pattern)}` };
         }
       }
     }
@@ -44,8 +44,8 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
   for (const rule of policy.rules) {
     if (rule.effect === "allow") {
       for (const pattern of rule.commands) {
-        if (matchGlob(pattern, command)) {
-          return { allowed: true, reason: `allowed by rule: ${pattern}` };
+        if (matchCommand(pattern, command)) {
+          return { allowed: true, reason: `allowed by rule: ${patternLabel(pattern)}` };
         }
       }
     }
@@ -59,6 +59,16 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
 }
 
 /**
+ * Match a command against a pattern (glob string or regex object).
+ */
+export function matchCommand(pattern: CommandPattern, command: string): boolean {
+  if (typeof pattern === "string") {
+    return matchGlob(pattern, command);
+  }
+  return matchRegex(pattern.regex, command);
+}
+
+/**
  * Minimal glob matching: supports * as wildcard for any characters.
  */
 export function matchGlob(pattern: string, str: string): boolean {
@@ -66,6 +76,27 @@ export function matchGlob(pattern: string, str: string): boolean {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   const re = new RegExp(`^${escaped}$`);
   return re.test(str);
+}
+
+/**
+ * Regex matching: pattern is tested against the full command string.
+ */
+export function matchRegex(pattern: string, str: string): boolean {
+  try {
+    const re = new RegExp(pattern);
+    return re.test(str);
+  } catch {
+    // Invalid regex — treat as non-match
+    return false;
+  }
+}
+
+/**
+ * Human-readable label for a pattern (used in deny/allow reasons).
+ */
+function patternLabel(pattern: CommandPattern): string {
+  if (typeof pattern === "string") return pattern;
+  return `regex:${pattern.regex}`;
 }
 
 /**

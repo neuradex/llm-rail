@@ -47,9 +47,11 @@ export interface ShellActionDef {
 
 export type ActionDef = JsActionDef | ShellActionDef;
 
+export type CommandPattern = string | { regex: string };
+
 export interface PolicyRule {
   effect: "allow" | "deny";
-  commands: string[];
+  commands: CommandPattern[];
 }
 
 export interface PolicyDef {

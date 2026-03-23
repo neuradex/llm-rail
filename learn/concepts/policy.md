@@ -47,6 +47,38 @@ policy:
 
 Evaluation order: deny rules → allow rules → default.
 
+### Pattern types
+
+Commands support two pattern types:
+
+**Glob** (default) — simple wildcard matching. `*` matches any characters.
+
+```yaml
+commands:
+  - "rm -rf *"
+  - "sudo *"
+  - "chmod 777 *"
+```
+
+**Regex** — full regular expression for precise matching. Use when glob is too coarse (e.g., catching flag reordering, absolute path bypass).
+
+```yaml
+commands:
+  - regex: "rm\\s+(-[a-z]*r[a-z]*\\s+.*-[a-z]*f|.*-[a-z]*f[a-z]*\\s+.*-[a-z]*r|.*-[a-z]*rf)"
+  - regex: "(^|/)sudo\\s+"
+  - regex: "git\\s+push\\s+.*--force"
+```
+
+Glob and regex can be mixed in the same rule:
+
+```yaml
+rules:
+  - effect: deny
+    commands:
+      - "chmod 777 *"                    # glob
+      - regex: "git\\s+push\\s+.*--force"  # regex
+```
+
 ### default field
 
 Controls what happens when no rule matches:

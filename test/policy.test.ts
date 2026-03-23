@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
-import { evaluatePolicy, matchGlob, appendPolicyLog } from "../src/engine/policy.js";
+import { evaluatePolicy, matchGlob, matchRegex, matchCommand, appendPolicyLog } from "../src/engine/policy.js";
 import type { PolicyDef } from "../src/types.js";
 
 // ── matchGlob ──
@@ -28,6 +28,47 @@ describe("matchGlob", () => {
   it("matches complex patterns", () => {
     assert.ok(matchGlob("npm run *", "npm run test"));
     assert.ok(matchGlob("cat */src/*", "cat myrepo/src/index.ts"));
+  });
+});
+
+// ── matchRegex ──
+
+describe("matchRegex", () => {
+  it("matches regex patterns", () => {
+    assert.ok(matchRegex("rm\\s+.*-rf", "rm  -rf /"));
+    assert.ok(matchRegex("rm\\s+.*-rf", "rm -rf /tmp"));
+    assert.ok(!matchRegex("rm\\s+.*-rf", "echo rm"));
+  });
+
+  it("matches split flags", () => {
+    const pattern = "rm\\s+(-[a-z]*r[a-z]*\\s+.*-[a-z]*f|.*-[a-z]*f[a-z]*\\s+.*-[a-z]*r|.*-[a-z]*rf)";
+    assert.ok(matchRegex(pattern, "rm -r -f /"));
+    assert.ok(matchRegex(pattern, "rm -rf /"));
+    assert.ok(!matchRegex(pattern, "rm file.txt"));
+  });
+
+  it("matches absolute path bypass", () => {
+    assert.ok(matchRegex("(^|/)sudo\\s+", "sudo reboot"));
+    assert.ok(matchRegex("(^|/)sudo\\s+", "/usr/bin/sudo reboot"));
+    assert.ok(!matchRegex("(^|/)sudo\\s+", "pseudocode"));
+  });
+
+  it("handles invalid regex gracefully", () => {
+    assert.ok(!matchRegex("[invalid", "anything"));
+  });
+});
+
+// ── matchCommand ──
+
+describe("matchCommand", () => {
+  it("dispatches glob strings", () => {
+    assert.ok(matchCommand("git *", "git status"));
+    assert.ok(!matchCommand("git *", "npm test"));
+  });
+
+  it("dispatches regex objects", () => {
+    assert.ok(matchCommand({ regex: "git\\s+push.*--force" }, "git push --force origin main"));
+    assert.ok(!matchCommand({ regex: "git\\s+push.*--force" }, "git push origin main"));
   });
 });
 
@@ -79,6 +120,53 @@ describe("evaluatePolicy", () => {
   it("enforce mode with no rules denies all", () => {
     const policy: PolicyDef = { mode: "enforce", rules: [] };
     assert.ok(!evaluatePolicy(policy, "ls").allowed);
+  });
+
+  it("supports regex patterns in rules", () => {
+    const policy: PolicyDef = {
+      mode: "enforce",
+      default: "allow",
+      rules: [
+        {
+          effect: "deny",
+          commands: [
+            { regex: "rm\\s+(-[a-z]*r[a-z]*\\s+.*-[a-z]*f|.*-[a-z]*f[a-z]*\\s+.*-[a-z]*r|.*-[a-z]*rf)" },
+            { regex: "(^|/)sudo\\s+" },
+          ],
+        },
+      ],
+    };
+
+    // Catches bypass attempts
+    assert.ok(!evaluatePolicy(policy, "rm -r -f /").allowed);
+    assert.ok(!evaluatePolicy(policy, "rm  -rf /tmp").allowed);
+    assert.ok(!evaluatePolicy(policy, "/usr/bin/sudo reboot").allowed);
+    assert.ok(!evaluatePolicy(policy, "sudo ls").allowed);
+
+    // Allows normal commands
+    assert.ok(evaluatePolicy(policy, "rm file.txt").allowed);
+    assert.ok(evaluatePolicy(policy, "git status").allowed);
+  });
+
+  it("mixes glob and regex in same rule", () => {
+    const policy: PolicyDef = {
+      mode: "enforce",
+      rules: [
+        {
+          effect: "deny",
+          commands: [
+            "chmod 777 *",
+            { regex: "git\\s+push\\s+.*--force" },
+          ],
+        },
+        { effect: "allow", commands: ["git *", "chmod *"] },
+      ],
+    };
+
+    assert.ok(!evaluatePolicy(policy, "chmod 777 /tmp").allowed);
+    assert.ok(!evaluatePolicy(policy, "git push --force origin main").allowed);
+    assert.ok(evaluatePolicy(policy, "chmod 644 file.txt").allowed);
+    assert.ok(evaluatePolicy(policy, "git push origin main").allowed);
   });
 });
 

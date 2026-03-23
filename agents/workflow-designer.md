@@ -39,7 +39,7 @@ policy:                # command execution policy
   default: allow | deny  # optional, default "deny"
   rules:               # required for enforce mode
     - effect: allow | deny
-      commands: ["glob *"]
+      commands: ["glob *", {regex: "pattern"}]  # glob string or {regex} object
   env:                 # secret mediation (see lrail docs concepts/secrets)
     inject: string[]   # secret env vars — injected into proxy subprocess, redacted from output
     passthrough: string[]  # non-secret env vars — explicit allowlist (optional)

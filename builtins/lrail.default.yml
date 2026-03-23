@@ -15,6 +15,10 @@ rules:
       - "git push -f *"
       - "git reset --hard *"
 
+      # Regex patterns — precise matching (catches flag reordering, absolute paths, etc.)
+      - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
+      - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
+
 # Secret mediation — lrail docs concepts/secrets
 # env:
 #   secret_files: [.env, .env.local]

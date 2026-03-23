@@ -16,9 +16,9 @@
 
 <p align="center">
   <a href="#install-and-forget">Install & Forget</a> ·
-  <a href="#what-you-get">What You Get</a> ·
+  <a href="#how-it-protects-you">How It Protects You</a> ·
   <a href="#workflow-engine">Workflow Engine</a> ·
-  <a href="#security-model">Security</a> ·
+  <a href="#security-architecture">Security Architecture</a> ·
   <a href="#getting-started">Getting Started</a> ·
   <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
@@ -35,28 +35,28 @@
 
 Your AI agent just ran `rm -rf` on your project. Or leaked your API key in its output. Or force-pushed to main.
 
-Prompt-level safety ("please be careful") doesn't work. Agents ignore instructions as context grows. **You need structural enforcement.**
+You told it to be careful. It ignored you — because that's what LLMs do when context grows long enough. Prompt-level safety is a suggestion. Agents don't follow suggestions.
+
+**LLM Rail enforces safety structurally.** Not through prompts, but through hooks that intercept every command before it runs, policies that block what shouldn't execute, and audit logs that record everything that does.
+
+It works at two levels:
+
+- **Instant protection** — install the plugin, and every Claude Code session is guarded. Dangerous commands are blocked. Secrets are redacted. Everything is logged.
+- **Workflow control** — for complex tasks, decompose work into validated steps where each step gets only the context it needs, runs under its own policy, and must pass validation before advancing.
+
+Both levels share the same policy engine, the same audit infrastructure, and the same security model. The guardrails you configure for everyday use also protect your workflows.
 
 ```bash
-# Install the plugin. That's it.
+# That's the whole setup.
 /plugin marketplace add neuradex/llm-rail
 /plugin install llm-rail@llm-rail
 ```
-
-Next session, every Claude Code command is guarded. No config needed.
 
 ---
 
 ## Install and Forget
 
-LLM Rail works the moment you install it. On your next Claude Code session:
-
-1. `lrail.yml` is auto-created with sensible defaults
-2. Dangerous commands are blocked (`rm -rf`, `sudo`, `git push --force`, ...)
-3. Every command the agent runs is logged
-4. The config file itself is protected from agent tampering
-
-**One file. Zero setup. Every session guarded.**
+On your next Claude Code session, `lrail.yml` is auto-created with sensible defaults. That one file does everything:
 
 ```yaml
 # lrail.yml — auto-generated, edit anytime
@@ -77,43 +77,51 @@ policy:
         - regex: "lrail\\.yml"              # protect this config
 ```
 
-Put one `lrail.yml` in your home directory — it covers every project underneath.
+Put it in your home directory and it covers every project underneath. Put it in a specific project and it overrides the global one for that directory tree. The nearest `lrail.yml` walking up from cwd wins — just like `.gitignore`.
+
+**One file. Zero setup. Every session guarded.**
 
 ---
 
-## What You Get
+## How It Protects You
 
-### Policy enforcement
+### Policy: controlling what agents can do
 
-Glob patterns for simple rules. Regex for precision:
+Every Bash command the agent runs is intercepted by a PreToolUse hook and checked against your policy rules before it executes. Denied commands never run.
+
+Simple rules use glob patterns. When you need precision — catching flag reordering, absolute path tricks, or subcommand variants — use regex:
 
 ```yaml
 rules:
   - effect: deny
     commands:
-      - "sudo *"                                    # glob — simple
-      - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f"     # regex — catches rm -r -f, rm -rf, etc.
+      - "sudo *"                                    # glob — blocks sudo
+      - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f"     # regex — catches rm -rf, rm -r -f, rm -fr, etc.
       - regex: "git\\s+push\\s+.*(--force|\\s-f)"   # regex — catches all force-push variants
 ```
 
-Agents can't bypass regex rules by reordering flags or using absolute paths.
+An agent that knows `rm -rf` is blocked might try `rm -r -f` or `/bin/rm -rf`. Glob patterns miss these. Regex doesn't.
 
-### Secret protection
+### Secrets: use them without seeing them
 
-Point to your `.env` file. Secrets are auto-injected and auto-redacted:
+Agents need API keys to call external services. But they shouldn't see the actual values, and they definitely shouldn't print them in their output.
 
 ```yaml
 env:
   secret_files: [.env, .env.local]
 ```
 
-- Agent runs `curl -H "Authorization: Bearer $API_KEY" ...` — works normally
-- But `$API_KEY` value **never appears** in agent output — replaced with `[REDACTED]`
-- Agent can't `cat .env` or `grep` secret files — hooks block it
+This one line does three things:
 
-### Command audit
+1. **Injects** — secret values from your `.env` files are injected into the agent's subprocess environment
+2. **Redacts** — any output containing a secret value is replaced with `[REDACTED]` before the agent sees it
+3. **Blocks** — Read and Grep hooks prevent agents from accessing the `.env` files directly
 
-Every command logged. See what your agent actually did:
+The agent writes `curl -H "Authorization: Bearer $API_KEY" ...` and it works. But it never learns what `$API_KEY` actually is.
+
+### Audit: everything is recorded
+
+Every command from every source — hooks, proxies, CLI — goes into a single command log with timestamps, source tags, and policy decisions:
 
 ```bash
 lrail log              # recent commands
@@ -122,21 +130,23 @@ lrail log -f           # follow in real-time
 lrail log --raw        # machine-readable TSV
 ```
 
-### Config self-protection
+Denied commands are logged too. You can see exactly what the agent tried to do and what was blocked.
 
-By default, agents can't read, edit, or write `lrail.yml`. They can't remove the rules that constrain them.
+### Self-protection: agents can't change the rules
 
-Set `visible: true` if you want agents to read the config and adapt (e.g., "this will be denied, let me try another approach"):
+`visible: false` (the default) means agents can't read `lrail.yml` through any tool — Read, Edit, Write, Grep, or Bash. They don't know what rules exist, so they can't game them.
 
-```yaml
-visible: true   # agents can see and modify this config
-```
+If you want agents to see the rules and adapt their behavior ("this will be denied, let me try another approach"), set `visible: true`. This is a deliberate choice, not a default.
 
 ---
 
 ## Workflow Engine
 
-For tasks that need more than guardrails — decompose complex work into validated steps:
+Guardrails protect against bad actions. But complex tasks fail for a different reason: LLMs have **recency bias**. The longer the context, the more they forget their original instructions. In a 200-step task, an agent will inevitably skip steps, fabricate data, or drift from the plan.
+
+The workflow engine solves this by decomposing work into steps where **each step gets a clean, narrow context** with only the data it needs. A step that receives 10K tokens of focused input produces better output than an agent drowning in 100K tokens of accumulated history.
+
+This has a direct cost implication: when context is narrow enough, **Haiku produces the same quality as Opus** at a fraction of the cost. The model doesn't need to be smart — it needs to be focused. LLM Rail makes focus structural.
 
 ```yaml
 name: code-review
@@ -162,29 +172,25 @@ steps:
         value: [low, medium, high, critical]
 ```
 
-### Why this matters
+`fetch-diff` runs as a shell command — no LLM, no tokens, milliseconds. `review` gets exactly the diff it needs via `context_in`, produces exactly the output declared in `required_output`, and the output must pass `validation` before the workflow advances.
 
-LLMs have **recency bias** — the longer the context, the more they forget. In a 200-step task, an agent will inevitably skip steps. A workflow engine never forgets.
-
-Each step gets a **narrow context** with only the data it needs. Small model, small context, precise output. **Haiku replaces Opus.** Cost drops from $2 to $0.08.
-
-### Step types
+### Two step types, one workflow
 
 | | Programmatic | Agentic |
 |---|---|---|
-| Execution | CLI runs directly | LLM agent does the work |
+| Execution | CLI runs it directly | LLM agent does the work |
 | Cost | Zero tokens | Minimal (scoped context) |
 | Speed | Milliseconds | Seconds |
-| Use when | Deterministic operations | Judgment needed |
+| Use when | Deterministic ops (fetch, filter, post) | Judgment needed (analyze, review, write) |
 
-Mix them in one workflow. Fetch data programmatically, analyze with an agent, post results programmatically.
+The power is in mixing them. Fetch data programmatically, analyze with an agent, post results programmatically. The deterministic parts never hallucinate because no LLM is involved.
 
 ### Validation gates
 
-22 built-in operators. Two tiers:
+Each step's output passes through two tiers of checks:
 
-- **validation** — pre-completion guards. Rejects bad output before the step completes.
-- **assertions** — post-completion checks. Reverts the step on failure, agent retries automatically.
+- **validation** — runs before the step completes. Rejects bad output immediately. The agent gets the error message and retries.
+- **assertions** — runs after the step completes (including any post-step actions). Reverts the step on failure. The agent retries automatically.
 
 ```yaml
 validation:
@@ -197,15 +203,15 @@ validation:
     message: "Every source must have a URL"
 assertions:
   - field: sources
-    op: verify_source          # fetches URLs, verifies data exists
+    op: verify_source          # fetches URLs, verifies data actually exists
     value: { field: "snippet", sample_size: 3 }
 ```
 
-Includes `script` for custom shell-based validation — run any check you can script.
+22 built-in operators cover type checks, ranges, array validation, uniqueness, and anti-fabrication (`verify_source` fetches URLs and confirms the cited data actually exists on the page). For anything custom, `script` runs a shell command as a validation gate.
 
 ### Policy per workflow
 
-Project-level policy protects everything. Workflow-level policy adds per-task restrictions:
+The project-level policy in `lrail.yml` protects everything globally. Workflows can layer additional restrictions on top:
 
 ```yaml
 policy:
@@ -217,13 +223,13 @@ policy:
       commands: ["curl *", "rm *"]
 ```
 
-Only the specific API endpoints you allow. Everything else denied.
+A code-review workflow might allow `git diff` and `jq`. A data-collection workflow might allow specific API endpoints. Each workflow gets exactly the permissions it needs — nothing more.
 
-### Lifecycle & variants
+### Lifecycle and variants
 
-Workflows mature through phases: `draft` → `dev` → `stable`
+Workflows mature through phases: `draft` → `dev` → `stable`. In draft, you experiment freely. In dev, you tighten validation and convert agentic steps to programmatic where possible. In stable, policy must be in enforce mode.
 
-Multiple design approaches coexist as variants, get compared, and the winner merges into the base:
+Multiple design approaches can coexist as variants — different step structures, different models, different data sources — and the winner gets merged into the base:
 
 ```bash
 lrail wf code-review variants           # list variants
@@ -231,22 +237,24 @@ lrail wf code-review merge api-driven   # merge winning variant
 lrail wf code-review promote            # check if ready for next phase
 ```
 
-### Audit trail
+### Complete audit trail
 
-Every event recorded per instance:
+Every workflow instance records its full history:
 
 ```
 .llm-rail/{workflow}/{instance}/
-  ├── state.yaml      # instance state
-  ├── audit.jsonl      # all lifecycle events
-  └── proxy.jsonl     # all command executions + policy decisions
+  ├── state.yaml      # current instance state
+  ├── audit.jsonl      # all lifecycle events (step starts, completions, rejections, resets)
+  └── proxy.jsonl     # all command executions with policy decisions
 ```
+
+Combined with the global `lrail log`, you get a complete picture: what the agent did, what was allowed, what was blocked, and why.
 
 ---
 
-## Security Model
+## Security Architecture
 
-LLM Rail enforces safety **structurally** — not with prompts.
+All of LLM Rail's protections — policy, secrets, audit, self-protection — converge into a single architecture that covers both standalone use and workflow execution:
 
 ```
 ┌─ Project Policy (lrail.yml) ─────────────────────────────┐
@@ -255,25 +263,27 @@ LLM Rail enforces safety **structurally** — not with prompts.
 │  ┌──────────────────┐          ┌──────────────────┐      │
 │  │ PreToolUse hook   │          │ lrail <id> bash   │      │
 │  │ → policy eval     │          │ → project policy  │      │
-│  │ → command log     │          │ → workflow policy │      │
+│  │ → secret redact   │          │ → workflow policy │      │
+│  │ → command log     │          │ → secret redact   │      │
 │  └──────────────────┘          │ → command log     │      │
 │                                 └──────────────────┘      │
 └───────────────────────────────────────────────────────────┘
 ```
 
-| Layer | Enforcement |
-|---|---|
-| **Bash** | PreToolUse hook checks every command against policy |
-| **Read/Edit/Write** | Hooks guard secret files and `lrail.yml` |
-| **Config** | `visible: false` prevents agents from reading the rules |
-| **Bash (proxy)** | `lrail <id> bash` adds workflow-level policy on top |
-| **Secrets** | Auto-injected, auto-redacted, files blocked from access |
+| Layer | What it enforces | How |
+|---|---|---|
+| **Bash hook** | Which commands can run | PreToolUse intercepts every Bash call, evaluates policy, blocks with exit 2 |
+| **File hooks** | Which files can be accessed | Read/Grep hooks block secret files; guard hook blocks `lrail.yml` |
+| **Config visibility** | Whether agents know the rules | `visible: false` hides the config from all tools |
+| **Bash proxy** | Workflow-specific permissions | `lrail <id> bash` adds workflow policy on top of project policy |
+| **Secret mediation** | Credential exposure | Values injected into subprocess env, redacted from all output |
+| **Audit log** | Accountability | Every command, every decision, every source — recorded |
 
-Hook protocol uses **exit 2** (blocking error) — overrides the Claude Code allow list and works in all permission modes, including `bypassPermissions`.
+The hook protocol uses **exit 2** (blocking error), which overrides the Claude Code allow list and works in all permission modes including `bypassPermissions`. This isn't a suggestion the agent can ignore — it's a structural gate.
 
 ### Structural enforcement for custom agents
 
-Restrict agents to `Bash(lrail *)` via `allowed-tools`. They can **only** execute through the proxy — no direct shell access. Policy becomes structurally impossible to bypass.
+For maximum isolation, restrict an agent's tools to `Bash(lrail *)` via `allowed-tools`. The agent can only execute commands through the proxy — no direct shell access. Policy enforcement becomes structurally impossible to bypass, not just difficult.
 
 ---
 

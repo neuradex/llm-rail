@@ -56,6 +56,13 @@ export interface PolicyDef {
   mode: "trail" | "enforce";
   default?: "allow" | "deny";
   rules?: PolicyRule[];
+  env?: EnvPolicy;
+}
+
+export interface EnvPolicy {
+  inject?: string[];
+  passthrough?: string[];
+  secret_files?: string[];
 }
 
 // ── Workflow Phase ──

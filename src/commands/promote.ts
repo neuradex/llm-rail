@@ -71,7 +71,7 @@ export function runPromote(workflowName: string): void {
 
     // Read policy log for bash commands
     const dir = instanceDir(workflowName, inst.id);
-    const policyLogPath = path.resolve(dir, "policy.jsonl");
+    const policyLogPath = path.resolve(dir, "proxy.jsonl");
     if (!fs.existsSync(policyLogPath)) continue;
 
     const lines = fs.readFileSync(policyLogPath, "utf-8").trim().split("\n");

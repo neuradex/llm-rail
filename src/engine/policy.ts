@@ -88,6 +88,6 @@ export function appendPolicyLog(
     allowed,
   };
 
-  const logPath = path.resolve(dir, "policy.jsonl");
+  const logPath = path.resolve(dir, "proxy.jsonl");
   fs.appendFileSync(logPath, JSON.stringify(entry) + "\n", "utf-8");
 }

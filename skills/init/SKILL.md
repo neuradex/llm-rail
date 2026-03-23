@@ -10,21 +10,12 @@ Initialize lrail in the current project.
 
 ## Steps
 
-1. Create the workflows directory:
+1. Run the CLI init command (creates `lrail.yml`, `workflows/`, `.llm-rail/`, updates `.gitignore`):
 ```bash
-mkdir -p workflows
+lrail init
 ```
 
-2. Add `.llm-rail/` to `.gitignore` (runtime state directory):
-```bash
-if [ -f .gitignore ]; then
-  grep -q '.llm-rail/' .gitignore || echo '.llm-rail/' >> .gitignore
-else
-  echo '.llm-rail/' > .gitignore
-fi
-```
-
-3. **Register lrail in CLAUDE.md** — inject context so the agent knows about lrail in every session.
+2. **Register lrail in CLAUDE.md** — inject context so the agent knows about lrail in every session.
 
 First, check if CLAUDE.md already has an lrail section:
 ```bash
@@ -68,7 +59,7 @@ LLMs have recency bias — long context leads to forgotten instructions and drif
 ## Report
 
 Report the results:
-- The `.gitignore` status
+- The output of `lrail init`
 - Whether CLAUDE.md was updated (and what was added)
 - Suggest running `/llm-rail:design` to create a custom workflow for this project
 - Suggest running `lrail docs` to learn about lrail concepts

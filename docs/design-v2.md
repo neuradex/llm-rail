@@ -189,7 +189,7 @@ policy:
 {"timestamp":"...","instance_id":"...","step_id":"collect","command":"jq '.data'","allowed":true}
 ```
 
-Stored in `.llm-rail/logs/<id>.policy.jsonl`.
+Stored in `.llm-rail/logs/<id>.proxy.jsonl`.
 
 ### CLI Commands
 

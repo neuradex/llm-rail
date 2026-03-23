@@ -23,7 +23,7 @@
   <a href="./docs/README.ja.md">日本語</a>
 </p>
 
-> **Beta (0.2.x)** — This project is under active development. APIs, CLI commands, and workflow schema may change without notice. Pin your version if you depend on stability.
+> **Beta (0.x.x)** — This project is under active development. APIs, CLI commands, and workflow schema may change without notice. Pin your version if you depend on stability.
 
 ---
 
@@ -199,7 +199,7 @@ Every event is recorded per instance:
 .llm-rail/{workflow}/{instance}/
   ├── state.yaml      # Instance state
   ├── audit.jsonl      # All lifecycle events
-  └── policy.jsonl     # All command executions
+  └── proxy.jsonl     # All command executions
 ```
 
 ---
@@ -210,7 +210,7 @@ Every event is recorded per instance:
 |---|---|
 | **Step Types** | `programmatic` (no LLM, direct execution) and `agentic` (LLM agent with validation) in one workflow. |
 | **Actions** | `js:` (JavaScript with auto-injected context) and `shell:` (template interpolation + JSON extraction). Pipe-style data flow between chained actions. |
-| **Policy** | AWS IAM-inspired allow/deny rules with trail and enforce modes. Bash proxy for all agent commands. |
+| **Policy** | AWS IAM-inspired allow/deny rules with trail and enforce modes. Bash proxy for all agent commands. Secret mediation with output redaction. |
 | **Validation Gates** | 22 built-in operators. Structural validation + business logic assertions + `verify_source` anti-fabrication + `script` custom logic. |
 | **Explicit Data Flow** | `context_in` passes only needed data between steps — no implicit merging, no context pollution. |
 | **Accumulate Mode** | Incremental data collection with dedup-by-key merging. Quality gate keeps the step open until validation passes. |
@@ -226,10 +226,10 @@ Every event is recorded per instance:
 
 LLM Rail provides **structural safety** — not prompt-level "please be careful" warnings.
 
-Policy enforcement operates in **two layers**. A project-level policy (`.llm-rail/policy.yml`) applies to every command across the entire project. Workflow-level policy (`policy:` in workflow YAML) adds per-workflow rules on top.
+Policy enforcement operates in **two layers**. A project-level policy (`lrail.yml`) applies to every command across the entire project. Workflow-level policy (`policy:` in workflow YAML) adds per-workflow rules on top.
 
 ```
-┌─ Project Policy (.llm-rail/policy.yml) ──────────────────────┐
+┌─ Project Policy (lrail.yml) ──────────────────────┐
 │                                                               │
 │  Main Agent (hook)              Subagent (proxy)              │
 │  ┌──────────────────┐          ┌──────────────────┐          │
@@ -257,10 +257,10 @@ Custom agents can be restricted to `Bash(lrail *)` via `allowed-tools`, meaning 
 
 ### Two Policy Layers
 
-**Project policy** (`.llm-rail/policy.yml`) — applies to all commands from any source:
+**Project policy** (`lrail.yml`) — applies to all commands from any source:
 
 ```yaml
-# .llm-rail/policy.yml
+# lrail.yml
 mode: enforce
 default: allow
 rules:
@@ -292,7 +292,7 @@ lrail log --raw          # machine-readable TSV output
 lrail log -f             # follow mode
 ```
 
-Per-instance policy decisions are also logged in `policy.jsonl`. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
+Per-instance policy decisions are also logged in `proxy.jsonl`. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
 
 ### Web Access Without Losing Control
 
@@ -308,14 +308,52 @@ Instead of unrestricted `WebFetch`/`WebSearch`, use `curl` through the bash prox
 
 Programmatic steps execute through the proxy automatically. For agentic steps, the agent calls `lrail <id> bash 'curl ...'` — same policy, same audit.
 
+### Secret Mediation
+
+Agents often need to use API keys and credentials in commands — but shouldn't see the actual values. Secret mediation solves this through proxy-mediated access control. Just point to your `.env` file:
+
+```yaml
+# lrail.yml
+env:
+  secret_files: [.env, .env.local]
+```
+
+That's it. The `.env` file is auto-parsed — all key-value pairs are injected into the proxy subprocess and redacted from output. The agent uses `$VAR` syntax as usual, never sees the actual value.
+
+```bash
+# Agent writes normal shell — proxy handles the rest
+lrail bash 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com/data'
+# → API call succeeds, but $API_KEY value never appears in agent output
+```
+
+When env mediation is active:
+- All Bash calls are forced through `lrail bash` — bare bash is denied by the hook
+- `secret_files` are auto-parsed and values injected into the subprocess + redacted from output
+- Read/Grep hooks block agent access to secret files
+- `inject` adds CI/runtime secrets from `process.env` (for vars not in any file)
+- `passthrough` locks down the subprocess to only specified env vars (optional)
+
+### Quick Start
+
+`lrail init` generates a project policy with sensible defaults out of the box:
+
+```bash
+lrail init
+# → Creates lrail.yml with deny rules for rm -rf, sudo, chmod 777,
+#   git push --force, git reset --hard. Ready to use immediately.
+```
+
+Add `env.secret_files` to protect your secrets, and you have a working security setup.
+
 ### Recommended Configuration
 
 For maximum structural safety:
-1. Use **custom agents** with `allowed-tools: Bash(lrail *), Read, Glob, Grep`
-2. Set **project policy** (`.llm-rail/policy.yml`) to deny dangerous commands
-3. Set **workflow policy** to **enforce mode** with explicit allow-list
-4. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
-5. Review audit logs: `lrail log` (global) and `policy.jsonl` (per-instance)
+1. Run **`lrail init`** to generate a project policy with default deny rules
+2. Add **`env.secret_files`** to `lrail.yml` pointing to your `.env` files
+3. Use **custom agents** with `allowed-tools: Bash(lrail *), Read, Glob, Grep`
+4. Set **workflow policy** to **enforce mode** with explicit allow-list
+5. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
+6. Review audit logs: `lrail log` (global) and `proxy.jsonl` (per-instance)
 
 > **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./CONTRIBUTING.md).
 
@@ -345,9 +383,13 @@ Then run `/llm-rail:init` in your project to set up workflows and register in `C
 
 ```bash
 # Global
+lrail init                                            # Initialize project (lrail.yml, workflows/, .gitignore)
 lrail docs [topic]                                    # Browse documentation
 lrail log [-n <count>] [-f] [--raw]                   # Show command history
+lrail bash '<command>'                                # Execute through global proxy
 lrail policy eval --command '<cmd>'                   # Evaluate project-level policy
+lrail policy has-env                                  # Check if env mediation is active
+lrail policy check-file <path>                        # Check file against env policy
 
 # Workflow management
 lrail wf list                                         # List all workflows

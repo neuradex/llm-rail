@@ -7,7 +7,7 @@ description: Command control — trail mode for observation, enforce mode for lo
 
 Policy controls what shell commands agents can run. Two layers:
 
-1. **Project policy** (`.llm-rail/policy.yml`) — applies to all commands from any source. The main agent's Bash calls are intercepted via a PreToolUse hook and checked against this policy before execution.
+1. **Project policy** (`lrail.yml`) — applies to all commands from any source. The main agent's Bash calls are intercepted via a PreToolUse hook and checked against this policy before execution.
 2. **Workflow policy** (`policy:` in workflow YAML) — additional per-workflow rules applied when commands go through the bash proxy (`lrail <id> bash`).
 
 Both layers are evaluated in order: project policy first, then workflow policy. A deny at either layer blocks the command.
@@ -26,7 +26,7 @@ policy:
   mode: trail
 ```
 
-Logs go to `.llm-rail/<workflow>/<instance>/policy.jsonl`.
+Logs go to `.llm-rail/<workflow>/<instance>/proxy.jsonl`.
 
 ### enforce mode
 
@@ -82,13 +82,33 @@ This ensures all commands are logged and policy-checked.
 
 ### Project-level policy
 
-A project-level policy file (`.llm-rail/policy.yml`) applies to all commands — both agent (hook) and instance (proxy). Evaluate it with:
+A project-level policy file (`lrail.yml`) applies to all commands — both agent (hook) and instance (proxy). Evaluate it with:
 
 ```bash
 lrail policy eval --command 'curl https://example.com'
 ```
 
 Exit code 0 = allowed, 1 = denied.
+
+### Environment variable mediation
+
+Policy can include an `env` section for secret mediation. See `lrail docs concepts/secrets` for full details.
+
+```yaml
+# lrail.yml
+mode: enforce
+default: allow
+env:
+  inject: [API_KEY, SERPER_KEY]
+  passthrough: [PATH, HOME, LANG]
+  secret_files: [.env, ~/.aws/credentials]
+```
+
+When env mediation is active (`inject` or `secret_files`):
+- All Bash calls are forced through `lrail bash` (PreToolUse hook denies bare bash)
+- Proxy subprocess receives only permitted env vars
+- Output is scanned and secret values replaced with `[REDACTED]`
+- Read/Grep hooks block access to `secret_files` paths
 
 ### Policy is required for stable phase
 

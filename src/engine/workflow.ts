@@ -4,6 +4,10 @@ import type { WorkflowDef, StepDef } from "../types.js";
 import { loadYaml } from "../util.js";
 import { resolveWorkflowPath, loadVariant, mergeVariant } from "./variant.js";
 
+export function loadWorkflowFromPath(filePath: string): WorkflowDef {
+  return loadYaml<WorkflowDef>(path.resolve(filePath));
+}
+
 export function loadWorkflow(name: string, variant?: string): WorkflowDef {
   const { basePath } = resolveWorkflowPath(name);
   const base = loadYaml<WorkflowDef>(basePath);

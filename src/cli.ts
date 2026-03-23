@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { runCreate } from "./commands/create.js";
 import { runStart } from "./commands/start.js";
 import { runNext } from "./commands/next.js";
@@ -34,7 +35,7 @@ function usage(): never {
   lrail wf list                                       List all workflows
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
-  lrail wf <name> validate [--variant <v>]            Validate workflow YAML
+  lrail wf <name> validate [--variant <v>] [--path <file>]  Validate workflow YAML
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
@@ -84,8 +85,11 @@ if (target === "init") {
   runInit();
 } else if (target === "docs") {
   runDocs(args.slice(1).join("/"));
-} else if (target === "help" || target === "--help") {
+} else if (target === "help" || target === "--help" || target === "-h") {
   usage();
+} else if (target === "version" || target === "--version" || target === "-v") {
+  const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+  console.log(pkg.version);
 } else if (target === "bash") {
   const bashCmd = args.slice(1).join(" ");
   if (!bashCmd) {
@@ -145,7 +149,7 @@ if (target === "init") {
 
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
-  validate [--variant <v>]               Validate workflow YAML
+  validate [--variant <v>] [--path <file>]  Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
@@ -170,6 +174,8 @@ Instance commands (after 'create'):
   // Parse --variant flag (shared across subcommands)
   const variantIdx = args.indexOf("--variant");
   const variantFlag = variantIdx !== -1 ? args[variantIdx + 1] : undefined;
+  const pathIdx = args.indexOf("--path");
+  const pathFlag = pathIdx !== -1 ? args[pathIdx + 1] : undefined;
 
   switch (command) {
     case "create": {
@@ -187,7 +193,7 @@ Instance commands (after 'create'):
     }
 
     case "validate":
-      runValidate(workflowName, variantFlag);
+      runValidate(workflowName, variantFlag, pathFlag);
       break;
 
     case "show":
@@ -275,7 +281,7 @@ Usage: lrail wf ${workflowName} <command>
 
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
-  validate [--variant <v>]               Validate workflow YAML
+  validate [--variant <v>] [--path <file>]  Validate workflow YAML
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants

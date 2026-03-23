@@ -1,7 +1,7 @@
-import { loadWorkflow, validateWorkflowDef } from "../engine/workflow.js";
+import { loadWorkflow, loadWorkflowFromPath, validateWorkflowDef } from "../engine/workflow.js";
 
-export function runValidate(workflowName: string, variant?: string): void {
-  const def = loadWorkflow(workflowName, variant);
+export function runValidate(workflowName: string, variant?: string, filePath?: string): void {
+  const def = filePath ? loadWorkflowFromPath(filePath) : loadWorkflow(workflowName, variant);
   const errors = validateWorkflowDef(def);
 
   if (errors.length > 0) {

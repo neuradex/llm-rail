@@ -312,30 +312,33 @@ npm install llm-rail
 ### CLI 레퍼런스
 
 ```bash
-# 문서 탐색
-lrail docs [topic]
+# 글로벌
+lrail docs [topic]                                    # 문서 탐색
+lrail log [-n <count>] [-f] [--raw]                   # 커맨드 이력 조회
+lrail policy eval --command '<cmd>'                   # 프로젝트 정책 평가
 
 # 워크플로우 관리
-lrail wf list                                       # 전체 워크플로우 목록
-lrail wf instances [--status <status>]              # 전체 인스턴스 목록
+lrail wf list                                         # 전체 워크플로우 목록
+lrail wf instances [--status <status>]                # 전체 인스턴스 목록
 lrail wf <name> create [--variant <v>] [--param k=v]  # 인스턴스 생성
-lrail wf <name> validate [--variant <v>]            # 워크플로우 YAML 검증
-lrail wf <name> show [--variant <v>]                # 워크플로우 YAML 표시
-lrail wf <name> variants                            # 배리언트 목록
-lrail wf <name> merge <variant> [--backup <name>]   # 배리언트를 베이스에 병합
-lrail wf <name> list [--status <status>]            # 인스턴스 목록
-lrail wf <name> promote                             # 단계 승격 분석
+lrail wf <name> validate [--variant <v>]              # 워크플로우 YAML 검증
+lrail wf <name> show [--variant <v>]                  # 워크플로우 YAML 표시
+lrail wf <name> summary [--variant <v>] [--param k=v] # 워크플로우 요약 및 경고
+lrail wf <name> variants                              # 배리언트 목록
+lrail wf <name> merge <variant> [--backup <name>]     # 배리언트를 베이스에 병합
+lrail wf <name> list [--status <status>]              # 인스턴스 목록
+lrail wf <name> promote                               # 단계 승격 분석
+lrail wf <name> policy check --command '<cmd>'        # 정책 드라이런 체크
 
 # 인스턴스 실행
-lrail <id> start                                    # 실행 시작
-lrail <id> next --result '<json>'                   # 스텝 결과 제출
-lrail <id> status                                   # 진행 상황 확인
-lrail <id> query [--step <stepId>]                  # 인스턴스 상태 조회
-lrail <id> reset <step-id>                          # 스텝 초기화
-lrail <id> log [step-id] [-f]                       # 감사 로그 조회
-lrail <id> bash '<command>'                         # 정책 프록시를 통한 명령 실행
-lrail <id> summary                                  # 워크플로우 요약 및 경고
-lrail <id> policy generate                          # trail에서 정책 생성
+lrail <id> start                                      # 실행 시작
+lrail <id> next --result '<json>'                     # 스텝 결과 제출
+lrail <id> status                                     # 진행 상황 확인
+lrail <id> query [--step <stepId>]                    # 인스턴스 상태 조회
+lrail <id> reset <step-id>                            # 스텝 초기화
+lrail <id> log [step-id] [-f]                         # 감사 로그 조회
+lrail <id> bash '<command>'                           # 정책 프록시를 통한 명령 실행
+lrail <id> policy generate                            # trail에서 정책 생성
 
 # 배리언트 관리
 lrail wf <name> save-variant <v> --yaml '<content>'  # 배리언트 YAML 저장

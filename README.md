@@ -312,31 +312,33 @@ Then run `/llm-rail:init` in your project to set up workflows and register in `C
 ### CLI Reference
 
 ```bash
-# Browse documentation
-lrail docs [topic]
+# Global
+lrail docs [topic]                                    # Browse documentation
+lrail log [-n <count>] [-f] [--raw]                   # Show command history
+lrail policy eval --command '<cmd>'                   # Evaluate project-level policy
 
 # Workflow management
-lrail wf list                                       # List all workflows
-lrail wf instances [--status <status>]              # List all instances
+lrail wf list                                         # List all workflows
+lrail wf instances [--status <status>]                # List all instances
 lrail wf <name> create [--variant <v>] [--param k=v]  # Create instance
-lrail wf <name> validate [--variant <v>]            # Validate workflow YAML
-lrail wf <name> show [--variant <v>]                # Show workflow YAML
-lrail wf <name> variants                            # List variants
-lrail wf <name> merge <variant> [--backup <name>]   # Merge variant into base
-lrail wf <name> list [--status <status>]            # List instances
-lrail wf <name> promote                             # Suggest phase promotion
-lrail wf <name> policy check --command '<cmd>'      # Dry-run policy check
+lrail wf <name> validate [--variant <v>]              # Validate workflow YAML
+lrail wf <name> show [--variant <v>]                  # Show workflow YAML
+lrail wf <name> summary [--variant <v>] [--param k=v] # Workflow summary with warnings
+lrail wf <name> variants                              # List variants
+lrail wf <name> merge <variant> [--backup <name>]     # Merge variant into base
+lrail wf <name> list [--status <status>]              # List instances
+lrail wf <name> promote                               # Suggest phase promotion
+lrail wf <name> policy check --command '<cmd>'        # Dry-run policy check
 
 # Instance execution
-lrail <id> start                                    # Begin execution
-lrail <id> next --result '<json>'                   # Submit step result
-lrail <id> status                                   # Check progress
-lrail <id> query [--step <stepId>]                  # Query instance state
-lrail <id> reset <step-id>                          # Reset a step
-lrail <id> log [step-id] [-f]                       # Show audit log
-lrail <id> bash '<command>'                         # Execute through policy proxy
-lrail <id> summary                                  # Workflow summary with warnings
-lrail <id> policy generate                          # Generate policy from trail
+lrail <id> start                                      # Begin execution
+lrail <id> next --result '<json>'                     # Submit step result
+lrail <id> status                                     # Check progress
+lrail <id> query [--step <stepId>]                    # Query instance state
+lrail <id> reset <step-id>                            # Reset a step
+lrail <id> log [step-id] [-f]                         # Show audit log
+lrail <id> bash '<command>'                           # Execute through policy proxy
+lrail <id> policy generate                            # Generate policy from trail
 
 # Variant management
 lrail wf <name> save-variant <v> --yaml '<content>'  # Save a variant YAML file

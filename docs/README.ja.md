@@ -312,30 +312,33 @@ npm install llm-rail
 ### CLIリファレンス
 
 ```bash
-# ドキュメントの閲覧
-lrail docs [topic]
+# グローバル
+lrail docs [topic]                                    # ドキュメントの閲覧
+lrail log [-n <count>] [-f] [--raw]                   # コマンド履歴の表示
+lrail policy eval --command '<cmd>'                   # プロジェクトポリシーの評価
 
 # ワークフロー管理
-lrail wf list                                       # 全ワークフロー一覧
-lrail wf instances [--status <status>]              # 全インスタンス一覧
+lrail wf list                                         # 全ワークフロー一覧
+lrail wf instances [--status <status>]                # 全インスタンス一覧
 lrail wf <name> create [--variant <v>] [--param k=v]  # インスタンス作成
-lrail wf <name> validate [--variant <v>]            # ワークフローYAMLの検証
-lrail wf <name> show [--variant <v>]                # ワークフローYAMLの表示
-lrail wf <name> variants                            # バリアント一覧
-lrail wf <name> merge <variant> [--backup <name>]   # バリアントをベースにマージ
-lrail wf <name> list [--status <status>]            # インスタンス一覧
-lrail wf <name> promote                             # フェーズ昇格の分析
+lrail wf <name> validate [--variant <v>]              # ワークフローYAMLの検証
+lrail wf <name> show [--variant <v>]                  # ワークフローYAMLの表示
+lrail wf <name> summary [--variant <v>] [--param k=v] # ワークフロー概要と警告
+lrail wf <name> variants                              # バリアント一覧
+lrail wf <name> merge <variant> [--backup <name>]     # バリアントをベースにマージ
+lrail wf <name> list [--status <status>]              # インスタンス一覧
+lrail wf <name> promote                               # フェーズ昇格の分析
+lrail wf <name> policy check --command '<cmd>'        # ポリシーのドライランチェック
 
 # インスタンス実行
-lrail <id> start                                    # 実行開始
-lrail <id> next --result '<json>'                   # ステップ結果の送信
-lrail <id> status                                   # 進捗確認
-lrail <id> query [--step <stepId>]                  # インスタンス状態の照会
-lrail <id> reset <step-id>                          # ステップのリセット
-lrail <id> log [step-id] [-f]                       # 監査ログの表示
-lrail <id> bash '<command>'                         # ポリシープロキシ経由のコマンド実行
-lrail <id> summary                                  # ワークフロー概要と警告
-lrail <id> policy generate                          # trailからポリシーを生成
+lrail <id> start                                      # 実行開始
+lrail <id> next --result '<json>'                     # ステップ結果の送信
+lrail <id> status                                     # 進捗確認
+lrail <id> query [--step <stepId>]                    # インスタンス状態の照会
+lrail <id> reset <step-id>                            # ステップのリセット
+lrail <id> log [step-id] [-f]                         # 監査ログの表示
+lrail <id> bash '<command>'                           # ポリシープロキシ経由のコマンド実行
+lrail <id> policy generate                            # trailからポリシーを生成
 
 # バリアント管理
 lrail wf <name> save-variant <v> --yaml '<content>'  # バリアントYAMLの保存

@@ -71,12 +71,13 @@ lrail 0321-143022 status
 ### Key commands
 
 ```bash
-lrail wf list # List all workflows
+lrail wf list                        # List all workflows
 lrail wf <workflow> list             # List instances
 lrail wf <workflow> create           # Create instance
 lrail wf <workflow> validate         # Check YAML
-lrail <id> start                  # Begin first step
-lrail <id> next --result '<json>' # Submit and advance
-lrail <id> status                 # Check progress
-lrail <id> reset <step-id>        # Reset a step
+lrail <id> start                     # Begin first step
+lrail <id> next --result '<json>'    # Submit and advance
+lrail <id> status                    # Check progress
+lrail <id> reset <step-id>           # Reset a step
+lrail log [-n <count>] [-f] [--raw]  # Command history
 ```

@@ -1,6 +1,6 @@
 ---
 agent: workflow-designer
-description: lrail workflow design expert — schema-aware YAML workflow designer
+description: LLM Rail workflow design expert — schema-aware YAML workflow designer
 tools:
   - Read
   - Glob
@@ -36,6 +36,7 @@ params:                # input parameters
 context: object        # shared context (rarely used)
 policy:                # command execution policy
   mode: trail | enforce
+  default: allow | deny  # optional, default "deny"
   rules:               # required for enforce mode
     - effect: allow | deny
       commands: ["glob *"]
@@ -118,25 +119,35 @@ policy: PolicyDef          # replaces base policy entirely
 ## CLI Reference
 
 ```bash
-lrail docs [topic]                                   # browse built-in documentation
-lrail wf list                                        # list all workflows
-lrail wf instances [--status <status>]               # list all instances
-lrail wf <name> validate [--variant <v>]             # validate YAML schema
-lrail wf <name> create [--variant <v>] [--param k=v] # create instance
-lrail wf <name> show [--variant <v>]                 # show YAML (merged if variant)
-lrail wf <name> variants                             # list available variants
-lrail wf <name> list [--status <status>]             # list instances
-lrail wf <name> merge <variant> [--backup <name>]    # merge variant into base
-lrail wf <name> promote                              # suggest phase promotion
-lrail wf <name> policy check --command '<cmd>'       # dry-run policy check
-lrail <alias|id> start                               # start execution
-lrail <alias|id> next --result '<json>'              # submit step result
-lrail <alias|id> bash '<command>'                    # execute through policy proxy
-lrail <alias|id> status                              # check status
-lrail <alias|id> query [--step <id>]                 # query current state
-lrail <alias|id> reset <step-id>                     # reset a step
-lrail <alias|id> log [step-id] [-f]                  # show audit log
-lrail <alias|id> summary                             # show workflow summary with warnings
+# Global
+lrail docs [topic]                                    # browse built-in documentation
+lrail log [-n <count>] [-f] [--raw]                   # show command history
+lrail policy eval --command '<cmd>'                   # evaluate project-level policy
+
+# Workflow management
+lrail wf list                                         # list all workflows
+lrail wf instances [--status <status>]                # list all instances
+lrail wf <name> validate [--variant <v>]              # validate YAML schema
+lrail wf <name> create [--variant <v>] [--param k=v]  # create instance
+lrail wf <name> show [--variant <v>]                  # show YAML (merged if variant)
+lrail wf <name> summary [--variant <v>] [--param k=v] # workflow summary with warnings
+lrail wf <name> variants                              # list available variants
+lrail wf <name> list [--status <status>]              # list instances
+lrail wf <name> merge <variant> [--backup <name>]     # merge variant into base
+lrail wf <name> promote                               # suggest phase promotion
+lrail wf <name> policy check --command '<cmd>'        # dry-run policy check
+
+# Instance execution
+lrail <alias|id> start                                # start execution
+lrail <alias|id> next --result '<json>'               # submit step result
+lrail <alias|id> bash '<command>'                     # execute through policy proxy
+lrail <alias|id> status                               # check status
+lrail <alias|id> query [--step <id>]                  # query current state
+lrail <alias|id> reset <step-id>                      # reset a step
+lrail <alias|id> log [step-id] [-f]                   # show audit log
+lrail <alias|id> policy generate                      # generate policy from trail
+
+# Variant management
 lrail wf <name> save-variant <v> --yaml '<content>'  # save variant YAML file
 ```
 

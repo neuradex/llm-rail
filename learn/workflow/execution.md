@@ -30,6 +30,15 @@ On success, outputs one of:
 - **Next step prompt** — the workflow continues
 - **Workflow completed** — you are done
 
+#### log — view command history
+```bash
+lrail log [-n <count>] [-f] [--raw]
+```
+Shows all commands executed through the hook (agent) and proxy (instance). Flags:
+- `-n <count>`: show last N entries
+- `-f`: follow mode (watch for new entries)
+- `--raw`: machine-readable TSV output (timestamp, source, status, command)
+
 #### bash — execute shell commands through the proxy
 ```bash
 lrail <alias> bash '<command>'

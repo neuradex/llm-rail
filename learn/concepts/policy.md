@@ -25,7 +25,7 @@ Logs go to `.llm-rail/<workflow>/<instance>/policy.jsonl`.
 
 ### enforce mode
 
-Deny-first evaluation. Only explicitly allowed commands can run.
+Deny-first evaluation by default. Only explicitly allowed commands can run.
 
 ```yaml
 policy:
@@ -40,7 +40,23 @@ policy:
         - "rm *"
 ```
 
-Evaluation order: deny rules → allow rules → implicit deny.
+Evaluation order: deny rules → allow rules → default.
+
+### default field
+
+Controls what happens when no rule matches:
+
+```yaml
+policy:
+  mode: enforce
+  default: allow   # allow-list → deny specific commands (deny-list approach)
+  rules:
+    - effect: deny
+      commands: ["rm *", "sudo *"]
+```
+
+- `default: deny` (default) — deny-first. Only explicitly allowed commands can run.
+- `default: allow` — allow-first. Only explicitly denied commands are blocked.
 
 ### trail → enforce workflow
 
@@ -58,6 +74,16 @@ lrail <id> bash 'curl https://api.example.com'
 ```
 
 This ensures all commands are logged and policy-checked.
+
+### Project-level policy
+
+A project-level policy file (`.llm-rail/policy.yml`) applies to all commands — both agent (hook) and instance (proxy). Evaluate it with:
+
+```bash
+lrail policy eval --command 'curl https://example.com'
+```
+
+Exit code 0 = allowed, 1 = denied.
 
 ### Policy is required for stable phase
 

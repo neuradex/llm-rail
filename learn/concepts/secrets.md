@@ -85,7 +85,7 @@ env:
 
 | # | Layer | What it does |
 |---|---|---|
-| 1 | **Bash proxy forced** | When env mediation is active (`inject` or `secret_files`), all Bash calls must go through `lrail bash`. Bare bash is denied by the PreToolUse hook. |
+| 1 | **Bash proxy forced** | When env mediation is active (`inject` or `secret_files`), all Bash calls are automatically rewritten to go through `lrail bash` via the PreToolUse hook's `updatedInput`. The agent does not need to retry. |
 | 2 | **Subprocess env isolation** | Proxy controls which env vars the subprocess sees. With `passthrough`: strict allowlist. Without: full env inherited. |
 | 3 | **Output redaction** | stdout/stderr scanned for inject values → replaced with `[REDACTED]`. Longer values redacted first to prevent partial match pollution. |
 | 4 | **Secret files blocked** | Read/Grep hooks deny access to `secret_files` paths. Read hook also scans file contents for inject values. |

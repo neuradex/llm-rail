@@ -21,7 +21,7 @@ if lrail policy has-env 2>/dev/null; then
     exit 0
   else
     mkdir -p .llm-rail
-    ESCAPED_CMD=$(echo "$COMMAND" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    ESCAPED_CMD=$(printf '%s' "$COMMAND" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
     echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",\"command\":\"$ESCAPED_CMD\",\"cwd\":\"$(pwd)\",\"source\":\"hook\",\"denied\":true,\"reason\":\"env-mediation\"}" >> .llm-rail/command.jsonl
     echo "LLM Rail: env mediation is active. Run instead: lrail bash '$COMMAND'" >&2
     exit 2

@@ -37,5 +37,14 @@ export function readCommandLog(): CommandLogEntry[] {
   const content = fs.readFileSync(p, "utf-8").trim();
   if (!content) return [];
 
-  return content.split("\n").map((line) => JSON.parse(line) as CommandLogEntry);
+  const entries: CommandLogEntry[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line) as CommandLogEntry);
+    } catch {
+      // Skip malformed lines (e.g. multiline commands split across lines)
+    }
+  }
+  return entries;
 }

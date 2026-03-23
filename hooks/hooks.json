@@ -37,6 +37,24 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/grep-hook.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-policy-file.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-policy-file.sh"
+          }
+        ]
       }
     ]
   }

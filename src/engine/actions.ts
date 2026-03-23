@@ -3,6 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ActionDef, JsActionDef, ShellActionDef } from "../types.js";
+import { loadLrailConfig } from "./gateway.js";
+import { buildSanitizedEnv, resolveAllSecrets, redactSecrets, mergeEnvPolicies } from "./secrets.js";
 
 // ── Type guards ──
 
@@ -132,7 +134,15 @@ function executeShellAction(
 
   const contextJson = JSON.stringify(context);
   let ctxFile: string | undefined;
-  const env: Record<string, string> = { ...process.env } as Record<string, string>;
+
+  // Env mediation: use sanitized env with secrets injected when active
+  const config = loadLrailConfig();
+  const envPolicy = config?.env ? mergeEnvPolicies(config.env) : undefined;
+  const secretValues = envPolicy ? resolveAllSecrets(envPolicy) : new Map<string, string>();
+  const baseEnv = envPolicy
+    ? buildSanitizedEnv(envPolicy, secretValues)
+    : { ...process.env } as Record<string, string>;
+  const env: Record<string, string> = { ...baseEnv };
 
   if (contextJson.length <= 8192) {
     env.CONTEXT = contextJson;
@@ -167,7 +177,8 @@ function executeShellAction(
       }
     }
 
-    return { stdout: stdout.trim(), extracted };
+    const trimmed = secretValues.size > 0 ? redactSecrets(stdout.trim(), secretValues) : stdout.trim();
+    return { stdout: trimmed, extracted };
   } finally {
     cleanupFile(ctxFile);
   }

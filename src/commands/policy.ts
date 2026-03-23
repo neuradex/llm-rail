@@ -14,12 +14,12 @@ interface PolicyLogEntry {
 }
 
 /**
- * Read policy.jsonl and generate a minimal allow-list from observed commands.
+ * Read proxy.jsonl and generate a minimal allow-list from observed commands.
  */
 export function runPolicyGenerate(instanceId: string): void {
   const state = loadInstance(instanceId);
   const dir = instanceDir(state.workflow_name, instanceId);
-  const logPath = path.resolve(dir, "policy.jsonl");
+  const logPath = path.resolve(dir, "proxy.jsonl");
 
   if (!fs.existsSync(logPath)) {
     console.error("No policy log found. Run commands in trail mode first.");

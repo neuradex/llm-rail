@@ -199,7 +199,7 @@ workflows/stock-screening/
 .llm-rail/{workflow}/{instance}/
   ├── state.yaml      # 인스턴스 상태
   ├── audit.jsonl      # 전체 라이프사이클 이벤트
-  └── policy.jsonl     # 전체 명령 실행 기록
+  └── proxy.jsonl     # 전체 명령 실행 기록
 ```
 
 ---
@@ -292,7 +292,7 @@ lrail log --raw          # 머신 파싱용 TSV 출력
 lrail log -f             # 팔로우 모드
 ```
 
-인스턴스별 정책 판정은 `policy.jsonl`에도 기록됩니다. `trail` 모드(전부 허용)에서도 모든 행위가 기록되어 사후 검토가 가능합니다.
+인스턴스별 정책 판정은 `proxy.jsonl`에도 기록됩니다. `trail` 모드(전부 허용)에서도 모든 행위가 기록되어 사후 검토가 가능합니다.
 
 ### 제어를 잃지 않는 웹 접근
 
@@ -315,7 +315,7 @@ Programmatic 스텝은 자동으로 프록시를 경유합니다. Agentic 스텝
 2. **프로젝트 정책**(`.llm-rail/policy.yml`)으로 위험한 명령을 차단합니다
 3. **워크플로우 정책**을 **enforce 모드**로 설정하고 명시적 허용 목록을 작성합니다
 4. `WebFetch`/`WebSearch` 대신 bash 프록시를 통한 `curl`로 웹에 접근합니다
-5. 감사 로그를 검토합니다: `lrail log`(글로벌) 및 `policy.jsonl`(인스턴스별)
+5. 감사 로그를 검토합니다: `lrail log`(글로벌) 및 `proxy.jsonl`(인스턴스별)
 
 > **이 영역은 현재 활발히 개발 중입니다.** 구조적 보안 모델을 강화하는 방법을 지속적으로 탐구하고 있습니다. 기여와 아이디어를 환영합니다. [Contributing](./CONTRIBUTING.ko.md)을 참고해 주세요.
 

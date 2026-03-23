@@ -102,7 +102,7 @@ describe("appendPolicyLog", () => {
     appendPolicyLog("my-workflow", "inst-001", "step1", "git status", true);
     appendPolicyLog("my-workflow", "inst-001", "step1", "rm -rf /", false);
 
-    const logPath = path.resolve(".llm-rail", "my-workflow", "inst-001", "policy.jsonl");
+    const logPath = path.resolve(".llm-rail", "my-workflow", "inst-001", "proxy.jsonl");
     assert.ok(fs.existsSync(logPath));
 
     const lines = fs.readFileSync(logPath, "utf-8").trim().split("\n");
@@ -170,7 +170,7 @@ describe("bash proxy E2E", () => {
     runBash(state.id, "echo hello");
 
     // Verify policy log was written
-    const logPath = path.resolve(".llm-rail", "bash-test", state.id, "policy.jsonl");
+    const logPath = path.resolve(".llm-rail", "bash-test", state.id, "proxy.jsonl");
     assert.ok(fs.existsSync(logPath));
     const lines = fs.readFileSync(logPath, "utf-8").trim().split("\n");
     assert.ok(lines.length >= 1);

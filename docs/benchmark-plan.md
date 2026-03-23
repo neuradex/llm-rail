@@ -118,7 +118,7 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 | **Controllability** | All-or-nothing. Cancel = lose everything. | Pause/resume at any step. Reset individual steps. Gate hooks can block progression. |
 | **Transparency** | No intermediate outputs visible. | Each step produces validated, inspectable output before the next begins. |
 | **Scope Limitation** | Agent has access to all tools. | step-runner agents have restricted tool access. Only know `start` and `next`. |
-| **Command Proxying** | Terminal commands are invisible. | All commands go through bash proxy (`lrail <id> bash`). Policy system enforces allow/deny rules. Every execution logged in `policy.jsonl`. |
+| **Command Proxying** | Terminal commands are invisible. | All commands go through bash proxy (`lrail <id> bash`). Policy system enforces allow/deny rules. Every execution logged in `proxy.jsonl`. |
 
 ### Experiment: Command Audit Trail
 
@@ -161,7 +161,7 @@ LLM agents executing tasks locally have unrestricted access to terminal commands
 **Setup**: Execute the stock-screening workflow in two rounds:
 
 **Round 1 — Trail Mode (Policy Discovery)**:
-Run the workflow with `policy.mode: trail`. All commands are allowed and logged to `.llm-rail/{workflow}/{instance}/policy.jsonl`.
+Run the workflow with `policy.mode: trail`. All commands are allowed and logged to `.llm-rail/{workflow}/{instance}/proxy.jsonl`.
 
 After completion, generate a minimal allow-list:
 ```bash
@@ -173,7 +173,7 @@ Apply the generated policy with `policy.mode: enforce`. Re-run the workflow.
 
 | Metric | How to Measure |
 |---|---|
-| **Trail Completeness** | Does `policy.jsonl` capture every command the agent executed? |
+| **Trail Completeness** | Does `proxy.jsonl` capture every command the agent executed? |
 | **Policy Generation Accuracy** | Does the auto-generated allow-list cover all legitimate commands without over-permissioning? |
 | **Enforce Effectiveness** | Are out-of-scope commands blocked? Does the agent recover gracefully when denied? |
 | **False Positive Rate** | How many legitimate commands are incorrectly blocked by the generated policy? |

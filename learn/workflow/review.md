@@ -89,8 +89,8 @@ Based on actual execution:
 #### 4a. Command Audit
 Read the bash command logs from **both** instances:
 ```bash
-cat .llm-rail/<workflow-name>/<instance-id-a>/policy.jsonl
-cat .llm-rail/<workflow-name>/<instance-id-b>/policy.jsonl
+cat .llm-rail/<workflow-name>/<instance-id-a>/proxy.jsonl
+cat .llm-rail/<workflow-name>/<instance-id-b>/proxy.jsonl
 ```
 
 For each command:

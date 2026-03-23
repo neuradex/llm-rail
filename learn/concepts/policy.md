@@ -26,7 +26,7 @@ policy:
   mode: trail
 ```
 
-Logs go to `.llm-rail/<workflow>/<instance>/policy.jsonl`.
+Logs go to `.llm-rail/<workflow>/<instance>/proxy.jsonl`.
 
 ### enforce mode
 

@@ -199,7 +199,7 @@ Every event is recorded per instance:
 .llm-rail/{workflow}/{instance}/
   ├── state.yaml      # Instance state
   ├── audit.jsonl      # All lifecycle events
-  └── policy.jsonl     # All command executions
+  └── proxy.jsonl     # All command executions
 ```
 
 ---
@@ -292,7 +292,7 @@ lrail log --raw          # machine-readable TSV output
 lrail log -f             # follow mode
 ```
 
-Per-instance policy decisions are also logged in `policy.jsonl`. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
+Per-instance policy decisions are also logged in `proxy.jsonl`. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
 
 ### Web Access Without Losing Control
 
@@ -315,7 +315,7 @@ For maximum structural safety:
 2. Set **project policy** (`.llm-rail/policy.yml`) to deny dangerous commands
 3. Set **workflow policy** to **enforce mode** with explicit allow-list
 4. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
-5. Review audit logs: `lrail log` (global) and `policy.jsonl` (per-instance)
+5. Review audit logs: `lrail log` (global) and `proxy.jsonl` (per-instance)
 
 > **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./CONTRIBUTING.md).
 

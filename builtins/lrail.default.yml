@@ -15,21 +15,38 @@ policy:
   rules:
     - effect: deny
       commands:
-        - "rm -rf *"
-        - "sudo *"
-        - "chmod 777 *"
-        - "git push --force *"
-        - "git push -f *"
-        - "git reset --hard *"
+        # ── File system destruction ──
+        - "rm -rf *"                             # rm -rf (recursive force delete)
+        - regex: "rm\\s+-r\\s"                   # rm -r (recursive delete without -f)
+        - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f" # rm -rf with reordered flags (e.g. rm -fr, rm -r -f)
 
-        # Regex patterns — precise matching (catches flag reordering, absolute paths, etc.)
-        - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
-        - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
+        # ── Privilege escalation ──
+        - "sudo *"                               # run as root
+        - "chmod 777 *"                          # make files world-writable
 
+        # ── Git destructive ops ──
+        - "git push --force *"                   # force push (overwrites remote history)
+        - "git push -f *"                        # force push (short flag)
+        - regex: "git\\s+push\\s+.*--force"      # force push with args before --force
+        - "git reset --hard *"                   # hard reset (discards all local changes)
+        - regex: "git\\s+reset\\s+--hard"        # hard reset variants
+        - regex: "git\\s+clean\\s+(-\\w*f)"      # git clean -f/-fd (deletes untracked files)
+        - regex: "git\\s+checkout\\s+--\\s+\\."   # git checkout -- . (reverts all working tree changes)
+        - regex: "git\\s+branch\\s+(-\\w*D)"     # git branch -D (force-delete branch ignoring merge status)
+
+        # ── Guardrail self-protection ──
+        - regex: "npm\\s+(uninstall|remove|rm)\\s+.*llm-rail" # uninstall llm-rail (breaks all guardrails)
+        - regex: "llm-rail/(scripts|hooks|builtins)" # targeting guardrail internals
+
+        # ── Shell injection ──
+        - regex: "curl.*\\|\\s*(bash|sh)"        # download and pipe to shell interpreter
+        - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"   # redirect output to raw disk device
+
+        # ── Config protection ──
         # Block bash commands targeting this config file.
         # Remove this rule if you set visible: true and want agents
         # to manage lrail.yml via shell commands as well.
-        - regex: "lrail\\.yml"
+        - regex: "lrail\\.yml"                   # any command referencing lrail.yml
 
 # Secret mediation — lrail docs concepts/secrets
 # env:

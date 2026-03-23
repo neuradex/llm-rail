@@ -19,6 +19,9 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
     return { allowed: true, reason: "trail mode: all commands logged" };
   }
 
+  // Normalize line continuations (backslash + newline) to prevent evasion
+  command = command.replace(/\\\n\s*/g, "");
+
   // Enforce mode
   const defaultEffect = policy.default || "deny";
 

@@ -1,11 +1,95 @@
-mode: enforce
-default: allow
-rules:
-  - effect: deny
-    commands:
-      - "rm -rf *"
-      - "sudo *"
-      - "chmod 777 *"
-      - "git push --force *"
-      - "git push -f *"
-      - "git reset --hard *"
+visible: true
+
+env:
+  secret_files:
+    - .env.test
+
+policy:
+  mode: enforce
+  default: allow
+  rules:
+    - effect: deny
+      commands:
+        # ── File system destruction ──
+        - regex: "rm\\s+(-\\w*r\\w*\\s+)*-\\w*f" # rm -rf, rm -r -f, rm -fr, etc.
+        - regex: "rm\\s+(-\\w*f\\w*\\s+)*-\\w*r" # rm -fr, rm -f -r, etc.
+        - "rm -rf *"
+        - regex: "rm\\s+-r\\s" # rm -r (recursive delete)
+        - regex: "find\\s+.*-delete" # find -delete
+        - "truncate *" # truncate files
+        - "shred *" # shred files
+        - regex: "mv\\s+.*\\s+/dev/null" # mv to /dev/null
+        - regex: "mv\\s+(src|dist|\\.git)(\\s|/)" # mv critical directories
+        - regex: "mv\\s+.*\\s+/tmp/" # mv to /tmp (exfiltration)
+        - regex: "\\brm\\s+(?!-\\w)\\S+\\.(ts|js|json|ya?ml|sh|lock)\\b" # rm single source files
+        - regex: ">\\s*\\S+\\.(ts|js|json|ya?ml|sh)" # shell redirect overwriting source files
+
+        # ── Privilege escalation ──
+        - "sudo *"
+        - "su *"
+        - "chmod 777 *"
+        - regex: "chmod\\s+[0-7]*7[0-7]*\\s" # any world-writable chmod
+        - "chown *"
+
+        # ── Git destructive ops ──
+        - "git push --force *"
+        - "git push -f *"
+        - regex: "git\\s+push\\s+.*--force" # all force-push variants
+        - regex: "git\\s+push\\s+.*\\s-f\\b" # git push origin main -f
+        - "git reset --hard *"
+        - regex: "git\\s+reset\\s+--hard" # all hard resets
+        - "git clean -f *"
+        - regex: "git\\s+clean\\s+(-\\w*f)" # git clean -fd, -fx, etc.
+        - regex: "git\\s+checkout\\s+--\\s+\\." # git checkout -- .
+        - regex: "git\\s+restore\\s+--staged\\s+--worktree\\s+\\." # mass restore
+        - regex: "git\\s+branch\\s+(-\\w*D)" # git branch -D (force delete)
+        - regex: "git\\s+update-ref\\s+-d" # git update-ref -d HEAD
+        - regex: "git\\s+reflog\\s+expire" # git reflog expire
+
+        # ── Shell injection / piping to shell ──
+        - regex: "curl.*\\|\\s*(bash|sh|zsh)" # curl | bash
+        - regex: "wget.*\\|\\s*(bash|sh|zsh)" # wget | bash
+        - regex: "curl.*>\\s*/tmp/.*&&.*sh\\s" # download and execute
+
+        # ── Disk / system destructive ──
+        - "dd *"
+        - "mkfs *"
+        - "fdisk *"
+        - regex: ">(\\s*/dev/sd|\\s*/dev/disk)" # write to raw disk
+
+        # ── Process killing ──
+        - "kill -9 *"
+        - "killall *"
+        - "pkill *"
+
+        # ── Network exfiltration ──
+        - regex: "curl\\s+.*-X\\s*POST.*--data.*\\$" # POST with env vars
+        - regex: "curl\\s+.*-d\\s+.*\\$\\w+" # curl -d with env var expansion
+
+        # ── Package manager (global install) ──
+        - regex: "npm\\s+i(nstall)?\\s+-g" # npm install -g
+        - regex: "pip\\s+install(?!.*--user)" # pip install (system-wide)
+        - "brew install *"
+        - "brew uninstall *"
+
+        # ── Sensitive paths — credentials & keys ──
+        - regex: "\\.ssh(/|\\s|$|\")" # anything touching .ssh/
+        - regex: "\\.aws(/|\\s|$|\")" # anything touching .aws/
+        - regex: "\\.gnupg(/|\\s|$|\")" # anything touching .gnupg/
+        - regex: "\\.kube(/|\\s|$|\")" # anything touching .kube/
+        - regex: "/etc/shadow" # shadow file
+        - regex: "\\.npmrc" # npm credentials
+        - regex: "\\.netrc" # network credentials
+        - regex: "\\.docker/config" # docker credentials
+        - regex: "id_rsa|id_ed25519|id_ecdsa" # SSH private keys by name
+
+        # ── Secret files — block bash access to .env ──
+        - regex: "(^|\\s|/)\\.env(\\.|\\s|$|\")" # .env, .env.test, .env.local, etc.
+
+        # ── Directory escape ──
+        - regex: "cd\\s+/" # cd to absolute path
+        - regex: "cd\\s+~" # cd to home
+        - regex: "cd\\s+\\.\\." # cd .. (parent traversal)
+
+        # ── Protect this config (disabled for dev repo) ──
+        # - regex: "lrail\\.yml"

@@ -2,7 +2,12 @@
 # lrail docs concepts/policy   — modes, rules, pattern syntax
 # lrail docs concepts/secrets  — secret mediation
 
-visible: false  # true: agents can read this file / false: blocked (default)
+# Controls agent access to this config file (Read/Edit/Write).
+# false (default): agents cannot see or modify this file.
+# true: agents can read and modify this file.
+# When visible is true, consider removing the 'lrail\.yml' deny rule below
+# to also allow bash commands targeting this file.
+visible: false
 
 policy:
   mode: enforce       # trail | enforce
@@ -21,7 +26,9 @@ policy:
         - regex: "curl.*\\|\\s*(bash|sh)"    # pipe to shell
         - regex: ">(\\s*/dev/sd|\\s*/dev/disk)"  # write to raw device
 
-        # Protect this config file from agent manipulation
+        # Block bash commands targeting this config file.
+        # Remove this rule if you set visible: true and want agents
+        # to manage lrail.yml via shell commands as well.
         - regex: "lrail\\.yml"
 
 # Secret mediation — lrail docs concepts/secrets

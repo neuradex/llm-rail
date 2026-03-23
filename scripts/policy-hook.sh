@@ -15,12 +15,6 @@ if [ -z "$COMMAND" ] || [ "$COMMAND" = "null" ]; then
   exit 0
 fi
 
-# Block commands targeting lrail.yml
-if echo "$COMMAND" | grep -qE '(^|\s|/)(cat\s*>|sed\s+-i|mv\s|cp\s|rm\s|tee\s).*lrail\.yml|lrail\.yml.*(>|>>)'; then
-  echo "LLM Rail: modification of lrail.yml is blocked by policy. If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
-  exit 2
-fi
-
 # If env mediation is active, force all bash through lrail
 if lrail policy has-env 2>/dev/null; then
   if [[ "$COMMAND" == lrail\ * ]] || [[ "$COMMAND" == lrail ]]; then

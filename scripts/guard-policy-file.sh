@@ -1,18 +1,11 @@
 #!/bin/bash
-# LLM Rail — Guard lrail.yml from agent access.
-# Used by Edit/Write hooks (always block) and Read hook (block unless visible: true).
+# LLM Rail — Guard lrail.yml from agent access (Read/Edit/Write).
 #
-# Usage:
-#   guard-policy-file.sh          — block write (Edit/Write hooks)
-#   guard-policy-file.sh --read   — block read unless visible: true
+# Controlled by the `visible` field in lrail.yml:
+#   visible: false (default) — agents cannot read or modify lrail.yml
+#   visible: true            — agents can read and modify lrail.yml
 #
 # exit 0 → allow | exit 2 + stderr → block
-
-MODE="write"
-if [ "$1" = "--read" ]; then
-  MODE="read"
-  shift
-fi
 
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
@@ -42,16 +35,10 @@ if [ "$RESOLVED" != "$POLICY_FILE" ]; then
   exit 0
 fi
 
-# Write is always blocked
-if [ "$MODE" = "write" ]; then
-  echo "LLM Rail: modification of lrail.yml is blocked by policy. If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
-  exit 2
-fi
-
-# Read is blocked unless visible: true
+# visible: true → allow all access
 if lrail policy visible 2>/dev/null; then
   exit 0
-else
-  echo "LLM Rail: reading lrail.yml is blocked (visible: false). If this is a misconfiguration, ask the user to edit lrail.yml directly." >&2
-  exit 2
 fi
+
+echo "LLM Rail: access to lrail.yml is blocked (visible: false). If this is a misconfiguration, ask the user to set 'visible: true' in lrail.yml." >&2
+exit 2

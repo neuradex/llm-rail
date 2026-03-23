@@ -1,18 +1,27 @@
 name: stock-screening
 version: "0.1.0"
-description: Japanese semiconductor stock screening and investment analysis report
+description: Stock screening and investment analysis report generator — collects companies, gathers financials with source verification, screens by PER/ROE criteria, analyzes news sentiment and competitive positioning, then scores and recommends a portfolio allocation
 phase: draft
+
+params:
+  sector:
+    type: string
+    required: true
+    description: Target sector (e.g., "semiconductor", "automotive", "pharma")
+  market:
+    type: string
+    required: true
+    description: Target market/country (e.g., "Japan", "US", "Korea")
 
 steps:
   - id: collect-companies
-    instruction: >
-      Search for and collect at least 20 listed semiconductor companies in Japan.
-      For each company, provide the ticker symbol, stock exchange (e.g., TSE Prime, TSE Standard),
-      and a brief description of their semiconductor business focus.
-      Include major players like Tokyo Electron, Renesas, SCREEN Holdings, Advantest, etc.
-      as well as mid-cap and smaller companies across the semiconductor value chain
-      (equipment, materials, design, fabrication, testing).
-    description: Collect 20+ Japanese semiconductor companies
+    description: Collect listed companies in the target sector and market
+    instruction: |
+      Search the web for listed companies in the {{sector}} sector in the {{market}} market.
+
+      Collect at least 20 companies spanning the full value chain (upstream suppliers, core players, downstream applications).
+
+      For each company return: ticker, exchange, name, description (1-2 sentences about the company's business).
     required_output:
       - companies
     validation:
@@ -36,22 +45,25 @@ steps:
         op: each_has
         value: description
     tips:
-      - Use WebSearch to find comprehensive lists of Japanese semiconductor stocks
-      - Include companies across the full semiconductor value chain — equipment, materials, design, fabrication, testing, packaging
-      - Ticker format should include the numeric code (e.g., 8035 for Tokyo Electron)
-      - Exchange should be one of TSE Prime, TSE Standard, TSE Growth, or other valid Japanese exchange
+      - Use WebSearch to find companies listed on exchanges in the target market
+      - Include the full value chain — upstream materials/equipment, core manufacturers, downstream applications
+      - Ticker format must match market convention (e.g., 4-digit numbers for Japan, letter symbols for US)
+      - Include a mix of large-cap, mid-cap, and small-cap companies for diversity
 
   - id: gather-financials
-    instruction: >
-      For each company in the provided list, look up the following financial metrics:
-      market_cap (in billions of JPY), PER (trailing twelve months price-to-earnings ratio),
-      PBR (price-to-book ratio), ROE (return on equity as percentage),
-      and revenue_growth_pct (year-over-year revenue growth as percentage).
-      Include the source_url where you found the data, and provide verbatim text snippets
-      from the source page for each metric: per_snippet, roe_snippet.
-      If a metric is genuinely unavailable, set it to null — never fabricate values.
-    description: Gather financial metrics with source verification
+    description: Look up financial metrics with source verification
     depends_on: collect-companies
+    instruction: |
+      For each company in the companies list, look up the following financial metrics:
+      - market_cap (in local currency, as a number)
+      - per (PER — trailing twelve months Price-to-Earnings ratio)
+      - pbr (PBR — Price-to-Book ratio)
+      - roe (ROE — Return on Equity as a percentage, e.g., 15.2 for 15.2%)
+      - revenue_growth_pct (year-over-year revenue growth as a percentage)
+
+      Return a financials array with one object per company containing: ticker, name, market_cap, per, pbr, roe, revenue_growth_pct.
+
+      If a metric is unavailable, set it to null — never guess or fabricate values.
     context_in:
       companies: "{collect-companies.companies}"
     required_output:
@@ -63,60 +75,43 @@ steps:
       - field: financials
         op: min_length
         value: 20
-        message: "Must have financials for at least 20 companies"
+        message: "Must gather financials for at least 20 companies"
       - field: financials
         op: each_has
         value: ticker
       - field: financials
         op: each_has
         value: name
-      - field: financials
-        op: each_has
-        value: source_url
-      - field: financials
-        op: verify_source
-        value:
-          url_field: source_url
-          field_snippets:
-            per: per_snippet
-            roe: roe_snippet
-        message: "Financial data could not be verified against source"
     tips:
-      - Use WebSearch and WebFetch to find financial data from reliable sources like Yahoo Finance Japan, Kabutan, or company IR pages
-      - Use PER trailing twelve months, not forward PER
-      - If a metric is unavailable, set it to null — never guess or fabricate
-      - per_snippet and roe_snippet must be verbatim text excerpts from the source page containing the actual values
-      - market_cap should be in billions of JPY
+      - Use WebSearch and WebFetch to find financial data from reliable sources (Yahoo Finance, Google Finance, stock exchange sites)
+      - Use trailing twelve months PER, not forward PER
+      - If a metric is unavailable, set it to null — never guess
 
   - id: screen-candidates
+    description: Filter companies by PER <= 25 AND ROE >= 10%
     type: programmatic
-    description: Filter companies where PER <= 25 AND ROE >= 10%
     depends_on: gather-financials
     context_in:
       financials: "{gather-financials.financials}"
+    actions:
+      - js: |
+          const screened = context.financials.filter(c =>
+            c.per != null && c.roe != null && c.per <= 25 && c.roe >= 10
+          );
+          return { screened: screened, screened_count: screened.length };
     required_output:
       - screened
       - screened_count
-    actions:
-      - js: |
-          const financials = context.financials;
-          const screened = financials.filter(c => c.per !== null && c.roe !== null && c.per <= 25 && c.roe >= 10);
-          return { screened: screened, screened_count: screened.length };
-    validation:
-      - field: screened
-        op: type
-        value: array
-      - field: screened_count
-        op: type
-        value: number
 
   - id: news-sentiment
-    instruction: >
-      For each screened candidate company, research recent news from the last 3 months.
-      Summarize the key news items and assess overall sentiment as one of:
-      positive, neutral, or negative. Provide a brief rationale for the sentiment assessment.
-    description: Analyze recent news and sentiment for screened candidates
+    description: Analyze recent news sentiment for screened candidates
     depends_on: screen-candidates
+    instruction: |
+      For each company in the screened list, research recent news from the last 3 months.
+
+      Assess overall sentiment as one of: positive, neutral, negative.
+
+      For each company return: ticker, sentiment, key_news (array of 2-3 headline strings), rationale (1-2 sentences explaining the sentiment assessment).
     context_in:
       screened: "{screen-candidates.screened}"
     required_output:
@@ -138,23 +133,29 @@ steps:
         op: each_has
         value: rationale
     tips:
-      - Use WebSearch to find recent news for each company
-      - Focus on news from the last 3 months
-      - Sentiment must be exactly one of: positive, neutral, negative
-      - key_news should be an array of 2-5 headline summaries
-      - Consider earnings announcements, product launches, partnerships, regulatory changes, and market trends
+      - Use WebSearch to find recent news articles for each company
+      - sentiment must be exactly one of: positive, neutral, negative
+      - Focus on material news — earnings, product launches, regulatory actions, M&A, management changes
+      - key_news should be actual headline strings, not summaries
 
   - id: competitive-matrix
-    instruction: >
-      Build a competitive comparison matrix for the screened candidates.
-      Compare them across these dimensions: technology_strength (1-5),
-      market_position (1-5), financial_health (1-5), growth_potential (1-5),
-      and valuation_attractiveness (1-5). Provide a brief justification for each rating.
-      Also identify each company's primary competitive advantage and main risk factor.
-    description: Build multi-dimensional competitive comparison matrix
+    description: Compare screened candidates across 5 competitive dimensions
     depends_on:
       - screen-candidates
       - gather-financials
+    instruction: |
+      For each company in the screened list, evaluate and score on a 1-5 scale across these dimensions:
+      - technology_strength: R&D capability, patents, technological moat
+      - market_position: market share, brand recognition, customer base
+      - financial_health: balance sheet strength, cash flow, debt levels
+      - growth_potential: addressable market growth, expansion opportunities
+      - valuation_attractiveness: current valuation relative to peers and growth
+
+      Also include:
+      - competitive_advantage: 1-2 sentences describing the company's key competitive edge
+      - main_risk: 1-2 sentences describing the primary risk
+
+      Use the financials data for quantitative context. Return a matrix array with one object per company.
     context_in:
       screened: "{screen-candidates.screened}"
       financials: "{gather-financials.financials}"
@@ -189,27 +190,25 @@ steps:
         op: each_has
         value: main_risk
     tips:
-      - Use WebSearch to research each company's competitive position
-      - Ratings must be integers from 1 to 5
-      - Base financial_health on the actual financial metrics from the financials data
-      - Base valuation_attractiveness on PER and PBR relative to peers
-      - competitive_advantage should be a single sentence
-      - main_risk should be a single sentence
+      - Scores must be integers from 1 to 5
+      - Use financial data from gather-financials to inform financial_health and valuation_attractiveness scores
+      - Be calibrated — not every company is a 5 in every dimension
+      - competitive_advantage and main_risk should be specific, not generic
 
   - id: score-and-recommend
-    instruction: >
-      Using all available data (screened financials, news sentiment, and competitive matrix),
-      produce a final investment analysis:
-      1. Score each screened candidate from 0 to 100 based on all factors.
-      2. Write a bull case (2-3 sentences) and bear case (2-3 sentences) for each.
-      3. Create a portfolio recommendation with allocation weights (percentage) for each candidate.
-         The weights MUST sum to exactly 100.
-      4. Include a comprehensive investment risk disclaimer.
-    description: Score candidates, produce portfolio recommendation with risk disclaimer
+    description: Score candidates and recommend portfolio allocation
     depends_on:
       - screen-candidates
       - news-sentiment
       - competitive-matrix
+    instruction: |
+      For each screened company, produce a final investment score (0-100) synthesizing financial metrics, news sentiment, and competitive positioning.
+
+      For each company in scores, return: ticker, name, score (0-100), bull_case (2-3 sentences), bear_case (2-3 sentences).
+
+      Then create a portfolio array with recommended allocation weights. Each entry: ticker, name, weight (percentage as a number). The weights across all portfolio entries must sum to exactly 100.
+
+      Finally, provide a disclaimer string with a standard investment risk disclaimer (2-3 sentences).
     context_in:
       screened: "{screen-candidates.screened}"
       news_analyses: "{news-sentiment.news_analyses}"
@@ -252,12 +251,24 @@ steps:
       - field: portfolio
         op: script
         value: |
-          const portfolio = context.FIELD_VALUE;
-          const total = portfolio.reduce((sum, p) => sum + p.weight, 0);
-          if (total !== 100) {
-            throw new Error("Allocation weights sum to " + total + ", must be exactly 100");
+          node -e '
+          const fs = require("fs");
+          const ctx = process.env.CONTEXT
+            ? JSON.parse(process.env.CONTEXT)
+            : JSON.parse(fs.readFileSync(process.env.CONTEXT_FILE, "utf8"));
+          const total = ctx.portfolio.reduce((sum, p) => sum + p.weight, 0);
+          if (Math.abs(total - 100) > 0.01) {
+            console.error("Portfolio weights sum to " + total + ", expected exactly 100");
+            process.exit(1);
           }
+          '
         message: "Portfolio allocation weights must sum to exactly 100"
+    tips:
+      - Score should reflect a balanced view of all inputs — not just financials
+      - Higher-conviction picks should get higher portfolio weights
+      - Portfolio weights must sum to exactly 100 — verify before submitting
+      - Bull and bear cases should be specific to each company, not generic
+      - Disclaimer must mention that this is not financial advice and past performance does not guarantee future results
 
 policy:
   mode: trail

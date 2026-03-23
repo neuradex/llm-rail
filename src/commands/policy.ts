@@ -4,7 +4,8 @@ import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
-import { checkCommand } from "../engine/gateway.js";
+import { checkCommand, loadProjectPolicy } from "../engine/gateway.js";
+import { resolveAllSecrets, matchSecretFilePath, checkFileForSecrets } from "../engine/secrets.js";
 
 interface PolicyLogEntry {
   timestamp: string;
@@ -76,7 +77,7 @@ export function runPolicyCheck(workflowName: string, command: string): void {
 }
 
 /**
- * Evaluate a command against the project-level policy (.llm-rail/policy.yml).
+ * Evaluate a command against the project-level policy (lrail.yml).
  * Used by the plugin hook for main agent enforcement.
  * Exit code: 0 = allow, 1 = deny.
  */
@@ -90,4 +91,49 @@ export function runPolicyEval(command: string): void {
     console.error(`  ${result.reason}`);
     process.exit(1);
   }
+}
+
+/**
+ * Check if env mediation is configured in project policy.
+ * Exit code: 0 = env mediation is active (inject or secret_files), 1 = not configured.
+ */
+export function runPolicyHasEnv(): void {
+  const policy = loadProjectPolicy();
+  const env = policy?.env;
+  if (
+    (env?.inject && env.inject.length > 0) ||
+    (env?.secret_files && env.secret_files.length > 0)
+  ) {
+    process.exit(0);
+  }
+  process.exit(1);
+}
+
+/**
+ * Check if a file is blocked by env policy (secret_files path match or content scan).
+ * Exit code: 0 = allowed, 1 = blocked.
+ */
+export function runPolicyCheckFile(filePath: string): void {
+  const policy = loadProjectPolicy();
+  if (!policy?.env) {
+    process.exit(0);
+  }
+
+  // Check secret_files path match
+  if (policy.env.secret_files && matchSecretFilePath(filePath, policy.env.secret_files)) {
+    console.error(JSON.stringify({ allowed: false, reason: `Path matches secret_files: ${filePath}` }));
+    process.exit(1);
+  }
+
+  // Check file contents for secret values (inject + secret_files-derived)
+  const secrets = resolveAllSecrets(policy.env);
+  if (secrets.size > 0) {
+    const result = checkFileForSecrets(filePath, secrets);
+    if (result.blocked) {
+      console.error(JSON.stringify({ allowed: false, reason: result.reason }));
+      process.exit(1);
+    }
+  }
+
+  process.exit(0);
 }

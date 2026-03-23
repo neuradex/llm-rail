@@ -19,6 +19,24 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/policy-hook.sh"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/read-hook.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/grep-hook.sh"
+          }
+        ]
       }
     ]
   }

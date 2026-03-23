@@ -1,6 +1,6 @@
 {
   "name": "llm-rail",
-  "version": "0.2.3-beta",
+  "version": "0.2.4-beta",
   "description": "Guardrails for agentic work — decompose tasks into validated steps, enforce policy, audit everything",
   "author": { "name": "neuradex" },
   "homepage": "https://github.com/neuradex/llm-rail",

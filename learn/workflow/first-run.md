@@ -71,6 +71,7 @@ lrail 0321-143022 status
 ### Key commands
 
 ```bash
+lrail init                           # Initialize project (lrail.yml, workflows/, .gitignore)
 lrail wf list                        # List all workflows
 lrail wf <workflow> list             # List instances
 lrail wf <workflow> create           # Create instance

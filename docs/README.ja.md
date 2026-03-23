@@ -210,7 +210,7 @@ workflows/stock-screening/
 |---|---|
 | **ステップタイプ** | `programmatic`（LLMなしで直接実行）と`agentic`（LLMエージェント＋検証）を1つのワークフローで使用できます。 |
 | **アクション** | `js:`（コンテキストが自動注入されるJavaScript）と`shell:`（テンプレート展開＋JSON抽出）。チェーンされたアクション間でパイプスタイルのデータフローをサポートします。 |
-| **ポリシー** | AWS IAMスタイルのallow/denyルール。trailとenforceモード。全エージェントコマンドにbashプロキシを適用します。 |
+| **ポリシー** | AWS IAMスタイルのallow/denyルール。trailとenforceモード。全エージェントコマンドにbashプロキシを適用します。Secret Mediationによる出力リダクション。 |
 | **検証ゲート** | 22の組み込み演算子。構造バリデーション＋ビジネスロジックアサーション＋`verify_source`捏造防止＋`script`カスタムロジック。 |
 | **明示的データフロー** | `context_in`で必要なデータのみを受け渡します — 暗黙のマージもコンテキスト汚染もありません。 |
 | **Accumulateモード** | キーによる重複排除マージで段階的にデータを収集します。品質ゲートを満たすまでステップは開いたままです。 |
@@ -226,10 +226,10 @@ workflows/stock-screening/
 
 LLM Railは**構造的な安全性**を提供します — プロンプトレベルの「注意してください」という警告ではありません。
 
-ポリシー適用は**2つのレイヤー**で動作します。プロジェクトポリシー（`.llm-rail/policy.yml`）はプロジェクト全体のすべてのコマンドに適用されます。ワークフローポリシー（workflow YAMLの`policy:`）はその上にワークフローごとのルールを追加します。
+ポリシー適用は**2つのレイヤー**で動作します。プロジェクトポリシー（`lrail.yml`）はプロジェクト全体のすべてのコマンドに適用されます。ワークフローポリシー（workflow YAMLの`policy:`）はその上にワークフローごとのルールを追加します。
 
 ```
-┌─ プロジェクトポリシー (.llm-rail/policy.yml) ────────────────┐
+┌─ プロジェクト設定 (lrail.yml) ───────────────────────────────┐
 │                                                               │
 │  メインエージェント（フック）    サブエージェント（プロキシ）   │
 │  ┌──────────────────┐          ┌──────────────────┐          │
@@ -257,10 +257,10 @@ Custom agentの`allowed-tools`を`Bash(lrail *)`に制限すると、**lrail bas
 
 ### 2つのポリシーレイヤー
 
-**プロジェクトポリシー**（`.llm-rail/policy.yml`）— すべてのソースからのコマンドに適用：
+**プロジェクトポリシー**（`lrail.yml`）— すべてのソースからのコマンドに適用：
 
 ```yaml
-# .llm-rail/policy.yml
+# lrail.yml
 mode: enforce
 default: allow
 rules:
@@ -308,14 +308,52 @@ lrail log -f             # フォローモード
 
 Programmaticステップは自動的にプロキシを経由します。Agenticステップでは、エージェントが`lrail <id> bash 'curl ...'`を呼び出します — 同じポリシー、同じ監査。
 
+### Secret Mediation（Secret Mediation）
+
+エージェントがAPIキーや認証情報をコマンドで使用しつつ、実際の値を見えなくします。`.env`ファイルを指定するだけです：
+
+```yaml
+# lrail.yml
+env:
+  secret_files: [.env, .env.local]
+```
+
+これだけで十分です。`.env`ファイルが自動パースされ、すべてのキー・バリューペアがプロキシサブプロセスに注入され、出力からリダクトされます。エージェントは通常通り`$VAR`構文を使用し、実際の値を見ることはありません。
+
+```bash
+# エージェントは通常のシェル構文を使用 — プロキシが残りを処理
+lrail bash 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com/data'
+# → API呼び出し成功、$API_KEY値はエージェント出力に表示されない
+```
+
+env mediationが有効な場合：
+- すべてのBash呼び出しが`lrail bash`を経由 — 素のbashはフックにより拒否
+- `secret_files`が自動パースされ、値がサブプロセスに注入＋出力からリダクト
+- Read/Grepフックがシークレットファイルへのアクセスをブロック
+- `inject`でCI/ランタイムシークレットを`process.env`から追加（ファイルにない変数用）
+- `passthrough`でサブプロセスのenv変数を指定されたもののみに制限（任意）
+
+### クイックスタート
+
+`lrail init`はデフォルトポリシーを含むプロジェクト設定を即座に生成します：
+
+```bash
+lrail init
+# → rm -rf, sudo, chmod 777, git push --force, git reset --hardを
+#   ブロックするdenyルールを含むlrail.ymlを生成します。すぐに使用可能。
+```
+
+`env.secret_files`を追加すれば、シークレットまで保護されるセキュリティ設定が完成します。
+
 ### 推奨構成
 
 構造的な安全性を最大化するには：
-1. **Custom agent**を使用し、`allowed-tools: Bash(lrail *), Read, Glob, Grep`に制限します
-2. **プロジェクトポリシー**（`.llm-rail/policy.yml`）で危険なコマンドをブロックします
-3. **ワークフローポリシー**を**enforceモード**に設定し、明示的な許可リストを作成します
-4. `WebFetch`/`WebSearch`の代わりに、bashプロキシ経由の`curl`でウェブにアクセスします
-5. 監査ログをレビューします：`lrail log`（グローバル）および`proxy.jsonl`（インスタンスごと）
+1. **`lrail init`**を実行してデフォルトdenyルールを含むプロジェクトポリシーを生成
+2. `lrail.yml`に**`env.secret_files`**を追加して`.env`ファイルを保護
+3. **Custom agent**を使用し、`allowed-tools: Bash(lrail *), Read, Glob, Grep`に制限
+4. **ワークフローポリシー**を**enforceモード**に設定し、明示的な許可リストを作成
+5. `WebFetch`/`WebSearch`の代わりに、bashプロキシ経由の`curl`でウェブにアクセス
+6. 監査ログをレビュー：`lrail log`（グローバル）および`proxy.jsonl`（インスタンスごと）
 
 > **この領域は現在活発に開発中です。** 構造的セキュリティモデルを強化する方法を継続的に模索しています。貢献やアイデアを歓迎します。[Contributing](./CONTRIBUTING.ja.md)をご参照ください。
 
@@ -345,9 +383,13 @@ npm install llm-rail
 
 ```bash
 # グローバル
+lrail init                                            # プロジェクト初期化 (lrail.yml, workflows/, .gitignore)
 lrail docs [topic]                                    # ドキュメントの閲覧
 lrail log [-n <count>] [-f] [--raw]                   # コマンド履歴の表示
 lrail policy eval --command '<cmd>'                   # プロジェクトポリシーの評価
+lrail bash '<command>'                                # グローバルプロキシ経由で実行
+lrail policy has-env                                  # env mediationの有効確認
+lrail policy check-file <path>                        # ファイルのenv ポリシー検査
 
 # ワークフロー管理
 lrail wf list                                         # 全ワークフロー一覧

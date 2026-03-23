@@ -210,7 +210,7 @@ workflows/stock-screening/
 |---|---|
 | **스텝 타입** | `programmatic`(LLM 없이 직접 실행)과 `agentic`(LLM 에이전트 + 검증)을 하나의 워크플로우에서 사용합니다. |
 | **액션** | `js:`(컨텍스트가 자동 주입되는 JavaScript)와 `shell:`(템플릿 보간 + JSON 추출). 체이닝된 액션 간 파이프 스타일 데이터 흐름을 지원합니다. |
-| **정책** | AWS IAM 스타일 allow/deny 규칙. trail과 enforce 모드. 모든 에이전트 명령에 bash 프록시를 적용합니다. |
+| **정책** | AWS IAM 스타일 allow/deny 규칙. trail과 enforce 모드. 모든 에이전트 명령에 bash 프록시를 적용합니다. Secret Mediation를 통한 출력 리댁션. |
 | **검증 게이트** | 22개 내장 연산자. 구조적 검증 + 비즈니스 로직 어서션 + `verify_source` 날조 방지 + `script` 커스텀 로직. |
 | **명시적 데이터 플로우** | `context_in`으로 필요한 데이터만 전달합니다 — 암묵적 병합이나 컨텍스트 오염이 없습니다. |
 | **Accumulate 모드** | 키 기준 중복 제거 병합으로 점진적 데이터 수집. 품질 게이트를 충족할 때까지 스텝이 열려 있습니다. |
@@ -226,10 +226,10 @@ workflows/stock-screening/
 
 LLM Rail은 **구조적 안전성**을 제공합니다 — 프롬프트 수준의 "조심하세요" 경고가 아닙니다.
 
-정책 적용은 **2개 레이어**로 동작합니다. 프로젝트 정책(`.llm-rail/policy.yml`)은 프로젝트 전체의 모든 명령에 적용됩니다. 워크플로우 정책(workflow YAML의 `policy:`)은 그 위에 워크플로우별 규칙을 추가합니다.
+정책 적용은 **2개 레이어**로 동작합니다. 프로젝트 정책(`lrail.yml`)은 프로젝트 전체의 모든 명령에 적용됩니다. 워크플로우 정책(workflow YAML의 `policy:`)은 그 위에 워크플로우별 규칙을 추가합니다.
 
 ```
-┌─ 프로젝트 정책 (.llm-rail/policy.yml) ──────────────────────┐
+┌─ 프로젝트 정책 (lrail.yml) ──────────────────────┐
 │                                                               │
 │  메인 에이전트 (훅)              서브에이전트 (프록시)          │
 │  ┌──────────────────┐          ┌──────────────────┐          │
@@ -257,10 +257,10 @@ Custom agent의 `allowed-tools`를 `Bash(lrail *)`로 제한하면, **lrail bash
 
 ### 2개 정책 레이어
 
-**프로젝트 정책** (`.llm-rail/policy.yml`) — 모든 소스의 명령에 적용:
+**프로젝트 정책** (`lrail.yml`) — 모든 소스의 명령에 적용:
 
 ```yaml
-# .llm-rail/policy.yml
+# lrail.yml
 mode: enforce
 default: allow
 rules:
@@ -308,14 +308,52 @@ lrail log -f             # 팔로우 모드
 
 Programmatic 스텝은 자동으로 프록시를 경유합니다. Agentic 스텝에서는 에이전트가 `lrail <id> bash 'curl ...'`을 호출합니다 — 동일한 정책, 동일한 감사.
 
+### Secret Mediation (Secret Mediation)
+
+에이전트가 API 키와 자격증명을 커맨드에서 사용하되, 실제 값은 보지 못하게 합니다. `.env` 파일을 지정하면 됩니다:
+
+```yaml
+# lrail.yml
+env:
+  secret_files: [.env, .env.local]
+```
+
+이것만으로 충분합니다. `.env` 파일이 자동 파싱되어 모든 키-값 쌍이 프록시 서브프로세스에 주입되고 출력에서 리댁트됩니다. 에이전트는 평소처럼 `$VAR` 문법을 사용하며, 실제 값은 볼 수 없습니다.
+
+```bash
+# 에이전트는 일반 셸 문법 사용 — 프록시가 나머지를 처리
+lrail bash 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com/data'
+# → API 호출 성공, $API_KEY 값은 에이전트 출력에 나타나지 않음
+```
+
+env mediation 활성화 시:
+- 모든 Bash 호출이 `lrail bash`를 경유 — bare bash는 훅에 의해 블록
+- `secret_files`가 자동 파싱되어 값이 서브프로세스에 주입 + 출력에서 리댁트
+- Read/Grep 훅이 시크릿 파일 액세스 블록
+- `inject`로 CI/런타임 시크릿을 `process.env`에서 추가 (파일에 없는 변수용)
+- `passthrough`로 서브프로세스의 env 변수를 지정된 것만으로 제한 (선택)
+
+### 빠른 시작
+
+`lrail init`은 기본 정책이 포함된 프로젝트 설정을 즉시 생성합니다:
+
+```bash
+lrail init
+# → rm -rf, sudo, chmod 777, git push --force, git reset --hard를
+#   차단하는 deny 규칙이 포함된 lrail.yml을 생성합니다. 바로 사용 가능.
+```
+
+`env.secret_files`를 추가하면 시크릿까지 보호되는 보안 설정이 완성됩니다.
+
 ### 권장 구성
 
 구조적 안전성을 극대화하려면:
-1. **Custom agent**를 사용하고 `allowed-tools: Bash(lrail *), Read, Glob, Grep`으로 제한합니다
-2. **프로젝트 정책**(`.llm-rail/policy.yml`)으로 위험한 명령을 차단합니다
-3. **워크플로우 정책**을 **enforce 모드**로 설정하고 명시적 허용 목록을 작성합니다
-4. `WebFetch`/`WebSearch` 대신 bash 프록시를 통한 `curl`로 웹에 접근합니다
-5. 감사 로그를 검토합니다: `lrail log`(글로벌) 및 `proxy.jsonl`(인스턴스별)
+1. **`lrail init`**을 실행하여 기본 deny 규칙이 포함된 프로젝트 정책 생성
+2. `lrail.yml`에 **`env.secret_files`**를 추가하여 `.env` 파일 보호
+3. **Custom agent**를 사용하고 `allowed-tools: Bash(lrail *), Read, Glob, Grep`으로 제한
+4. **워크플로우 정책**을 **enforce 모드**로 설정하고 명시적 허용 목록 작성
+5. `WebFetch`/`WebSearch` 대신 bash 프록시를 통한 `curl`로 웹 접근
+6. 감사 로그 검토: `lrail log`(글로벌) 및 `proxy.jsonl`(인스턴스별)
 
 > **이 영역은 현재 활발히 개발 중입니다.** 구조적 보안 모델을 강화하는 방법을 지속적으로 탐구하고 있습니다. 기여와 아이디어를 환영합니다. [Contributing](./CONTRIBUTING.ko.md)을 참고해 주세요.
 
@@ -345,9 +383,13 @@ npm install llm-rail
 
 ```bash
 # 글로벌
+lrail init                                            # 프로젝트 초기화 (lrail.yml, workflows/, .gitignore)
 lrail docs [topic]                                    # 문서 탐색
 lrail log [-n <count>] [-f] [--raw]                   # 커맨드 이력 조회
-lrail policy eval --command '<cmd>'                   # 프로젝트 정책 평가
+lrail bash '<command>'                                # 글로벌 프록시를 통해 실행
+lrail policy eval --command '<cmd>'                   # 프로젝트 레벨 정책 평가
+lrail policy has-env                                  # env mediation 활성화 여부 확인
+lrail policy check-file <path>                        # 파일의 env 정책 검사
 
 # 워크플로우 관리
 lrail wf list                                         # 전체 워크플로우 목록
@@ -399,7 +441,7 @@ YAML을 직접 작성하고 싶지 않으신가요? 프레임워크가 대신 �
 - **`/llm-rail:build`** — 자연어로 작업을 설명하세요. 프레임워크가 실현 가능성을 분석하고, 워크플로우를 생성하고, 검증하고, 테스트 실행까지 자동으로 수행합니다.
 - **`/llm-rail:optimize`** — 기존 워크플로우를 받아 7단계 최적화 파이프라인을 실행합니다: 베이스라인 측정 → programmatic 비율 개선 → 실행 시간 단축 → 검증 실패 감소 → 3티어 모델 검증 → 종합 리포트. 결과는 배리언트 파일로 저장되며 원본은 수정하지 않습니다.
 
-이 메타 워크플로우들은 LLM Rail 자체를 사용하여 LLM Rail 워크플로우를 만들고 개선합니다 — 프레임워크가 스스로를 호스팅합니다.
+이 메타 워크플로우들은 LLM Rail 자체를 사용하여 LLM Rail 워크플로우를 만들고 개선합니다 — 프레임워크의 셀프 호스팅입니다.
 
 ### `/llm-rail:run` 실행 시
 

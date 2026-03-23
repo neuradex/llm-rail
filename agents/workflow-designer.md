@@ -40,6 +40,10 @@ policy:                # command execution policy
   rules:               # required for enforce mode
     - effect: allow | deny
       commands: ["glob *"]
+  env:                 # secret mediation (see lrail docs concepts/secrets)
+    inject: string[]   # secret env vars — injected into proxy subprocess, redacted from output
+    passthrough: string[]  # non-secret env vars — explicit allowlist (optional)
+    secret_files: string[] # file paths blocked from Read/Grep (optional)
 steps: StepDef[]       # ordered step definitions
 ```
 
@@ -120,9 +124,13 @@ policy: PolicyDef          # replaces base policy entirely
 
 ```bash
 # Global
+lrail init                                            # initialize project
 lrail docs [topic]                                    # browse built-in documentation
 lrail log [-n <count>] [-f] [--raw]                   # show command history
+lrail bash '<command>'                                # execute through global proxy
 lrail policy eval --command '<cmd>'                   # evaluate project-level policy
+lrail policy has-env                                  # check if env mediation is active
+lrail policy check-file <path>                        # check file against env policy
 
 # Workflow management
 lrail wf list                                         # list all workflows

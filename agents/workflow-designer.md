@@ -34,13 +34,13 @@ params:                # input parameters
     description: string
     validation: AssertionRule[]
 context: object        # shared context (rarely used)
-policy:                # command execution policy
+policy:                # command execution policy (see lrail docs concepts/policy)
   mode: trail | enforce
   default: allow | deny  # optional, default "deny"
   rules:               # required for enforce mode
     - effect: allow | deny
       commands: ["glob *", {regex: "pattern"}]  # glob string or {regex} object
-  env:                 # secret mediation (see lrail docs concepts/secrets)
+  env:                 # workflow-level secret mediation (merged with project env)
     inject: string[]   # secret env vars — injected into proxy subprocess, redacted from output
     passthrough: string[]  # non-secret env vars — explicit allowlist (optional)
     secret_files: string[] # file paths blocked from Read/Grep (optional)

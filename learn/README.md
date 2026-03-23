@@ -7,9 +7,12 @@ description: Deterministic workflow control for LLM agents
 
 LLM Rail is a guardrail framework for agentic work. `lrail` is its CLI command.
 
-LLM Rail splits complex tasks into steps and controls execution with validation, policy, and audit.
-
 The dual meaning of "rail": **Track** (speed & productivity) + **Guardrail** (safety & correctness).
+
+LLM Rail works at two levels:
+
+- **Standalone guardrails** — install the plugin, get policy enforcement and audit logging immediately. No workflows needed. A single `lrail.yml` controls what agents can do.
+- **Workflow control** — decompose complex tasks into validated steps with full orchestration, policy, and audit.
 
 ## Topics
 

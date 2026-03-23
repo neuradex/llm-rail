@@ -7,15 +7,50 @@ description: Command control — trail mode for observation, enforce mode for lo
 
 Policy controls what shell commands agents can run. Two layers:
 
-1. **Project policy** (`lrail.yml`) — applies to all commands from any source. The main agent's Bash calls are intercepted via a PreToolUse hook and checked against this policy before execution.
+1. **Project config** (`lrail.yml`) — applies to all commands from any source. The main agent's Bash calls are intercepted via a PreToolUse hook and checked against this policy before execution.
 2. **Workflow policy** (`policy:` in workflow YAML) — additional per-workflow rules applied when commands go through the bash proxy (`lrail <id> bash`).
 
 Both layers are evaluated in order: project policy first, then workflow policy. A deny at either layer blocks the command.
 
+### Config file resolution
+
+`lrail.yml` is resolved by walking up the directory tree from the current working directory. The first `lrail.yml` found is used. This means:
+
+- A single `~/lrail.yml` applies to all projects
+- A project-level `lrail.yml` overrides the global one for that project
+- Subdirectories inherit the nearest parent's config
+
+When the llm-rail plugin is installed, `lrail.yml` is auto-created on session start if none is found in any parent directory.
+
+### lrail.yml structure
+
 ```yaml
+# Controls agent access to this config file (Read/Edit/Write/Bash).
+# false (default): agents cannot see or modify this file.
+# true: agents can read and modify this file.
+visible: false
+
 policy:
-  mode: trail    # or enforce
+  mode: enforce
+  default: allow
+  rules:
+    - effect: deny
+      commands: [...]
+
+env:
+  secret_files: [.env]
 ```
+
+Legacy flat format (without `policy:` wrapper) is also supported for backward compatibility.
+
+### visible field
+
+Controls whether agents can access `lrail.yml` itself:
+
+- `visible: false` (default) — Read, Edit, Write tools are all blocked. Agents cannot see what rules exist.
+- `visible: true` — all access allowed. Agents can read the config and adapt their behavior.
+
+Bash commands targeting `lrail.yml` are controlled by a separate policy rule (included in the default template). Remove that rule if you set `visible: true` and want agents to manage the config via shell commands as well.
 
 ### trail mode
 
@@ -112,9 +147,9 @@ lrail <id> bash 'curl https://api.example.com'
 
 This ensures all commands are logged and policy-checked.
 
-### Project-level policy
+### Testing policy rules
 
-A project-level policy file (`lrail.yml`) applies to all commands — both agent (hook) and instance (proxy). Evaluate it with:
+Evaluate a command against the project config:
 
 ```bash
 lrail policy eval --command 'curl https://example.com'
@@ -122,14 +157,21 @@ lrail policy eval --command 'curl https://example.com'
 
 Exit code 0 = allowed, 1 = denied.
 
+### Hook protocol
+
+LLM Rail hooks use the Claude Code hook protocol:
+
+- **exit 0** — allow (tool proceeds)
+- **exit 2 + stderr** — blocking error (tool blocked, message fed to agent)
+- **exit 1** — non-blocking error (ignored, tool proceeds)
+
+This applies to all hooks (Bash, Read, Grep, Edit, Write). Exit 2 overrides the Claude Code allow list and works in all permission modes.
+
 ### Environment variable mediation
 
 Policy can include an `env` section for secret mediation. See `lrail docs concepts/secrets` for full details.
 
 ```yaml
-# lrail.yml
-mode: enforce
-default: allow
 env:
   inject: [API_KEY, SERPER_KEY]
   passthrough: [PATH, HOME, LANG]

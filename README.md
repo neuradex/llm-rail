@@ -226,11 +226,22 @@ Every event is recorded per instance:
 
 LLM Rail provides **structural safety** — not prompt-level "please be careful" warnings.
 
-The core mechanism: **all agent commands must go through `lrail <id> bash '<cmd>'`**. This single control point enables policy enforcement and full audit logging.
+Policy enforcement operates in **two layers**. A project-level policy (`.llm-rail/policy.yml`) applies to every command across the entire project. Workflow-level policy (`policy:` in workflow YAML) adds per-workflow rules on top.
 
 ```
-Agent → lrail <id> bash 'curl ...' → Policy check → Audit log → Execute (or deny)
+┌─ Project Policy (.llm-rail/policy.yml) ──────────────────────┐
+│                                                               │
+│  Main Agent (hook)              Subagent (proxy)              │
+│  ┌──────────────────┐          ┌──────────────────┐          │
+│  │ PreToolUse hook   │          │ lrail <id> bash   │          │
+│  │ → policy eval     │          │ → policy eval     │          │
+│  │ → command log     │          │ → workflow policy │          │
+│  └──────────────────┘          │ → command log     │          │
+│                                 └──────────────────┘          │
+└───────────────────────────────────────────────────────────────┘
 ```
+
+The main agent's commands are intercepted via a **PreToolUse hook** — every Bash call is checked against the project policy before execution. Subagent commands go through `lrail <id> bash`, which checks both project and workflow policy. All commands are logged to a global command history (`lrail log`).
 
 ### Structural Enforcement
 
@@ -240,12 +251,24 @@ Custom agents can be restricted to `Bash(lrail *)` via `allowed-tools`, meaning 
 |---|---|---|
 | Tool restriction (`allowed-tools`) | Yes — whitelist only | No — all tools available |
 | Bash restriction | `Bash(lrail *)` — proxy only | Unrestricted |
-| Policy enforcement | Structural (cannot bypass) | Prompt-dependent |
+| Policy enforcement | Structural (cannot bypass) | Hook-based (project policy) |
 | WebSearch / WebFetch | Not available | Available |
+| Project policy | Applied (via proxy) | Applied (via PreToolUse hook) |
 
-### Policy Rules
+### Two Policy Layers
 
-The workflow's policy rules operate **on top of** the bash proxy. Every command that passes through `lrail <id> bash` is evaluated against these rules:
+**Project policy** (`.llm-rail/policy.yml`) — applies to all commands from any source:
+
+```yaml
+# .llm-rail/policy.yml
+mode: enforce
+default: allow
+rules:
+  - effect: deny
+    commands: ["rm -rf *", "sudo *"]
+```
+
+**Workflow policy** (`policy:` in workflow YAML) — additional per-workflow rules on top of the project policy:
 
 ```yaml
 policy:
@@ -261,7 +284,15 @@ This gives you **domain-level access control** — which URLs, which binaries, w
 
 ### Audit Trail
 
-Every command execution is logged in `policy.jsonl` with the full command, policy decision, and timestamp. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
+Every command is logged to a global command history with source tracking:
+
+```bash
+lrail log                # color-coded display with source tags
+lrail log --raw          # machine-readable TSV output
+lrail log -f             # follow mode
+```
+
+Per-instance policy decisions are also logged in `policy.jsonl`. Even in `trail` mode (allow-all), every action is recorded for post-hoc review.
 
 ### Web Access Without Losing Control
 
@@ -281,9 +312,10 @@ Programmatic steps execute through the proxy automatically. For agentic steps, t
 
 For maximum structural safety:
 1. Use **custom agents** with `allowed-tools: Bash(lrail *), Read, Glob, Grep`
-2. Set policy to **enforce mode** with explicit allow-list
-3. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
-4. Review `policy.jsonl` audit logs
+2. Set **project policy** (`.llm-rail/policy.yml`) to deny dangerous commands
+3. Set **workflow policy** to **enforce mode** with explicit allow-list
+4. Use `curl` through the bash proxy for web access instead of `WebFetch`/`WebSearch`
+5. Review audit logs: `lrail log` (global) and `policy.jsonl` (per-instance)
 
 > **This area is under active development.** We are continuously exploring ways to strengthen the structural security model. Contributions and ideas are welcome. See [Contributing](./CONTRIBUTING.md).
 

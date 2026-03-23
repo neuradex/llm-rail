@@ -5,7 +5,12 @@ description: Command control — trail mode for observation, enforce mode for lo
 
 ## Policy
 
-Policy controls what shell commands agents can run through the bash proxy.
+Policy controls what shell commands agents can run. Two layers:
+
+1. **Project policy** (`.llm-rail/policy.yml`) — applies to all commands from any source. The main agent's Bash calls are intercepted via a PreToolUse hook and checked against this policy before execution.
+2. **Workflow policy** (`policy:` in workflow YAML) — additional per-workflow rules applied when commands go through the bash proxy (`lrail <id> bash`).
+
+Both layers are evaluated in order: project policy first, then workflow policy. A deny at either layer blocks the command.
 
 ```yaml
 policy:

@@ -136,6 +136,13 @@ export function buildSanitizedEnv(
     }
   }
 
+  // Always forward lrail runtime vars (internal plumbing, not secrets)
+  for (const key of ["CONTEXT", "CONTEXT_FILE"]) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key]!;
+    }
+  }
+
   return env;
 }
 

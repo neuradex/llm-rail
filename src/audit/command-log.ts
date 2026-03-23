@@ -9,7 +9,12 @@ function logPath(): string {
   return path.resolve(".llm-rail", LOG_FILE);
 }
 
-export function appendCommandLog(args: string[]): void {
+export function appendCommandLog(
+  args: string[],
+  source: "cli" | "hook" | "instance" = "cli",
+  denied?: boolean,
+  error?: boolean,
+): void {
   const dir = path.resolve(".llm-rail");
   ensureDir(dir);
 
@@ -17,6 +22,9 @@ export function appendCommandLog(args: string[]): void {
     timestamp: nowISO(),
     command: args.join(" "),
     cwd: process.cwd(),
+    source,
+    ...(denied && { denied }),
+    ...(error && { error }),
   };
 
   fs.appendFileSync(logPath(), JSON.stringify(entry) + "\n", "utf-8");

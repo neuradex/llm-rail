@@ -20,8 +20,13 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
   }
 
   // Enforce mode
+  const defaultEffect = policy.default || "deny";
+
   if (!policy.rules || policy.rules.length === 0) {
-    return { allowed: false, reason: "enforce mode: no rules defined, implicit deny" };
+    if (defaultEffect === "allow") {
+      return { allowed: true, reason: "no rules defined, default allow" };
+    }
+    return { allowed: false, reason: "no rules defined, default deny" };
   }
 
   // Check deny rules first
@@ -46,8 +51,11 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
     }
   }
 
-  // Implicit deny
-  return { allowed: false, reason: "no matching allow rule (implicit deny)" };
+  // Default
+  if (defaultEffect === "allow") {
+    return { allowed: true, reason: "no matching rule, default allow" };
+  }
+  return { allowed: false, reason: "no matching rule, default deny" };
 }
 
 /**

@@ -54,6 +54,7 @@ export interface PolicyRule {
 
 export interface PolicyDef {
   mode: "trail" | "enforce";
+  default?: "allow" | "deny";
   rules?: PolicyRule[];
 }
 
@@ -156,6 +157,9 @@ export interface CommandLogEntry {
   timestamp: string;
   command: string;
   cwd: string;
+  source?: "cli" | "hook" | "instance";
+  denied?: boolean;
+  error?: boolean;
 }
 
 // ── Validation Result ──

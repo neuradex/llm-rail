@@ -4,6 +4,7 @@ import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
+import { checkCommand } from "../engine/gateway.js";
 
 interface PolicyLogEntry {
   timestamp: string;
@@ -72,4 +73,21 @@ export function runPolicyCheck(workflowName: string, command: string): void {
   console.log(`Command: ${command}`);
   console.log(`Result: ${result.allowed ? "ALLOWED" : "DENIED"}`);
   console.log(`Reason: ${result.reason}`);
+}
+
+/**
+ * Evaluate a command against the project-level policy (.llm-rail/policy.yml).
+ * Used by the plugin hook for main agent enforcement.
+ * Exit code: 0 = allow, 1 = deny.
+ */
+export function runPolicyEval(command: string): void {
+  const result = checkCommand(command);
+
+  if (result.allowed) {
+    process.exit(0);
+  } else {
+    console.error(`✗ DENIED: ${command}`);
+    console.error(`  ${result.reason}`);
+    process.exit(1);
+  }
 }

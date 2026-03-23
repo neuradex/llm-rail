@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { loadInstance } from "../engine/state.js";
 import { loadWorkflow } from "../engine/workflow.js";
-import { evaluatePolicy, appendPolicyLog } from "../engine/policy.js";
+import { checkCommand } from "../engine/gateway.js";
+import { appendCommandLog } from "../audit/command-log.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
 
 export function runBash(id: string, command: string): void {
@@ -11,21 +12,23 @@ export function runBash(id: string, command: string): void {
   const currentStep = def.steps[state.current_step];
   const stepId = currentStep?.id || "unknown";
 
-  if (def.policy) {
-    const result = evaluatePolicy(def.policy, command);
-    appendPolicyLog(state.workflow_name, state.id, stepId, command, result.allowed);
+  const result = checkCommand(command, {
+    workflowName: state.workflow_name,
+    instanceId: state.id,
+    stepId,
+    policy: def.policy,
+  });
 
-    if (!result.allowed) {
-      fireHook(
-        makeHookPayload("policy:denied", state.id, state.workflow_name, stepId, {
-          command,
-          reason: result.reason,
-        }),
-      );
-      console.error(`Policy denied: ${result.reason}`);
-      console.error(`Command: ${command}`);
-      process.exit(1);
-    }
+  if (!result.allowed) {
+    fireHook(
+      makeHookPayload("policy:denied", state.id, state.workflow_name, stepId, {
+        command,
+        reason: result.reason,
+      }),
+    );
+    console.error(`Policy denied: ${result.reason}`);
+    console.error(`Command: ${command}`);
+    process.exit(1);
   }
 
   try {
@@ -34,10 +37,12 @@ export function runBash(id: string, command: string): void {
       timeout: 30_000,
       stdio: ["inherit", "pipe", "pipe"],
     });
+    try { appendCommandLog([command], "instance"); } catch { /* best-effort */ }
     if (stdout.trim()) {
       console.log(stdout.trimEnd());
     }
   } catch (err: unknown) {
+    try { appendCommandLog([command], "instance", false, true); } catch { /* best-effort */ }
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Command failed: ${message}`);
     process.exit(1);

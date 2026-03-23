@@ -7,7 +7,7 @@ import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
-import { runPolicyGenerate, runPolicyCheck } from "./commands/policy.js";
+import { runPolicyGenerate, runPolicyCheck, runPolicyEval } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
 import { runLog } from "./commands/log.js";
@@ -18,14 +18,12 @@ import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
 import { resolveInstanceId } from "./engine/state.js";
 import { runGlobalLog } from "./commands/global-log.js";
-import { appendCommandLog } from "./audit/command-log.js";
-
 const args = process.argv.slice(2);
 
 function usage(): never {
   console.error(`Usage:
   lrail docs [topic]                                  Browse documentation
-  lrail log [-n <count>] [-f]                         Show command history
+  lrail log [-n <count>] [-f] [--raw]                  Show command history
   lrail wf list                                       List all workflows
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
@@ -56,7 +54,7 @@ function banner(): void {
    Track & Guardrail  v${v}
 
   lrail docs [topic]           Browse documentation
-  lrail log [-n N] [-f]        Show command history
+  lrail log [-n N] [-f] [--raw] Command history
   lrail wf list                List workflows
   lrail wf <name> create       Create a new instance
   lrail wf <name> variants     List variants
@@ -73,21 +71,25 @@ if (args.length < 1) {
 
 const target = args[0];
 
-// Record command to global log (skip log/help/docs to avoid noise)
-if (target !== "log" && target !== "help" && target !== "--help" && target !== "docs") {
-  try { appendCommandLog(args); } catch { /* best-effort */ }
-}
-
 // --- Global commands ---
 if (target === "docs") {
   runDocs(args.slice(1).join("/"));
 } else if (target === "help" || target === "--help") {
   usage();
+} else if (target === "policy" && args[1] === "eval") {
+  const cmdIdx = args.indexOf("--command");
+  const cmd = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
+  if (!cmd) {
+    console.error("Usage: lrail policy eval --command '<command>'");
+    process.exit(1);
+  }
+  runPolicyEval(cmd);
 } else if (target === "log") {
   const followFlag = args.includes("-f") || args.includes("--follow");
+  const rawFlag = args.includes("--raw");
   const nIdx = args.indexOf("-n");
   const limit = nIdx !== -1 && args[nIdx + 1] ? parseInt(args[nIdx + 1], 10) : undefined;
-  runGlobalLog(limit, followFlag);
+  runGlobalLog(limit, followFlag, rawFlag);
 } else if (target === "wf") {
   // --- Workflow commands: lrail wf <name> <command> ---
   const workflowName = args[1];

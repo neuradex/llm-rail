@@ -75,9 +75,11 @@ function executeJsAction(
     fs.writeFileSync(ctxFile, JSON.stringify(ctx), "utf-8");
 
     const wrapper = `
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { execSync, execFileSync } from "node:child_process";
+import { join, resolve, dirname, basename } from "node:path";
 const context = JSON.parse(readFileSync(${JSON.stringify(ctxFile)}, "utf8"));
-const __result = (() => {
+const __result = await (async () => {
 ${action.js}
 })();
 if (__result !== undefined && __result !== null) {
@@ -171,7 +173,9 @@ function executeShellAction(
         // stdout is not JSON — extract finds nothing
       }
       for (const [targetKey, sourceKey] of Object.entries(action.extract)) {
-        if (sourceKey in parsed) {
+        if (sourceKey === ".") {
+          extracted[targetKey] = parsed;
+        } else if (sourceKey in parsed) {
           extracted[targetKey] = parsed[sourceKey];
         }
       }

@@ -39,7 +39,7 @@ export function advanceThrough(
       // Resolve context_in for programmatic steps
       const stepOutputs = collectStepOutputs(state.steps);
       const stepContext = buildStepContext(step, state.params || {}, stepOutputs);
-      const fullContext = { ...state.context, ...stepContext };
+      const fullContext = { ...(state.params || {}), ...state.context, ...stepContext };
       const extracted = executeActions(step.actions || [], fullContext);
 
       state.steps[step.id].status = "completed";

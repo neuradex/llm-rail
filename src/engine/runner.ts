@@ -37,7 +37,7 @@ export function advanceThrough(
     // Programmatic step: execute actions and auto-complete
     try {
       // Resolve context_in for programmatic steps
-      const stepOutputs = collectStepOutputs(state.steps);
+      const stepOutputs = collectStepOutputs(state.steps, state.context);
       const stepContext = buildStepContext(step, state.params || {}, stepOutputs);
       const fullContext = { ...(state.params || {}), ...state.context, ...stepContext };
       const extracted = executeActions(step.actions || [], fullContext);

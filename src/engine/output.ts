@@ -17,7 +17,7 @@ export function formatStepStart(
   const exampleResult = buildExampleResult(step);
 
   const params = state.params || {};
-  const stepOutputs = collectStepOutputs(state.steps);
+  const stepOutputs = collectStepOutputs(state.steps, state.context);
   const headerLabel = resolveDescription(step.description || step.id, params, stepOutputs);
   const instruction = resolveInstruction(step.instruction || step.description || step.id, params, stepOutputs);
 
@@ -54,6 +54,19 @@ export function formatStepStart(
     }
     lines.push("");
     lines.push("MODE: accumulate — submit a batch, it will be merged into the pool. Repeat until validation passes.");
+  }
+
+  // Show available instance-scoped tools
+  if (def.tools && Object.keys(def.tools).length > 0) {
+    lines.push("");
+    lines.push("Available tools:");
+    for (const [name, tool] of Object.entries(def.tools)) {
+      const paramList = tool.params
+        ? Object.entries(tool.params).map(([k, v]) => `${k}${v.required ? "" : "?"}: ${v.type}`).join(", ")
+        : "";
+      lines.push(`  lrail ${state.alias || state.id} tool ${name}${paramList ? ` --args '{ ${paramList} }'` : ""}`);
+      if (tool.description) lines.push(`    ${tool.description}`);
+    }
   }
 
   lines.push(

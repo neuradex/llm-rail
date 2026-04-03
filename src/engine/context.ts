@@ -96,12 +96,17 @@ export function resolveInstruction(
  */
 export function collectStepOutputs(
   steps: Record<string, { output?: Record<string, unknown> }>,
+  context?: Record<string, unknown>,
 ): Record<string, Record<string, unknown>> {
   const outputs: Record<string, Record<string, unknown>> = {};
   for (const [id, state] of Object.entries(steps)) {
     if (state.output) {
       outputs[id] = state.output;
     }
+  }
+  // Expose _tool_calls as a virtual step output so assertions/context can reference {_tools.get-episodes}
+  if (context?._tool_calls && typeof context._tool_calls === "object") {
+    outputs["_tools"] = context._tool_calls as Record<string, unknown>;
   }
   return outputs;
 }

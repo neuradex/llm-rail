@@ -106,6 +106,14 @@ export interface StepDef {
   accumulate?: Record<string, AccumulateFieldConfig>;
 }
 
+// ── Instance-scoped Tools ──
+
+export interface ToolDef {
+  description?: string;
+  params?: Record<string, ParamDef>;
+  actions: ActionDef[];
+}
+
 export interface WorkflowDef {
   name: string;
   version?: string;
@@ -113,6 +121,7 @@ export interface WorkflowDef {
   phase?: WorkflowPhase;
   params?: Record<string, ParamDef>;
   context?: Record<string, unknown>;
+  tools?: Record<string, ToolDef>;
   steps: StepDef[];
   policy?: PolicyDef;
 }

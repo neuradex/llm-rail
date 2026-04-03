@@ -22,7 +22,7 @@ export function runQuery(id: string, stepId?: string): void {
   const step = def.steps[stepIndex];
   const stepState = state.steps[step.id];
   const params = state.params || {};
-  const stepOutputs = collectStepOutputs(state.steps);
+  const stepOutputs = collectStepOutputs(state.steps, state.context);
 
   const description = resolveDescription(step.description || step.id, params, stepOutputs);
   const instruction = step.instruction ? resolveInstruction(step.instruction, params, stepOutputs) : undefined;

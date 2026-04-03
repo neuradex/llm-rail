@@ -18,6 +18,7 @@ import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
 import { resolveInstanceId } from "./engine/state.js";
+import { runTool } from "./commands/tool.js";
 import { runGlobalLog } from "./commands/global-log.js";
 import { runGlobalBash } from "./commands/global-bash.js";
 import { runInit } from "./commands/init.js";
@@ -51,6 +52,7 @@ function usage(): never {
   lrail <alias|id> reset <step-id>                    Reset a step
   lrail <alias|id> log [step-id] [-f]                  Show audit log (-f to follow)
   lrail <alias|id> bash '<command>'                   Execute through proxy
+  lrail <alias|id> tool <name> [--args '<json>']       Call an instance-scoped tool
   lrail <alias|id> policy generate                    Generate policy from trail`);
   process.exit(1);
 }
@@ -383,6 +385,18 @@ Commands:
       const followFlag = args.includes("-f") || args.includes("--follow");
       const stepId = args.find((a, i) => i >= 2 && a !== "-f" && a !== "--follow");
       runLog(id, stepId, followFlag);
+      break;
+    }
+
+    case "tool": {
+      const toolName = args[2];
+      if (!toolName) {
+        console.error(`Usage: lrail ${target} tool <name> [--args '<json>']`);
+        process.exit(1);
+      }
+      const argsIdx = args.indexOf("--args");
+      const toolArgs = argsIdx !== -1 ? args[argsIdx + 1] : "";
+      runTool(id, toolName, toolArgs);
       break;
     }
 

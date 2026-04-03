@@ -42,7 +42,7 @@ export function runNext(id: string, resultJson: string): void {
   }
 
   // Resolve template variables in validation rules before checking
-  const stepOutputs = collectStepOutputs(state.steps);
+  const stepOutputs = collectStepOutputs(state.steps, state.context);
   const resolvedStep = resolveStepRules(currentStep, state.params || {}, stepOutputs);
 
   // Validate step output (validation rules)

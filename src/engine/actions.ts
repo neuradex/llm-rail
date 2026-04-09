@@ -191,7 +191,7 @@ function executeShellAction(
   }
 
   try {
-    const stdinData = pipe?.stdout ?? (ctxFile ? undefined : contextJson);
+    const stdinData = pipe?.stdout;
     const stdout = execFileSync("sh", ["-c", resolved], {
       ...(stdinData !== undefined && { input: stdinData }),
       encoding: "utf-8",

@@ -11,7 +11,7 @@ There are two action types: `js:` and `shell:`.
 
 ### js: action
 
-Runs JavaScript with automatic context injection and return extraction.
+Runs JavaScript with automatic context injection and return extraction. Supports `async`/`await`.
 
 ```yaml
 actions:
@@ -24,6 +24,8 @@ actions:
 - `return` value becomes extracted output — no `extract:` needed, no `console.log(JSON.stringify(...))`
 - Context is passed via temp file — no env var size limits
 - `extract:` is **not allowed** on `js:` actions (validation rejects it)
+- Supports `async`/`await` — use `await fetch(...)` or any async operation
+- Available Node.js modules: `fs` (`readFileSync`, `writeFileSync`, `existsSync`, `mkdirSync`), `child_process` (`execSync`, `execFileSync`), `path` (`join`, `resolve`, `dirname`, `basename`)
 
 Return value rules:
 - Return an object → each key becomes a step output field
@@ -42,7 +44,7 @@ actions:
 ```
 
 - `shell`: shell command string (supports `{{field}}` template interpolation)
-- `extract`: optional mapping of JSON keys from stdout to output fields
+- `extract`: optional mapping of JSON keys from stdout to output fields. Use `"."` as the source key to extract the entire parsed JSON object (e.g., `extract: { data: "." }`)
 - Context is available via `CONTEXT` env var (JSON) for small payloads, or `CONTEXT_FILE` env var (path to temp JSON file) for large payloads
 
 ### Pipe data flow

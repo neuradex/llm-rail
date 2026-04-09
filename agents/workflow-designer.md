@@ -34,6 +34,14 @@ params:                # input parameters
     description: string
     validation: AssertionRule[]
 context: object        # shared context (rarely used)
+tools:                 # instance-scoped tools (callable during any step)
+  <name>:
+    description: string      # what the tool does
+    params:
+      <key>:
+        type: string | number | boolean
+        required: boolean
+    actions: ActionDef[]     # actions to execute when called
 policy:                # command execution policy (see lrail docs concepts/policy)
   mode: trail | enforce
   default: allow | deny  # optional, default "deny"
@@ -86,16 +94,18 @@ steps: StepDef[]       # ordered step definitions
 
 ### ActionDef types
 ```yaml
-# js: — JavaScript with auto-injected context, return for output
+# js: — JavaScript with auto-injected context, return for output (supports async/await)
 - js: |
     const filtered = context.items.filter(x => x.active);
     return { result: filtered };
 # No extract: allowed (validation rejects it). Use return instead.
+# Available modules: fs, child_process, path
 
 # shell: — Shell command with template resolution
 - shell: "curl -s https://api.example.com/{{market}}/data"
   extract:                      # optional
-    targetKey: sourceKey
+    targetKey: sourceKey        # extract specific key from stdout JSON
+    targetKey: "."              # extract entire stdout JSON object
 ```
 
 Actions chain with pipe-style data flow. See `lrail docs concepts/actions`.
@@ -149,6 +159,7 @@ lrail wf <name> policy check --command '<cmd>'        # dry-run policy check
 lrail <alias|id> start                                # start execution
 lrail <alias|id> next --result '<json>'               # submit step result
 lrail <alias|id> bash '<command>'                     # execute through policy proxy
+lrail <alias|id> tool <name> [--args '<json>']        # call an instance-scoped tool
 lrail <alias|id> status                               # check status
 lrail <alias|id> query [--step <id>]                  # query current state
 lrail <alias|id> reset <step-id>                      # reset a step

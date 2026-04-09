@@ -42,14 +42,14 @@ describe("mergeVariant", () => {
         id: "analyze",
         description: "Analyze data",
         instruction: "Analyze data",
-        depends_on: "collect",
+
         required_output: ["result", "score"],
       },
       {
         id: "report",
         description: "Generate report",
         instruction: "Generate report",
-        depends_on: "analyze",
+
         required_output: ["summary"],
       },
     ],
@@ -142,7 +142,7 @@ describe("mergeVariant", () => {
           id: "extra-step",
           description: "Extra processing",
           instruction: "Extra processing",
-          depends_on: "analyze",
+  
           required_output: ["extra"],
         },
       ],

@@ -3,7 +3,6 @@ import { loadWorkflow } from "../engine/workflow.js";
 import { formatStepStart, formatCompletion, formatAutoCompleted } from "../engine/output.js";
 import { appendLog } from "../audit/logger.js";
 import { fireHook, makeHookPayload } from "../engine/hooks.js";
-import { isReady } from "../engine/dependency.js";
 import { advanceThrough } from "../engine/runner.js";
 import type { WorkflowDef, InstanceState } from "../types.js";
 

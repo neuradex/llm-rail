@@ -52,7 +52,6 @@ steps:
 
   - id: gather-financials
     description: Look up financial metrics with source verification
-    depends_on: collect-companies
     instruction: |
       For each company in the companies list, look up the following financial metrics:
       - market_cap (in local currency, as a number)
@@ -90,12 +89,11 @@ steps:
   - id: screen-candidates
     description: Filter companies by PER <= 25 AND ROE >= 10%
     type: programmatic
-    depends_on: gather-financials
     context_in:
       financials: "{gather-financials.financials}"
     actions:
       - js: |
-          const screened = context.financials.filter(c =>
+          const screened = lrail.get("financials").filter(c =>
             c.per != null && c.roe != null && c.per <= 25 && c.roe >= 10
           );
           return { screened: screened, screened_count: screened.length };
@@ -105,7 +103,6 @@ steps:
 
   - id: news-sentiment
     description: Analyze recent news sentiment for screened candidates
-    depends_on: screen-candidates
     instruction: |
       For each company in the screened list, research recent news from the last 3 months.
 
@@ -140,9 +137,6 @@ steps:
 
   - id: competitive-matrix
     description: Compare screened candidates across 5 competitive dimensions
-    depends_on:
-      - screen-candidates
-      - gather-financials
     instruction: |
       For each company in the screened list, evaluate and score on a 1-5 scale across these dimensions:
       - technology_strength: R&D capability, patents, technological moat
@@ -197,10 +191,6 @@ steps:
 
   - id: score-and-recommend
     description: Score candidates and recommend portfolio allocation
-    depends_on:
-      - screen-candidates
-      - news-sentiment
-      - competitive-matrix
     instruction: |
       For each screened company, produce a final investment score (0-100) synthesizing financial metrics, news sentiment, and competitive positioning.
 

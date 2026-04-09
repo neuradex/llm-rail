@@ -188,6 +188,36 @@ steps:
 
 混在させることが鍵です。データはprogrammaticで取得し、エージェントで分析し、結果はprogrammaticで送信します。決定的な部分はLLMが関与しないため、ハルシネーションが構造的に不可能です。
 
+### インスタンススコープツール
+
+ワークフローに再利用可能なツールを定義できます。エージェントがステップ実行中に呼び出し、ワークフロー全体のコンテキスト（params + ステップ出力 + ツール引数）でアクションを実行し、結果を永続化します。
+
+```yaml
+tools:
+  fetch-price:
+    description: "現在の株価を取得"
+    params:
+      symbol:
+        type: string
+        required: true
+    actions:
+      - shell: "curl -s https://api.example.com/price/{{symbol}}"
+        extract: { price: "." }
+
+steps:
+  - id: analyze
+    instruction: "fetch-priceツールで価格を取得し、トレンドを分析"
+    required_output: [analysis]
+```
+
+エージェントは実行中にCLIでツールを呼び出します：
+
+```bash
+lrail <id> tool fetch-price --args '{"symbol": "AAPL"}'
+```
+
+ツール呼び出しは監査ログに記録され、インスタンス状態に永続化されます。結果は`context_in`やassertionsで`{_tools.fetch-price}`として参照できます。
+
 ### 検証ゲート
 
 各ステップの出力は2つのティアのチェックを通過します：
@@ -275,7 +305,7 @@ LLM Railのすべての保護機能 — ポリシー、シークレット、監�
 
 | レイヤー | 強制する内容 | 方法 |
 |---|---|---|
-| **Bashフック** | どのコマンドが実行可能か | PreToolUseがすべてのBash呼び出しをインターセプトし、ポリシー評価後にexit 2でブロック |
+| **Bashフック** | どのコマンドが実行可能か | PreToolUseがすべてのBash呼び出しをインターセプトし、ポリシー評価後にexit 2でブロック。env仲介がアクティブな場合、`updatedInput`でコマンドを`lrail bash`経由に透過的に書き換え |
 | **ファイルフック** | どのファイルにアクセス可能か | Read/Grepフックがシークレットファイルをブロック、ガードフックが`lrail.yml`をブロック |
 | **設定の可視性** | エージェントがルールを知っているか | `visible: false`がすべてのツールから設定を隠蔽 |
 | **Bashプロキシ** | ワークフロー固有の権限 | `lrail <id> bash`がプロジェクトポリシーの上にワークフローポリシーを追加 |
@@ -328,6 +358,7 @@ lrail <id> start                                      # 実行開始
 lrail <id> next --result '<json>'                     # ステップ結果の送信
 lrail <id> status                                     # 進捗確認
 lrail <id> bash '<command>'                           # プロキシ経由で実行
+lrail <id> tool <name> [--args '<json>']               # インスタンススコープツールを呼び出す
 lrail <id> policy generate                            # trailからポリシーを生成
 ```
 

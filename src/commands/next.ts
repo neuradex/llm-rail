@@ -90,8 +90,8 @@ export function runNext(id: string, resultJson: string): void {
   // Execute post-validation actions if defined on agentic step
   if (currentStep.actions && currentStep.actions.length > 0) {
     try {
-      const extracted = executeActions(currentStep.actions, { ...state.context, ...output });
-      Object.assign(output, extracted);
+      const actionResult = executeActions(currentStep.actions, { ...state.context, ...output });
+      Object.assign(output, actionResult.extracted);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Action failed in step '${currentStep.id}': ${message}`);

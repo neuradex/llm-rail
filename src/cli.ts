@@ -8,7 +8,7 @@ import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runBash } from "./commands/bash.js";
-import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyHasEnv, runPolicyCheckFile, runPolicyVisible } from "./commands/policy.js";
+import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
 import { runDocs } from "./commands/docs.js";
 import { runLog } from "./commands/log.js";
@@ -31,8 +31,6 @@ function usage(): never {
   lrail log [-n <count>] [-f] [--raw]                  Show command history
   lrail bash '<command>'                              Execute through global proxy
   lrail policy eval --command '<cmd>'                 Evaluate project policy
-  lrail policy has-env                                Check if env mediation is active
-  lrail policy check-file <path>                      Check file against env policy
   lrail wf list                                       List all workflows
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
@@ -107,17 +105,8 @@ if (target === "init") {
     process.exit(1);
   }
   runPolicyEval(cmd);
-} else if (target === "policy" && args[1] === "has-env") {
-  runPolicyHasEnv();
 } else if (target === "policy" && args[1] === "visible") {
   runPolicyVisible();
-} else if (target === "policy" && args[1] === "check-file") {
-  const filePath = args[2];
-  if (!filePath) {
-    console.error("Usage: lrail policy check-file <path>");
-    process.exit(1);
-  }
-  runPolicyCheckFile(filePath);
 } else if (target === "log") {
   const followFlag = args.includes("-f") || args.includes("--follow");
   const rawFlag = args.includes("--raw");

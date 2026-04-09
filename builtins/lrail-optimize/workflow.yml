@@ -22,7 +22,7 @@ steps:
     actions:
       - js: |
           const fs = require("fs");
-          const name = context.workflow_name;
+          const name = lrail.get("workflow_name");
           const paths = [
             "workflows/" + name + "/workflow.yml",
             "builtins/" + name + "/workflow.yml"
@@ -41,7 +41,6 @@ steps:
   # Step 2: Baseline measurement
   - id: baseline
     description: Measure baseline metrics
-    depends_on: snapshot-original
     instruction: |
       Measure the current performance of workflow '{{workflow_name}}':
 
@@ -108,7 +107,6 @@ steps:
 
   - id: optimize-programmatic
     description: Improve programmatic ratio
-    depends_on: baseline
     instruction: |
       Goal: Improve the programmatic step ratio of workflow '{{workflow_name}}'.
       Baseline: {baseline.programmatic_ratio} ({baseline.programmatic_steps}/{baseline.total_steps})
@@ -182,7 +180,7 @@ steps:
     actions:
       - js: |
           const fs = require("fs");
-          fs.writeFileSync(context.original_path, context.original_yaml);
+          fs.writeFileSync(lrail.get("original_path"), lrail.get("original_yaml"));
     tips:
       - Data filtering, sorting, and aggregation are good candidates for programmatic
       - Steps that require web search or subjective judgment should stay agentic
@@ -191,7 +189,6 @@ steps:
 
   - id: optimize-time
     description: Reduce execution time
-    depends_on: optimize-programmatic
     instruction: |
       Goal: Reduce the execution time of workflow '{{workflow_name}}'.
       Baseline: {baseline.execution_time_sec} seconds.
@@ -262,7 +259,7 @@ steps:
     actions:
       - js: |
           const fs = require("fs");
-          fs.writeFileSync(context.original_path, context.original_yaml);
+          fs.writeFileSync(lrail.get("original_path"), lrail.get("original_yaml"));
     tips:
       - Parallel execution of independent steps is the biggest time win
       - Reducing the number of agentic steps also reduces time (each agentic step has LLM overhead)
@@ -271,7 +268,6 @@ steps:
 
   - id: optimize-validation
     description: Reduce validation failure count
-    depends_on: optimize-time
     instruction: |
       Goal: Reduce validation failures in workflow '{{workflow_name}}'.
       Baseline: {baseline.validation_failure_count} failures.
@@ -342,7 +338,7 @@ steps:
     actions:
       - js: |
           const fs = require("fs");
-          fs.writeFileSync(context.original_path, context.original_yaml);
+          fs.writeFileSync(lrail.get("original_path"), lrail.get("original_yaml"));
     tips:
       - Common causes of rejection — missing required fields, wrong type, wrong field names
       - Adding JSON examples in tips dramatically reduces first-try failures
@@ -353,7 +349,6 @@ steps:
   # The skill orchestrator spawns 3 agents, each running the optimized variant.
   - id: verify-model-tier
     description: Verify minimum passing model tier (3-tier parallel)
-    depends_on: optimize-validation
     instruction: |
       Run the optimized workflow variant with 3 model tiers (Haiku, Sonnet, Opus) to determine the minimum passing model tier.
 
@@ -402,7 +397,6 @@ steps:
   - id: synthesize
     description: Produce final optimization report
     type: programmatic
-    depends_on: verify-model-tier
     context_in:
       baseline_programmatic_ratio: "{baseline.programmatic_ratio}"
       baseline_execution_time: "{baseline.execution_time_sec}"
@@ -421,21 +415,21 @@ steps:
       - js: |
           const report = {
             metrics_comparison: {
-              programmatic_ratio: { baseline: context.baseline_programmatic_ratio, optimized: context.new_programmatic_ratio },
-              execution_time_sec: { baseline: context.baseline_execution_time, optimized: context.new_execution_time },
-              validation_failure_count: { baseline: context.baseline_validation_failures, optimized: context.new_validation_failures },
-              min_passing_tier: { baseline: context.baseline_min_tier, optimized: context.min_passing_tier }
+              programmatic_ratio: { baseline: lrail.get("baseline_programmatic_ratio"), optimized: lrail.get("new_programmatic_ratio") },
+              execution_time_sec: { baseline: lrail.get("baseline_execution_time"), optimized: lrail.get("new_execution_time") },
+              validation_failure_count: { baseline: lrail.get("baseline_validation_failures"), optimized: lrail.get("new_validation_failures") },
+              min_passing_tier: { baseline: lrail.get("baseline_min_tier"), optimized: lrail.get("min_passing_tier") }
             },
             all_improved: (
-              context.new_programmatic_ratio >= context.baseline_programmatic_ratio &&
-              context.new_execution_time <= context.baseline_execution_time &&
-              context.new_validation_failures <= context.baseline_validation_failures &&
-              context.min_passing_tier <= context.baseline_min_tier
+              lrail.get("new_programmatic_ratio") >= lrail.get("baseline_programmatic_ratio") &&
+              lrail.get("new_execution_time") <= lrail.get("baseline_execution_time") &&
+              lrail.get("new_validation_failures") <= lrail.get("baseline_validation_failures") &&
+              lrail.get("min_passing_tier") <= lrail.get("baseline_min_tier")
             ),
             total_changes: [
-              ...(context.programmatic_changes || []).map(ch => ({...ch, direction: "programmatic"})),
-              ...(context.time_changes || []).map(ch => ({...ch, direction: "time"})),
-              ...(context.validation_changes || []).map(ch => ({...ch, direction: "validation"}))
+              ...(lrail.get("programmatic_changes") || []).map(ch => ({...ch, direction: "programmatic"})),
+              ...(lrail.get("time_changes") || []).map(ch => ({...ch, direction: "time"})),
+              ...(lrail.get("validation_changes") || []).map(ch => ({...ch, direction: "validation"}))
             ]
           };
           return report;

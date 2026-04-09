@@ -48,7 +48,6 @@ steps:
   - id: collect-financials
     description: Collect financial metrics
     instruction: "Collect financial metrics for each company: market_cap, PER, PBR, ROE, revenue_growth_pct"
-    depends_on: collect-companies
     context_in:
       companies: "{collect-companies.companies}"
     required_output:
@@ -102,12 +101,11 @@ steps:
   - id: screen-candidates
     type: programmatic
     description: "Apply quantitative screening: PER ≤ 15 AND ROE ≥ 10%. Separate into candidates and filtered_out."
-    depends_on: collect-financials
     context_in:
       financials: "{collect-financials.financials}"
     actions:
       - js: |
-          const financials = context.financials;
+          const financials = lrail.get("financials");
           const criteria = { per_max: 15, roe_min: 10 };
           const candidates = [];
           const filtered_out = [];
@@ -142,7 +140,6 @@ steps:
   - id: news-analysis
     description: Analyze recent news and sentiment
     instruction: "For each candidate (or nearest-miss if no candidates passed screening), collect recent news, IR highlights, and identify risk factors. Assess overall sentiment."
-    depends_on: screen-candidates
     context_in:
       candidates: "{screen-candidates.candidates}"
       nearest_miss: "{screen-candidates.nearest_miss}"
@@ -172,9 +169,6 @@ steps:
   - id: comparison-matrix
     description: Build comparison matrix
     instruction: "Build a competitive comparison matrix with all candidates on uniform dimensions."
-    depends_on:
-      - screen-candidates
-      - news-analysis
     context_in:
       candidates: "{screen-candidates.candidates}"
       nearest_miss: "{screen-candidates.nearest_miss}"
@@ -205,7 +199,6 @@ steps:
   - id: scoring
     description: Score candidates
     instruction: "Score each candidate with a composite score (0-100). Write bull case and bear case for each."
-    depends_on: comparison-matrix
     context_in:
       matrix: "{comparison-matrix.matrix}"
       analyses: "{news-analysis.analyses}"
@@ -236,7 +229,6 @@ steps:
   - id: portfolio-recommendation
     description: Portfolio recommendation
     instruction: "Produce a final portfolio recommendation with allocation ratios, reasoning, and risk disclaimer."
-    depends_on: scoring
     context_in:
       scored_candidates: "{scoring.scored_candidates}"
       candidates_count: "{screen-candidates.candidates_count}"

@@ -38,7 +38,6 @@ steps:
   - id: transform
     description: データ変換・クレンジング
     instruction: データ変換・クレンジング
-    depends_on: fetch
     context_in:
       data: "{fetch.raw_data}"
       schema: "{fetch.schema}"
@@ -65,7 +64,6 @@ steps:
   - id: report
     description: レポート生成
     instruction: "{{format}} 形式でレポート生成"
-    depends_on: transform
     context_in:
       data: "{transform.transformed_data}"
       dropped: "{transform.dropped_count}"

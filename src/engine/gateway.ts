@@ -61,8 +61,8 @@ export function findConfigFile(from?: string): string | null {
  * Load lrail.yml and normalize to LrailConfig.
  * Supports both flat (legacy) and nested formats:
  *
- * Flat (legacy):     { mode, default, rules, env }
- * Nested (current):  { policy: { mode, default, rules }, env }
+ * Flat (legacy):     { mode, default, rules }
+ * Nested (current):  { policy: { mode, default, rules } }
  */
 export function loadLrailConfig(): LrailConfig | null {
   const p = findConfigFile();
@@ -77,11 +77,7 @@ export function loadLrailConfig(): LrailConfig | null {
 
   // Flat (legacy) format: mode/rules at top level
   if (raw.mode || raw.rules) {
-    const { env, ...rest } = raw;
-    return {
-      policy: rest as unknown as PolicyDef,
-      ...(env ? { env: env as LrailConfig["env"] } : {}),
-    };
+    return { policy: raw as unknown as PolicyDef };
   }
 
   return raw as unknown as LrailConfig;

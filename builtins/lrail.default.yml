@@ -1,6 +1,5 @@
 # LLM Rail — Project Configuration
 # lrail docs concepts/policy   — modes, rules, pattern syntax
-# lrail docs concepts/secrets  — secret mediation
 
 # Controls agent access to this config file (Read/Edit/Write).
 # false (default): agents cannot see or modify this file.
@@ -47,9 +46,3 @@ policy:
         # Remove this rule if you set visible: true and want agents
         # to manage lrail.yml via shell commands as well.
         - regex: "lrail\\.yml"                   # any command referencing lrail.yml
-
-# Secret mediation — lrail docs concepts/secrets
-# env:
-#   secret_files: [.env, .env.local]
-#   inject: [CI_TOKEN]
-#   passthrough: [PATH, HOME, LANG]

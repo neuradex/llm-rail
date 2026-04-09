@@ -35,7 +35,6 @@ steps:
   - id: review
     description: レビューコメント作成
     instruction: レビューコメント作成
-    depends_on: analyze
     context_in:
       files: "{analyze.file_list}"
       score: "{analyze.complexity_score}"
@@ -60,7 +59,6 @@ steps:
   - id: summary
     description: レビューサマリー作成
     instruction: レビューサマリー作成
-    depends_on: review
     context_in:
       comments: "{review.comments}"
       severity: "{review.severity_counts}"

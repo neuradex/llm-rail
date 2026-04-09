@@ -39,6 +39,12 @@ Shows all commands executed through the hook (agent) and proxy (instance). Flags
 - `-f`: follow mode (watch for new entries)
 - `--raw`: machine-readable TSV output (timestamp, source, status, command)
 
+#### tool — call an instance-scoped tool
+```bash
+lrail <alias> tool <name> [--args '<json>']
+```
+Calls a tool defined in the workflow's `tools` section. The tool executes its actions with the full workflow context (params + step outputs + tool args) and returns the result as JSON. Tool calls are persisted to instance state and accessible via `{_tools.<name>}` in `context_in` and assertions.
+
 #### bash — execute shell commands through the proxy
 ```bash
 lrail <alias> bash '<command>'
@@ -67,7 +73,7 @@ Use this instead of running shell commands directly. The bash proxy:
 - Follow tips — they exist for a reason
 - Escape JSON properly (single quotes around JSON, escape internal quotes)
 - Use `bash` proxy for all shell commands — do NOT run raw shell commands
-- Do NOT run any lrail CLI commands other than start, next, and bash
+- Do NOT run any lrail CLI commands other than start, next, tool, and bash
 - If stuck on a concept, run `lrail docs <topic>` for guidance
 
 ### Orchestration

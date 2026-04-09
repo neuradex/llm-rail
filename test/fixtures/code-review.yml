@@ -23,7 +23,7 @@ steps:
   - id: review
     description: レビューコメント作成
     instruction: レビューコメント作成
-    depends_on: analyze
+
     required_output:
       - comments
       - severity_counts
@@ -35,7 +35,7 @@ steps:
   - id: summary
     description: レビューサマリー作成
     instruction: レビューサマリー作成
-    depends_on: review
+
     required_output:
       - verdict
       - summary_text

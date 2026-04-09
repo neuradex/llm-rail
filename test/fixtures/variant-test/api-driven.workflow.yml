@@ -28,6 +28,6 @@ steps:
   - id: extra-step
     description: Extra processing
     instruction: Extra processing step
-    depends_on: analyze
+
     required_output:
       - extra_data

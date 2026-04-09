@@ -188,6 +188,36 @@ steps:
 
 The power is in mixing them. Fetch data programmatically, analyze with an agent, post results programmatically. The deterministic parts never hallucinate because no LLM is involved.
 
+### Instance-scoped tools
+
+Workflows can define reusable tools that agents call during any step. Tools execute actions with the full workflow context (params + step outputs + tool args) and persist results for later reference.
+
+```yaml
+tools:
+  fetch-price:
+    description: "Fetch current stock price"
+    params:
+      symbol:
+        type: string
+        required: true
+    actions:
+      - shell: "curl -s https://api.example.com/price/{{symbol}}"
+        extract: { price: "." }
+
+steps:
+  - id: analyze
+    instruction: "Use fetch-price tool to get prices, then analyze trends"
+    required_output: [analysis]
+```
+
+The agent calls tools via CLI during execution:
+
+```bash
+lrail <id> tool fetch-price --args '{"symbol": "AAPL"}'
+```
+
+Tool calls are audited and persisted to instance state. Results are accessible via `{_tools.fetch-price}` in `context_in` and assertions.
+
 ### Validation gates
 
 Each step's output passes through two tiers of checks:
@@ -275,7 +305,7 @@ All of LLM Rail's protections — policy, secrets, audit, self-protection — co
 
 | Layer | What it enforces | How |
 |---|---|---|
-| **Bash hook** | Which commands can run | PreToolUse intercepts every Bash call, evaluates policy, blocks with exit 2 |
+| **Bash hook** | Which commands can run | PreToolUse intercepts every Bash call, evaluates policy, blocks with exit 2. When env mediation is active, commands are transparently rewritten via `updatedInput` to go through `lrail bash` |
 | **File hooks** | Which files can be accessed | Read/Grep hooks block secret files; guard hook blocks `lrail.yml` |
 | **Config visibility** | Whether agents know the rules | `visible: false` hides the config from all tools |
 | **Bash proxy** | Workflow-specific permissions | `lrail <id> bash` adds workflow policy on top of project policy |
@@ -328,6 +358,7 @@ lrail <id> start                                      # Begin execution
 lrail <id> next --result '<json>'                     # Submit step result
 lrail <id> status                                     # Check progress
 lrail <id> bash '<command>'                           # Execute through proxy
+lrail <id> tool <name> [--args '<json>']               # Call an instance-scoped tool
 lrail <id> policy generate                            # Generate policy from trail
 ```
 

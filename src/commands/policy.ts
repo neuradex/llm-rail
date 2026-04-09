@@ -5,7 +5,6 @@ import { loadWorkflow } from "../engine/workflow.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
 import { checkCommand, loadLrailConfig } from "../engine/gateway.js";
-import { resolveAllSecrets, matchSecretFilePath, checkFileForSecrets } from "../engine/secrets.js";
 
 interface PolicyLogEntry {
   timestamp: string;
@@ -34,7 +33,6 @@ export function runPolicyGenerate(instanceId: string): void {
     if (!line.trim()) continue;
     try {
       const entry = JSON.parse(line) as PolicyLogEntry;
-      // Extract the base command (first word)
       const base = entry.command.split(/\s+/)[0];
       commands.add(`${base} *`);
     } catch {
@@ -78,7 +76,6 @@ export function runPolicyCheck(workflowName: string, command: string): void {
 
 /**
  * Evaluate a command against the project-level policy (lrail.yml).
- * Used by the plugin hook for main agent enforcement.
  * Exit code: 0 = allow, 1 = deny.
  */
 export function runPolicyEval(command: string): void {
@@ -94,26 +91,6 @@ export function runPolicyEval(command: string): void {
 }
 
 /**
- * Check if env mediation is configured in project policy.
- * Exit code: 0 = env mediation is active (inject or secret_files), 1 = not configured.
- */
-export function runPolicyHasEnv(): void {
-  const config = loadLrailConfig();
-  const env = config?.env;
-  if (
-    (env?.inject && env.inject.length > 0) ||
-    (env?.secret_files && env.secret_files.length > 0)
-  ) {
-    process.exit(0);
-  }
-  process.exit(1);
-}
-
-/**
- * Check if a file is blocked by env policy (secret_files path match or content scan).
- * Exit code: 0 = allowed, 1 = blocked.
- */
-/**
  * Check if lrail.yml is visible to agents.
  * Exit code: 0 = visible (reading allowed), 1 = not visible (reading blocked).
  */
@@ -123,29 +100,4 @@ export function runPolicyVisible(): void {
     process.exit(0);
   }
   process.exit(1);
-}
-
-export function runPolicyCheckFile(filePath: string): void {
-  const config = loadLrailConfig();
-  if (!config?.env) {
-    process.exit(0);
-  }
-
-  // Check secret_files path match
-  if (config.env.secret_files && matchSecretFilePath(filePath, config.env.secret_files)) {
-    console.error(JSON.stringify({ allowed: false, reason: `Path matches secret_files: ${filePath}` }));
-    process.exit(1);
-  }
-
-  // Check file contents for secret values (inject + secret_files-derived)
-  const secrets = resolveAllSecrets(config.env);
-  if (secrets.size > 0) {
-    const result = checkFileForSecrets(filePath, secrets);
-    if (result.blocked) {
-      console.error(JSON.stringify({ allowed: false, reason: result.reason }));
-      process.exit(1);
-    }
-  }
-
-  process.exit(0);
 }

@@ -2,9 +2,8 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { LrailGoto } from "../types.js";
 import type { ActionDef, JsActionDef, ShellActionDef } from "../types.js";
-import { loadLrailConfig } from "./gateway.js";
-import { buildSanitizedEnv, resolveAllSecrets, redactSecrets, mergeEnvPolicies } from "./secrets.js";
 
 // ── Type guards ──
 
@@ -16,6 +15,7 @@ function isShellAction(a: ActionDef): a is ShellActionDef { return "shell" in a;
 export interface ActionResult {
   stdout: string;
   extracted: Record<string, unknown>;
+  goto?: LrailGoto;
 }
 
 /** Data piped from one action to the next */
@@ -53,10 +53,14 @@ export function resolveActionCommand(cmd: string, context: Record<string, unknow
 /**
  * Execute a `js:` action.
  *
- * The user's code receives `context` as a variable and uses `return` to
- * produce output. The framework handles serialization on both ends.
+ * The user's code receives `lrail` builtin with get/set/goto methods.
+ * - lrail.get()       → entire context
+ * - lrail.get("key")  → context[key]
+ * - lrail.set({k: v}) → merge into context (side effect)
+ * - lrail.goto("id")  → return LrailGoto (flow control)
  *
- * Context is always passed via a temp file — no env var size limits.
+ * Context is passed via a temp file — no env var size limits.
+ * The lrail.set() mutations are written back to a separate file.
  */
 function executeJsAction(
   action: JsActionDef,
@@ -69,19 +73,45 @@ function executeJsAction(
   }
 
   const ctxFile = tmpFile("ctx", ".json");
+  const mutFile = tmpFile("mut", ".json");
   const scriptFile = tmpFile("js", ".mjs");
 
   try {
     fs.writeFileSync(ctxFile, JSON.stringify(ctx), "utf-8");
+    fs.writeFileSync(mutFile, "{}", "utf-8");
 
     const wrapper = `
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
 import { join, resolve, dirname, basename } from "node:path";
-const context = JSON.parse(readFileSync(${JSON.stringify(ctxFile)}, "utf8"));
+
+const __ctx = JSON.parse(readFileSync(${JSON.stringify(ctxFile)}, "utf8"));
+const __mutations = {};
+const __GOTO_BRAND = "__lrail_goto__";
+
+const lrail = {
+  get(key) {
+    if (key === undefined) return { ...__ctx };
+    return __ctx[key];
+  },
+  set(obj) {
+    if (typeof obj !== "object" || obj === null) throw new Error("lrail.set() requires an object");
+    Object.assign(__ctx, obj);
+    Object.assign(__mutations, obj);
+  },
+  goto(target) {
+    if (typeof target !== "string") throw new Error("lrail.goto() requires a step ID string");
+    return { __brand: __GOTO_BRAND, target };
+  },
+};
+
 const __result = await (async () => {
 ${action.js}
 })();
+
+// Write mutations back
+writeFileSync(${JSON.stringify(mutFile)}, JSON.stringify(__mutations));
+
 if (__result !== undefined && __result !== null) {
   process.stdout.write(JSON.stringify(__result));
 }
@@ -94,27 +124,41 @@ if (__result !== undefined && __result !== null) {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    // Read back mutations from lrail.set()
+    const mutations: Record<string, unknown> = JSON.parse(fs.readFileSync(mutFile, "utf-8"));
+
     const extracted: Record<string, unknown> = {};
     const trimmed = stdout.trim();
+    let goto: LrailGoto | undefined;
+
     if (trimmed) {
       try {
         const parsed = JSON.parse(trimmed);
         if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-          Object.assign(extracted, parsed);
+          if (parsed.__brand === "__lrail_goto__" && typeof parsed.target === "string") {
+            goto = new LrailGoto(parsed.target);
+          } else {
+            Object.assign(extracted, parsed);
+          }
         }
       } catch {
         // Non-JSON return — ignore
       }
     }
 
-    return { stdout: trimmed, extracted };
+    // Merge lrail.set() mutations into extracted
+    Object.assign(extracted, mutations);
+
+    return { stdout: trimmed, extracted, goto };
   } catch (e: unknown) {
-    const err = e as { stderr?: string; status?: number };
+    const err = e as { stderr?: string; status?: number; message?: string };
     const stderr = err.stderr?.trim() || "";
-    const meaningful = stderr.split("\n").find(l => !l.startsWith("    at ") && l.trim() !== "") || stderr;
-    throw new Error(`js action failed: ${meaningful}`);
+    const lines = stderr.split("\n");
+    const meaningful = lines.filter(l => !l.startsWith("    at ") && l.trim() !== "").join("\n");
+    throw new Error(`js action failed:\n${meaningful || err.message || "unknown error"}`);
   } finally {
     cleanupFile(ctxFile);
+    cleanupFile(mutFile);
     cleanupFile(scriptFile);
   }
 }
@@ -136,15 +180,7 @@ function executeShellAction(
 
   const contextJson = JSON.stringify(context);
   let ctxFile: string | undefined;
-
-  // Env mediation: use sanitized env with secrets injected when active
-  const config = loadLrailConfig();
-  const envPolicy = config?.env ? mergeEnvPolicies(config.env) : undefined;
-  const secretValues = envPolicy ? resolveAllSecrets(envPolicy) : new Map<string, string>();
-  const baseEnv = envPolicy
-    ? buildSanitizedEnv(envPolicy, secretValues)
-    : { ...process.env } as Record<string, string>;
-  const env: Record<string, string> = { ...baseEnv };
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
 
   if (contextJson.length <= 8192) {
     env.CONTEXT = contextJson;
@@ -181,7 +217,7 @@ function executeShellAction(
       }
     }
 
-    const trimmed = secretValues.size > 0 ? redactSecrets(stdout.trim(), secretValues) : stdout.trim();
+    const trimmed = stdout.trim();
     return { stdout: trimmed, extracted };
   } finally {
     cleanupFile(ctxFile);
@@ -205,6 +241,11 @@ export function executeAction(
 
 // ── Sequential executor with pipe flow ──
 
+export interface ActionsResult {
+  extracted: Record<string, unknown>;
+  goto?: LrailGoto;
+}
+
 /**
  * Execute actions sequentially with pipe-style data flow.
  *
@@ -212,11 +253,12 @@ export function executeAction(
  * - `shell:` stdout flows as stdin to the next `shell:` action,
  *   or as `context.stdout` to the next `js:` action
  * - `extract:` overrides default pipe behavior
+ * - If any action returns lrail.goto(), the chain stops and goto is propagated
  */
 export function executeActions(
   actions: ActionDef[],
   context: Record<string, unknown>,
-): Record<string, unknown> {
+): ActionsResult {
   const accumulated: Record<string, unknown> = {};
   const runningContext = { ...context };
   let pipe: PipeInput | undefined;
@@ -226,8 +268,12 @@ export function executeActions(
     Object.assign(accumulated, result.extracted);
     Object.assign(runningContext, result.extracted);
 
+    if (result.goto) {
+      return { extracted: accumulated, goto: result.goto };
+    }
+
     pipe = { stdout: result.stdout };
   }
 
-  return accumulated;
+  return { extracted: accumulated };
 }

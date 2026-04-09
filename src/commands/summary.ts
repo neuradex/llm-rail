@@ -1,5 +1,4 @@
 import { loadWorkflow } from "../engine/workflow.js";
-import { normalizeDeps } from "../engine/workflow.js";
 import { resolveTemplate } from "../engine/context.js";
 import type { WorkflowDef, StepDef } from "../types.js";
 
@@ -94,9 +93,6 @@ export function runSummary(workflowName: string, rawParams?: string[], variant?:
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i];
     const stepType = step.type || "agentic";
-    const deps = normalizeDeps(step.depends_on);
-    const depStr = deps.length > 0 ? `  ${c.dim}← ${deps.join(", ")}${c.reset}` : "";
-
     // Step type color
     const typeColor = stepType === "programmatic" ? c.blue : c.magenta;
 
@@ -107,7 +103,7 @@ export function runSummary(workflowName: string, rawParams?: string[], variant?:
       accStr = `  ${c.cyan}accumulate(${parts.join(", ")})${c.reset}`;
     }
 
-    console.log(`  ${c.bold}${i + 1}. ${step.id}${c.reset}  ${typeColor}[${stepType}]${c.reset}${accStr}${depStr}`);
+    console.log(`  ${c.bold}${i + 1}. ${step.id}${c.reset}  ${typeColor}[${stepType}]${c.reset}${accStr}`);
 
     // Required output
     if (step.required_output && step.required_output.length > 0) {

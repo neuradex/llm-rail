@@ -1,5 +1,4 @@
-import type { WorkflowDef, InstanceState } from "../types.js";
-import { isReady } from "./dependency.js";
+import type { WorkflowDef, InstanceState, LrailGoto } from "../types.js";
 import { executeActions } from "./actions.js";
 import { appendLog } from "../audit/logger.js";
 import { saveInstance } from "./state.js";
@@ -11,6 +10,9 @@ import { buildStepContext, collectStepOutputs } from "./context.js";
  * Executes actions for each programmatic step and auto-completes them.
  * Stops when an agentic step is found or the workflow is complete.
  *
+ * Steps execute in array order. Programmatic steps can return lrail.goto()
+ * to jump to any step — the target and all subsequent steps are reset to pending.
+ *
  * Returns the index of the next agentic step (-1 if workflow complete)
  * and a list of auto-completed step IDs.
  */
@@ -21,7 +23,7 @@ export function advanceThrough(
   const autoCompleted: string[] = [];
 
   while (true) {
-    // Find next pending step with ready deps
+    // Find next pending step in array order
     const nextIndex = findNextPending(def, state);
     if (nextIndex === -1) {
       return { reachedStep: -1, autoCompleted };
@@ -36,20 +38,25 @@ export function advanceThrough(
 
     // Programmatic step: execute actions and auto-complete
     try {
-      // Resolve context_in for programmatic steps
       const stepOutputs = collectStepOutputs(state.steps, state.context);
       const stepContext = buildStepContext(step, state.params || {}, stepOutputs);
       const fullContext = { ...(state.params || {}), ...state.context, ...stepContext };
-      const extracted = executeActions(step.actions || [], fullContext);
+      const result = executeActions(step.actions || [], fullContext);
 
       state.steps[step.id].status = "completed";
-      state.steps[step.id].output = extracted;
+      state.steps[step.id].output = result.extracted;
       state.steps[step.id].completed_at = nowISO();
-      Object.assign(state.context, extracted);
+      Object.assign(state.context, result.extracted);
       state.current_step = nextIndex;
 
-      appendLog(state.workflow_name, state.id, "step_auto_completed", step.id, { output: extracted });
+      appendLog(state.workflow_name, state.id, "step_auto_completed", step.id, { output: result.extracted });
       autoCompleted.push(step.id);
+
+      // Handle goto: reset target + all steps after it, then continue loop
+      if (result.goto) {
+        applyGoto(def, state, result.goto);
+        appendLog(state.workflow_name, state.id, "goto", step.id, { target: result.goto.target });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       state.status = "error";
@@ -60,12 +67,33 @@ export function advanceThrough(
   }
 }
 
+/**
+ * Apply a goto: reset the target step and all steps after it to pending.
+ * Context is NOT cleared — step outputs overwrite naturally on re-execution.
+ */
+function applyGoto(def: WorkflowDef, state: InstanceState, goto: LrailGoto): void {
+  const targetIndex = def.steps.findIndex((s) => s.id === goto.target);
+  if (targetIndex === -1) {
+    throw new Error(`goto target '${goto.target}' not found in workflow`);
+  }
+
+  // Reset target step and all steps after it
+  for (let i = targetIndex; i < def.steps.length; i++) {
+    const step = def.steps[i];
+    const ss = state.steps[step.id];
+    if (ss) {
+      ss.status = "pending";
+      ss.output = undefined;
+      ss.completed_at = undefined;
+    }
+  }
+}
+
 function findNextPending(def: WorkflowDef, state: InstanceState): number {
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i];
     const ss = state.steps[step.id];
     if (ss.status !== "pending") continue;
-    if (!isReady(def, step.id, state.steps)) continue;
     return i;
   }
   return -1;

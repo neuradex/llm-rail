@@ -60,16 +60,20 @@ export interface PolicyDef {
   rules?: PolicyRule[];
 }
 
-export interface EnvPolicy {
-  inject?: string[];
-  passthrough?: string[];
-  secret_files?: string[];
-}
-
 export interface LrailConfig {
   visible?: boolean;
   policy?: PolicyDef;
-  env?: EnvPolicy;
+}
+
+// ── Flow Control ──
+
+/**
+ * Branded class returned by lrail.goto() inside JS actions.
+ * The engine detects this via instanceof to distinguish from regular output.
+ */
+export class LrailGoto {
+  readonly __brand = "lrail_goto" as const;
+  constructor(public readonly target: string) {}
 }
 
 // ── Workflow Phase ──
@@ -95,7 +99,7 @@ export interface StepDef {
   type?: "programmatic" | "agentic";
   description?: string;
   instruction?: string;
-  depends_on?: string | string[];
+
   required_output?: string[];
   validation?: AssertionRule[];
   assertions?: AssertionRule[];

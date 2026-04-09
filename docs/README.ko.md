@@ -188,6 +188,36 @@ steps:
 
 혼합하는 것이 핵심입니다. 데이터를 programmatic으로 가져오고, 에이전트로 분석하고, 결과를 programmatic으로 전송합니다. 결정적 부분은 LLM이 관여하지 않기 때문에 환각이 불가능합니다.
 
+### 인스턴스 스코프 도구
+
+워크플로우에 재사용 가능한 도구를 정의할 수 있습니다. 에이전트가 스텝 실행 중에 호출하며, 전체 워크플로우 컨텍스트(params + 스텝 출력 + 도구 인자)로 액션을 실행하고 결과를 저장합니다.
+
+```yaml
+tools:
+  fetch-price:
+    description: "현재 주가 조회"
+    params:
+      symbol:
+        type: string
+        required: true
+    actions:
+      - shell: "curl -s https://api.example.com/price/{{symbol}}"
+        extract: { price: "." }
+
+steps:
+  - id: analyze
+    instruction: "fetch-price 도구로 가격을 가져온 후 추세를 분석"
+    required_output: [analysis]
+```
+
+에이전트는 실행 중 CLI로 도구를 호출합니다:
+
+```bash
+lrail <id> tool fetch-price --args '{"symbol": "AAPL"}'
+```
+
+도구 호출은 감사 로그에 기록되고 인스턴스 상태에 저장됩니다. 결과는 `context_in`과 assertions에서 `{_tools.fetch-price}`로 참조할 수 있습니다.
+
 ### 검증 게이트
 
 각 스텝의 출력은 두 단계의 검사를 거칩니다:
@@ -275,7 +305,7 @@ LLM Rail의 모든 보호 기능 — 정책, 시크릿, 감사, 자체 보호 �
 
 | 레이어 | 강제하는 것 | 방법 |
 |---|---|---|
-| **Bash 훅** | 어떤 명령이 실행 가능한지 | PreToolUse가 모든 Bash 호출을 가로채 정책 평가 후 exit 2로 차단 |
+| **Bash 훅** | 어떤 명령이 실행 가능한지 | PreToolUse가 모든 Bash 호출을 가로채 정책 평가 후 exit 2로 차단. env 중재 활성 시 `updatedInput`으로 명령을 `lrail bash`를 통하도록 투명하게 재작성 |
 | **파일 훅** | 어떤 파일에 접근 가능한지 | Read/Grep 훅이 시크릿 파일 차단; 가드 훅이 `lrail.yml` 차단 |
 | **설정 가시성** | 에이전트가 규칙을 아는지 | `visible: false`가 모든 도구에서 설정 숨김 |
 | **Bash 프록시** | 워크플로우별 권한 | `lrail <id> bash`가 프로젝트 정책 위에 워크플로우 정책 추가 |
@@ -328,6 +358,7 @@ lrail <id> start                                      # 실행 시작
 lrail <id> next --result '<json>'                     # 스텝 결과 제출
 lrail <id> status                                     # 진행 상황 확인
 lrail <id> bash '<command>'                           # 프록시를 통해 실행
+lrail <id> tool <name> [--args '<json>']               # 인스턴스 스코프 도구 호출
 lrail <id> policy generate                            # trail에서 정책 생성
 ```
 

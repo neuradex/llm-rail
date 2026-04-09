@@ -59,5 +59,5 @@ export function runInit(): void {
   console.log("\nNext steps:");
   console.log("  lrail docs                  Browse documentation");
   console.log("  /llm-rail:design            Design a workflow from a task description");
-  console.log("  Edit lrail.yml              Configure policy & secret mediation");
+  console.log("  Edit lrail.yml              Configure policy");
 }

@@ -11,7 +11,7 @@ steps:
     type: programmatic
     actions:
       - js: |
-          const endpoint = context.api_endpoint || "https://api.example.com";
+          const endpoint = lrail.get("api_endpoint") || "https://api.example.com";
           return {
             companies: [
               { ticker: "6723.T", company_name: "Renesas Electronics", exchange: "TSE" },

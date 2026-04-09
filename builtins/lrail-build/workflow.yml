@@ -67,7 +67,6 @@ steps:
 
       Save to `workflows/{{output_name}}/workflow.yml`, then validate with `lrail wf {{output_name}} validate`.
       Fix any validation errors before submitting.
-    depends_on: design
     context_in:
       step_plan: "{design.step_plan}"
     required_output:
@@ -109,7 +108,6 @@ steps:
 
       Bug fixes are expected. Requirement changes should be a last resort —
       exhaust other approaches first (better data sources, retry logic, etc.).
-    depends_on: generate-yaml
     context_in:
       workflow_yaml: "{generate-yaml.workflow_yaml}"
     required_output:

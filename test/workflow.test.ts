@@ -9,7 +9,7 @@ import { validateStepOutput, runAssertions } from "../src/engine/validator.js";
 import { pickTips } from "../src/engine/tip-pool.js";
 import { generateId } from "../src/util.js";
 import { resolveTemplate, buildStepContext, collectStepOutputs } from "../src/engine/context.js";
-import { collectDownstream, isReady } from "../src/engine/dependency.js";
+import { collectDownstream } from "../src/engine/dependency.js";
 
 // ── validateWorkflowDef ──
 
@@ -19,20 +19,7 @@ describe("validateWorkflowDef", () => {
       name: "test",
       steps: [
         { id: "s1", instruction: "Step 1", required_output: ["a"] },
-        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
-      ],
-    };
-    const errors = validateWorkflowDef(def);
-    assert.equal(errors.length, 0);
-  });
-
-  it("accepts multiple depends_on", () => {
-    const def: WorkflowDef = {
-      name: "test",
-      steps: [
-        { id: "s1", instruction: "Step 1", required_output: ["a"] },
         { id: "s2", instruction: "Step 2", required_output: ["b"] },
-        { id: "s3", instruction: "Step 3", depends_on: ["s1", "s2"], required_output: ["c"] },
       ],
     };
     const errors = validateWorkflowDef(def);
@@ -51,41 +38,6 @@ describe("validateWorkflowDef", () => {
     assert.ok(errors.some((e) => e.includes("Duplicate")));
   });
 
-  it("rejects invalid depends_on reference", () => {
-    const def: WorkflowDef = {
-      name: "test",
-      steps: [
-        { id: "s1", instruction: "Step 1", depends_on: "nonexistent", required_output: ["a"] },
-      ],
-    };
-    const errors = validateWorkflowDef(def);
-    assert.ok(errors.some((e) => e.includes("unknown step")));
-  });
-
-  it("rejects invalid depends_on in array form", () => {
-    const def: WorkflowDef = {
-      name: "test",
-      steps: [
-        { id: "s1", instruction: "Step 1", required_output: ["a"] },
-        { id: "s2", instruction: "Step 2", depends_on: ["s1", "bad"], required_output: ["b"] },
-      ],
-    };
-    const errors = validateWorkflowDef(def);
-    assert.ok(errors.some((e) => e.includes("unknown step 'bad'")));
-  });
-
-  it("detects cycles", () => {
-    const def: WorkflowDef = {
-      name: "test",
-      steps: [
-        { id: "s1", instruction: "Step 1", depends_on: "s2", required_output: ["a"] },
-        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
-      ],
-    };
-    const errors = validateWorkflowDef(def);
-    assert.ok(errors.some((e) => e.includes("Cycle")));
-  });
-
   it("rejects empty steps", () => {
     const def: WorkflowDef = { name: "test", steps: [] };
     const errors = validateWorkflowDef(def);
@@ -100,7 +52,6 @@ describe("validateWorkflowDef", () => {
         {
           id: "s2",
           instruction: "Step 2",
-          depends_on: "s1",
           required_output: ["b"],
           context_in: { data: "{unknown.field}" },
         },
@@ -662,46 +613,29 @@ describe("context resolution", () => {
 // ── Dependency ──
 
 describe("dependency", () => {
-  it("collectDownstream finds cascade targets", () => {
-    const def: WorkflowDef = {
-      name: "test",
-      steps: [
-        { id: "s1", instruction: "1", required_output: ["a"] },
-        { id: "s2", instruction: "2", depends_on: "s1", required_output: ["b"] },
-        { id: "s3", instruction: "3", depends_on: "s2", required_output: ["c"] },
-        { id: "s4", instruction: "4", required_output: ["d"] },
-      ],
-    };
-    const downstream = collectDownstream(def, "s1");
-    assert.deepEqual(downstream.sort(), ["s2", "s3"]);
-  });
-
-  it("isReady checks all dependencies", () => {
+  it("collectDownstream returns all steps after target in array order", () => {
     const def: WorkflowDef = {
       name: "test",
       steps: [
         { id: "s1", instruction: "1", required_output: ["a"] },
         { id: "s2", instruction: "2", required_output: ["b"] },
-        { id: "s3", instruction: "3", depends_on: ["s1", "s2"], required_output: ["c"] },
+        { id: "s3", instruction: "3", required_output: ["c"] },
+        { id: "s4", instruction: "4", required_output: ["d"] },
       ],
     };
-    const steps: InstanceState["steps"] = {
-      s1: { status: "completed" },
-      s2: { status: "pending" },
-      s3: { status: "pending" },
-    };
-    assert.equal(isReady(def, "s3", steps), false);
-
-    steps.s2.status = "completed";
-    assert.equal(isReady(def, "s3", steps), true);
+    const downstream = collectDownstream(def, "s1");
+    assert.deepEqual(downstream, ["s2", "s3", "s4"]);
   });
 
-  it("isReady returns true for steps with no dependencies", () => {
+  it("collectDownstream returns empty for last step", () => {
     const def: WorkflowDef = {
       name: "test",
-      steps: [{ id: "s1", instruction: "1", required_output: ["a"] }],
+      steps: [
+        { id: "s1", instruction: "1", required_output: ["a"] },
+        { id: "s2", instruction: "2", required_output: ["b"] },
+      ],
     };
-    assert.equal(isReady(def, "s1", { s1: { status: "pending" } }), true);
+    assert.deepEqual(collectDownstream(def, "s2"), []);
   });
 });
 
@@ -872,7 +806,6 @@ describe("E2E with params and context_in", () => {
           id: "step2",
           description: "Process result",
           instruction: "Process result",
-          depends_on: "step1",
           context_in: { data: "{step1.result}" },
           required_output: ["summary"],
           assertions: [{ field: "summary", op: "min_length", value: 5 }],
@@ -941,8 +874,8 @@ describe("reset cascade", () => {
       name: "reset-test",
       steps: [
         { id: "s1", instruction: "Step 1", required_output: ["a"] },
-        { id: "s2", instruction: "Step 2", depends_on: "s1", required_output: ["b"] },
-        { id: "s3", instruction: "Step 3", depends_on: "s2", required_output: ["c"] },
+        { id: "s2", instruction: "Step 2", required_output: ["b"] },
+        { id: "s3", instruction: "Step 3", required_output: ["c"] },
       ],
     };
     fs.writeFileSync(
@@ -1029,7 +962,6 @@ describe("mixed step types", () => {
         {
           id: "post-process",
           type: "programmatic",
-          depends_on: "analyze",
           actions: [
             { shell: `echo '{"processed": true}'`, extract: { processed: "processed" } },
           ],
@@ -1037,7 +969,6 @@ describe("mixed step types", () => {
         {
           id: "review",
           instruction: "Review results",
-          depends_on: "post-process",
           required_output: ["verdict"],
         },
       ],
@@ -1108,7 +1039,7 @@ describe("mixed step types", () => {
       name: "all-prog",
       steps: [
         { id: "s1", type: "programmatic", actions: [{ shell: `echo '{"a":1}'`, extract: { a: "a" } }] },
-        { id: "s2", type: "programmatic", depends_on: "s1", actions: [{ shell: `echo '{"b":2}'`, extract: { b: "b" } }] },
+        { id: "s2", type: "programmatic", actions: [{ shell: `echo '{"b":2}'`, extract: { b: "b" } }] },
       ],
     };
     fs.writeFileSync(

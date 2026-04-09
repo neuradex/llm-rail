@@ -37,7 +37,7 @@ describe("js: action — basic", () => {
 
   it("context object has correct data", () => {
     const result = executeAction(
-      { js: `return { got: context.myKey };` },
+      { js: `return { got: lrail.get("myKey") };` },
       { myKey: "injected-value" },
     );
     assert.equal(result.extracted.got, "injected-value");
@@ -47,7 +47,7 @@ describe("js: action — basic", () => {
     // Build a context object that serializes to > 8192 bytes
     const bigString = "x".repeat(9000);
     const result = executeAction(
-      { js: `return { len: context.big.length };` },
+      { js: `return { len: lrail.get("big").length };` },
       { big: bigString },
     );
     assert.equal(result.extracted.len, 9000);
@@ -99,15 +99,13 @@ describe("js: action — basic", () => {
     assert.deepEqual(result.extracted, {});
   });
 
-  it("context.stdout available from previous shell action via pipe", () => {
-    // Simulate a pipe where previous shell emitted "pipe-data"
-    // by passing it explicitly through executeActions
+  it("lrail.get('stdout') available from previous shell action via pipe", () => {
     const actions = [
       { shell: `echo pipe-data` },
-      { js: `return { received: context.stdout };` },
+      { js: `return { received: lrail.get("stdout") };` },
     ];
     const result = executeActions(actions, {});
-    assert.equal(result.received, "pipe-data");
+    assert.equal(result.extracted.received, "pipe-data");
   });
 });
 
@@ -147,13 +145,13 @@ describe("shell: action — basic", () => {
 // ── Pipe flow (executeActions) ──
 
 describe("executeActions — pipe flow", () => {
-  it("shell: → js: — stdout flows as context.stdout", () => {
+  it("shell: → js: — stdout flows via lrail.get", () => {
     const actions = [
       { shell: `echo upstream-output` },
-      { js: `return { piped: context.stdout };` },
+      { js: `return { piped: lrail.get("stdout") };` },
     ];
     const result = executeActions(actions, {});
-    assert.equal(result.piped, "upstream-output");
+    assert.equal(result.extracted.piped, "upstream-output");
   });
 
   it("js: → shell: — return value merged into context, available via {{field}}", () => {
@@ -162,47 +160,41 @@ describe("executeActions — pipe flow", () => {
       { shell: `echo {{value}}` },
     ];
     const result = executeActions(actions, {});
-    // The shell stdout should contain the value resolved from context
-    // result contains what was extracted; check stdout via a third action
     const actions2 = [
       { js: `return { value: "from-js" };` },
       { shell: `echo {{value}}`, extract: { got: "got" } },
     ];
-    // Just verify no crash and extracted fields propagate
     const r2 = executeActions(actions2, {});
-    // extract finds nothing (stdout is "from-js", not JSON), which is fine
     assert.ok(typeof r2 === "object");
   });
 
   it("js: → js: — return value merged into context for next js action", () => {
     const actions = [
       { js: `return { x: 10 };` },
-      { js: `return { doubled: context.x * 2 };` },
+      { js: `return { doubled: lrail.get("x") * 2 };` },
     ];
     const result = executeActions(actions, {});
-    assert.equal(result.x, 10);
-    assert.equal(result.doubled, 20);
+    assert.equal(result.extracted.x, 10);
+    assert.equal(result.extracted.doubled, 20);
   });
 
   it("shell: → shell: — stdout flows as stdin to next shell action", () => {
     const actions = [
       { shell: `echo '{"key": "piped-value"}'` },
-      // Read from stdin in the second shell action
       { shell: `cat`, extract: { key: "key" } },
     ];
     const result = executeActions(actions, {});
-    assert.equal(result.key, "piped-value");
+    assert.equal(result.extracted.key, "piped-value");
   });
 
   it("three-action chain: shell: → js: → shell:", () => {
     const actions = [
       { shell: `echo initial` },
-      { js: `return { step2: "processed-" + context.stdout };` },
+      { js: `return { step2: "processed-" + lrail.get("stdout") };` },
       { shell: `echo {{step2}}` },
     ];
-    // Verify no crash and chain completes
     const result = executeActions(actions, {});
-    assert.equal(result.step2, "processed-initial");
+    assert.equal(result.extracted.step2, "processed-initial");
   });
 });
 
@@ -222,8 +214,8 @@ describe("executeActions — sequential accumulation (existing coverage)", () =>
     ];
 
     const result = executeActions(actions, {});
-    assert.equal(result.x, 10);
-    assert.equal(result.y, 20);
+    assert.equal(result.extracted.x, 10);
+    assert.equal(result.extracted.y, 20);
   });
 
   it("later actions see earlier extractions in context", () => {
@@ -233,13 +225,13 @@ describe("executeActions — sequential accumulation (existing coverage)", () =>
         extract: { val: "val" },
       },
       {
-        js: `return { got: context.val };`,
+        js: `return { got: lrail.get("val") };`,
       },
     ];
 
     const result = executeActions(actions, {});
-    assert.equal(result.val, "from_first");
-    assert.equal(result.got, "from_first");
+    assert.equal(result.extracted.val, "from_first");
+    assert.equal(result.extracted.got, "from_first");
   });
 });
 
@@ -274,7 +266,7 @@ describe("validateWorkflowDef — action validation", () => {
   it("accepts mixed js: and shell: actions in one step", () => {
     const def = makeProgStep([
       { shell: `echo '{"raw": "data"}'` },
-      { js: `return { processed: context.stdout };` },
+      { js: `return { processed: lrail.get("stdout") };` },
     ]);
     const errors = validateWorkflowDef(def);
     assert.equal(errors.length, 0);

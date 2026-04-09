@@ -65,12 +65,11 @@ steps:
   - id: prepare-form-data
     description: Count and filter form-type companies
     type: programmatic
-    depends_on: collect-companies-with-contacts
     context_in:
       companies: "{collect-companies-with-contacts.companies}"
     actions:
       - js: |
-          const formCompanies = context.companies.filter(x => x.contact_type === "form");
+          const formCompanies = lrail.get("companies").filter(x => x.contact_type === "form");
           return { form_count: formCompanies.length, form_companies: formCompanies };
     required_output:
       - form_count
@@ -78,7 +77,6 @@ steps:
 
   - id: extract-form-structures
     description: Extract form HTML structure for all form-type companies
-    depends_on: prepare-form-data
     instruction: |
       For each company in form_companies, visit form_url and extract the HTML form structure.
 
@@ -123,15 +121,14 @@ steps:
   - id: generate-outreach-report
     description: Generate final outreach report with summary statistics
     type: programmatic
-    depends_on: extract-form-structures
     context_in:
       companies: "{collect-companies-with-contacts.companies}"
       forms: "{extract-form-structures.forms}"
       form_count: "{prepare-form-data.form_count}"
     actions:
       - js: |
-          const companies = context.companies;
-          const forms = context.forms;
+          const companies = lrail.get("companies");
+          const forms = lrail.get("forms");
           const report = {
             total_companies: companies.length,
             form_companies: companies.filter(x => x.contact_type === "form").length,

@@ -20,7 +20,7 @@ steps:
     description: Normalize company data and filter form-type companies
     actions:
       - js: |
-          const normalized = context.companies.map(co => ({
+          const normalized = lrail.get("companies").map(co => ({
             ...co,
             website_url: co.website_url.replace(/\/+$/, ""),
             form_url: co.form_url ? co.form_url.replace(/\/+$/, "") : null,

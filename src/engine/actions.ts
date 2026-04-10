@@ -192,13 +192,24 @@ function executeShellAction(
 
   try {
     const stdinData = pipe?.stdout;
-    const stdout = execFileSync("sh", ["-c", resolved], {
-      ...(stdinData !== undefined && { input: stdinData }),
-      encoding: "utf-8",
-      timeout: 30_000,
-      stdio: ["pipe", "pipe", "pipe"],
-      env,
-    });
+    let stdout: string;
+    try {
+      stdout = execFileSync("sh", ["-c", resolved], {
+        ...(stdinData !== undefined && { input: stdinData }),
+        encoding: "utf-8",
+        timeout: 30_000,
+        stdio: ["pipe", "pipe", "pipe"],
+        env,
+      });
+    } catch (err: unknown) {
+      // EPIPE: child exited successfully but didn't read all stdin - recover stdout
+      const e = err as { code?: string; status?: number | null; stdout?: string };
+      if (e.code === "EPIPE" && (e.status === 0 || e.status === null)) {
+        stdout = (e.stdout as string) ?? "";
+      } else {
+        throw err;
+      }
+    }
 
     const extracted: Record<string, unknown> = {};
     if (action.extract) {

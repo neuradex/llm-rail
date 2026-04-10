@@ -113,7 +113,7 @@ ${action.js}
 writeFileSync(${JSON.stringify(mutFile)}, JSON.stringify(__mutations));
 
 if (__result !== undefined && __result !== null) {
-  process.stdout.write(JSON.stringify(__result));
+  process.stdout.write(typeof __result === "string" ? __result : JSON.stringify(__result));
 }
 `;
     fs.writeFileSync(scriptFile, wrapper, "utf-8");
@@ -243,6 +243,7 @@ export function executeAction(
 
 export interface ActionsResult {
   extracted: Record<string, unknown>;
+  stdout?: string;
   goto?: LrailGoto;
 }
 
@@ -263,17 +264,20 @@ export function executeActions(
   const runningContext = { ...context };
   let pipe: PipeInput | undefined;
 
+  let lastStdout: string | undefined;
+
   for (const action of actions) {
     const result = executeAction(action, runningContext, pipe);
     Object.assign(accumulated, result.extracted);
     Object.assign(runningContext, result.extracted);
+    lastStdout = result.stdout;
 
     if (result.goto) {
-      return { extracted: accumulated, goto: result.goto };
+      return { extracted: accumulated, stdout: lastStdout, goto: result.goto };
     }
 
     pipe = { stdout: result.stdout };
   }
 
-  return { extracted: accumulated };
+  return { extracted: accumulated, stdout: lastStdout };
 }

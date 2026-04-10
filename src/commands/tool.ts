@@ -48,7 +48,9 @@ export function runTool(instanceId: string, toolName: string, toolArgs: string):
   // Execute tool actions
   try {
     const result = executeActions(toolDef.actions, context);
-    console.log(JSON.stringify(result, null, 2));
+    if (result.stdout) {
+      console.log(result.stdout);
+    }
 
     // Persist tool call to state for assertion/context access
     const toolCalls = (state.context._tool_calls ?? {}) as Record<string, unknown[]>;

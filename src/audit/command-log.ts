@@ -1,12 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CommandLogEntry } from "../types.js";
-import { ensureDir, nowISO } from "../util.js";
+import { ensureDir, getDataDir, nowISO } from "../util.js";
 
 const LOG_FILE = "command.jsonl";
 
 function logPath(): string {
-  return path.resolve(".llm-rail", LOG_FILE);
+  return path.resolve(getDataDir(), LOG_FILE);
 }
 
 export function appendCommandLog(
@@ -15,7 +15,7 @@ export function appendCommandLog(
   denied?: boolean,
   error?: boolean,
 ): void {
-  const dir = path.resolve(".llm-rail");
+  const dir = path.resolve(getDataDir());
   ensureDir(dir);
 
   const entry: CommandLogEntry = {

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CommandLogEntry } from "../types.js";
 import { readCommandLog } from "../audit/command-log.js";
+import { getDataDir } from "../util.js";
 
 // ANSI colors
 const c = {
@@ -53,7 +54,7 @@ export function runGlobalLog(limit?: number, follow?: boolean, raw?: boolean): v
   if (!follow) return;
 
   // Follow mode
-  const logFile = path.resolve(".llm-rail", "command.jsonl");
+  const logFile = path.resolve(getDataDir(), "command.jsonl");
   let lastSize = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
 
   fs.watchFile(logFile, { interval: 500 }, () => {

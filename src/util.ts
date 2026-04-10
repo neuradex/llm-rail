@@ -27,6 +27,15 @@ export function saveYaml(path: string, data: unknown): void {
   fs.writeFileSync(path, content, "utf-8");
 }
 
+/**
+ * Resolve the data directory for instance state, logs, and hooks.
+ * Override with LRAIL_DATA env var (e.g. for Electron production builds
+ * where cwd is read-only).
+ */
+export function getDataDir(): string {
+  return process.env.LRAIL_DATA || ".llm-rail";
+}
+
 export function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

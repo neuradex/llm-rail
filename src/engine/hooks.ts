@@ -2,8 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { HookEvent, HookPayload, HookResult } from "../types.js";
+import { getDataDir } from "../util.js";
 
-const HOOKS_DIR = path.resolve(".llm-rail", "hooks");
+function hooksDir(): string {
+  return path.resolve(getDataDir(), "hooks");
+}
 
 const GATE_EVENTS: Set<HookEvent> = new Set([
   "step:before_start",
@@ -16,16 +19,17 @@ const GATE_EVENTS: Set<HookEvent> = new Set([
  * e.g. step:before_start → step-before_start.sh
  */
 function findHookScripts(event: HookEvent): string[] {
-  if (!fs.existsSync(HOOKS_DIR)) return [];
+  const dir = hooksDir();
+  if (!fs.existsSync(dir)) return [];
 
   const prefix = event.replace(/:/g, "-");
-  const files = fs.readdirSync(HOOKS_DIR);
+  const files = fs.readdirSync(dir);
   return files
     .filter((f) => {
       const base = path.parse(f).name;
       return base === prefix;
     })
-    .map((f) => path.resolve(HOOKS_DIR, f));
+    .map((f) => path.resolve(dir, f));
 }
 
 function executeHookScript(scriptPath: string, payload: HookPayload): HookResult {

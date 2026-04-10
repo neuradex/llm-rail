@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AuditEntry } from "../types.js";
-import { ensureDir, nowISO } from "../util.js";
+import { ensureDir, getDataDir, nowISO } from "../util.js";
 
 export function instanceDir(workflowName: string, instanceId: string): string {
-  return path.resolve(".llm-rail", workflowName, instanceId);
+  return path.resolve(getDataDir(), workflowName, instanceId);
 }
 
 export function appendLog(

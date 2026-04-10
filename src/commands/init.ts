@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { resolvePackageDir } from "../util.js";
+import { getDataDir, resolvePackageDir } from "../util.js";
 
 /**
  * Initialize LLM Rail in the current project.
@@ -30,8 +30,8 @@ export function runInit(): void {
     results.push("Created workflows/");
   }
 
-  // 3. Create .llm-rail/ directory (runtime state)
-  const runtimeDir = path.resolve(cwd, ".llm-rail");
+  // 3. Create data directory (runtime state)
+  const runtimeDir = path.resolve(getDataDir());
   if (!fs.existsSync(runtimeDir)) {
     fs.mkdirSync(runtimeDir, { recursive: true });
   }

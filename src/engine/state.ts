@@ -1,11 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { InstanceState, WorkflowDef } from "../types.js";
-import { generateId, nowISO, saveYaml, loadYaml, ensureDir } from "../util.js";
+import { generateId, nowISO, saveYaml, loadYaml, ensureDir, getDataDir } from "../util.js";
 import { instanceDir } from "../audit/logger.js";
 import { generateAlias, collectExistingAliases, resolveAlias } from "./alias.js";
-
-const STATE_DIR = ".llm-rail";
 
 export function createInstance(
   def: WorkflowDef,
@@ -14,7 +12,7 @@ export function createInstance(
 ): InstanceState {
   const id = generateId();
   const now = nowISO();
-  const existingAliases = collectExistingAliases(path.resolve(STATE_DIR));
+  const existingAliases = collectExistingAliases(path.resolve(getDataDir()));
   const alias = generateAlias(existingAliases);
 
   const steps: InstanceState["steps"] = {};
@@ -44,7 +42,7 @@ export function createInstance(
 }
 
 export function resolveInstanceId(idOrAlias: string): string {
-  const baseDir = path.resolve(STATE_DIR);
+  const baseDir = path.resolve(getDataDir());
 
   // Try direct ID first
   if (fs.existsSync(baseDir)) {
@@ -66,7 +64,7 @@ export function resolveInstanceId(idOrAlias: string): string {
 
 export function loadInstance(idOrAlias: string): InstanceState {
   const id = resolveInstanceId(idOrAlias);
-  const baseDir = path.resolve(STATE_DIR);
+  const baseDir = path.resolve(getDataDir());
 
   for (const workflowDir of fs.readdirSync(baseDir)) {
     const dirPath = path.resolve(baseDir, workflowDir);
@@ -89,7 +87,7 @@ export function saveInstance(state: InstanceState): void {
 }
 
 export function listInstances(): InstanceState[] {
-  const baseDir = path.resolve(STATE_DIR);
+  const baseDir = path.resolve(getDataDir());
   if (!fs.existsSync(baseDir)) return [];
 
   const instances: InstanceState[] = [];

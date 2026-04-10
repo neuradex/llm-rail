@@ -8,6 +8,11 @@
     "type": "git",
     "url": "https://github.com/neuradex/llm-rail"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org"
+  },
   "keywords": [
     "claude-code-plugin",
     "llm",

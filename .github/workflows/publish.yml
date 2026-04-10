@@ -39,6 +39,8 @@ jobs:
 
       - name: Publish
         run: npm publish --access public --provenance
+        env:
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Commit version & create release
         run: |

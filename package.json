@@ -1,17 +1,12 @@
 {
   "name": "llm-rail",
-  "version": "0.4.7",
+  "version": "0.4.10",
   "description": "Deterministic workflow control CLI for LLM agents",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/neuradex/llm-rail"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true,
-    "registry": "https://registry.npmjs.org"
   },
   "keywords": [
     "claude-code-plugin",

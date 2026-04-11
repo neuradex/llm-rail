@@ -37,10 +37,11 @@ export function runTool(instanceId: string, toolName: string, toolArgs: string):
     }
   }
 
-  // Build context: workflow params + step outputs + tool args
+  // Build context: workflow params + persisted context + step outputs + tool args
   const stepOutputs = collectStepOutputs(state.steps, state.context);
   const context: Record<string, unknown> = {
     ...state.params,
+    ...state.context,
     ...stepOutputs,
     ...parsedArgs,
   };
@@ -51,6 +52,9 @@ export function runTool(instanceId: string, toolName: string, toolArgs: string):
     if (result.stdout) {
       console.log(result.stdout);
     }
+
+    // Persist lrail.set() mutations so next tool call can read them
+    Object.assign(state.context, result.extracted);
 
     // Persist tool call to state for assertion/context access
     const toolCalls = (state.context._tool_calls ?? {}) as Record<string, unknown[]>;

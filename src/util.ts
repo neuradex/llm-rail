@@ -4,13 +4,22 @@ import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
 
 export function generateId(): string {
+  // Format: MMDD-HHMMSS-mmm-XXXX
+  // - MMDD-HHMMSS: human-readable timestamp (preserves visual sort/grouping in dir listings)
+  // - mmm: milliseconds (3 digits) — handles parallel creates within the same second
+  // - XXXX: 4 hex chars from crypto.getRandomValues — collision resistance under heavy parallelism
+  // This is sufficient for the parallelism levels lrail targets (no need for full ULID).
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   const HH = String(now.getHours()).padStart(2, "0");
   const min = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
-  return `${mm}${dd}-${HH}${min}${ss}`;
+  const ms = String(now.getMilliseconds()).padStart(3, "0");
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(2)))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${mm}${dd}-${HH}${min}${ss}-${ms}-${rand}`;
 }
 
 export function nowISO(): string {

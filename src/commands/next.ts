@@ -90,7 +90,7 @@ export function runNext(id: string, resultJson: string): void {
   // Execute post-validation actions if defined on agentic step
   if (currentStep.actions && currentStep.actions.length > 0) {
     try {
-      const actionResult = executeActions(currentStep.actions, { ...state.context, ...output });
+      const actionResult = executeActions(currentStep.actions, { ...state.context, ...output }, currentStep.timeout_ms);
       Object.assign(output, actionResult.extracted);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

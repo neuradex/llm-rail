@@ -41,7 +41,7 @@ export function advanceThrough(
       const stepOutputs = collectStepOutputs(state.steps, state.context);
       const stepContext = buildStepContext(step, state.params || {}, stepOutputs);
       const fullContext = { ...(state.params || {}), ...state.context, ...stepContext };
-      const result = executeActions(step.actions || [], fullContext);
+      const result = executeActions(step.actions || [], fullContext, step.timeout_ms);
 
       state.steps[step.id].status = "completed";
       state.steps[step.id].output = result.extracted;

@@ -66,6 +66,7 @@ function executeJsAction(
   action: JsActionDef,
   context: Record<string, unknown>,
   pipe?: PipeInput,
+  timeoutMs?: number,
 ): ActionResult {
   const ctx = { ...context };
   if (pipe?.stdout !== undefined) {
@@ -120,7 +121,13 @@ if (__result !== undefined && __result !== null) {
 
     const stdout = execFileSync("node", [scriptFile], {
       encoding: "utf-8",
-      timeout: 30_000,
+      // Wall budget for this action. Defaults to 30s — enough for the
+      // "fast orchestration" step (SQL, simple API, flow control) that
+      // programmatic steps are expected to be. Steps with known-heavier
+      // I/O (embedding lookups, batch CLI, per-item fan-out) can pass a
+      // larger value via the step's `timeout_ms` field; keeping it
+      // per-step preserves runaway protection everywhere else.
+      timeout: timeoutMs ?? 30_000,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -175,6 +182,7 @@ function executeShellAction(
   action: ShellActionDef,
   context: Record<string, unknown>,
   pipe?: PipeInput,
+  timeoutMs?: number,
 ): ActionResult {
   const resolved = resolveActionCommand(action.shell, context);
 
@@ -197,7 +205,8 @@ function executeShellAction(
       stdout = execFileSync("sh", ["-c", resolved], {
         ...(stdinData !== undefined && { input: stdinData }),
         encoding: "utf-8",
-        timeout: 30_000,
+        // Same per-step override as the js action above.
+        timeout: timeoutMs ?? 30_000,
         stdio: ["pipe", "pipe", "pipe"],
         env,
       });
@@ -244,9 +253,10 @@ export function executeAction(
   action: ActionDef,
   context: Record<string, unknown>,
   pipe?: PipeInput,
+  timeoutMs?: number,
 ): ActionResult {
-  if (isJsAction(action)) return executeJsAction(action, context, pipe);
-  if (isShellAction(action)) return executeShellAction(action, context, pipe);
+  if (isJsAction(action)) return executeJsAction(action, context, pipe, timeoutMs);
+  if (isShellAction(action)) return executeShellAction(action, context, pipe, timeoutMs);
   throw new Error("Invalid action: must have 'js' or 'shell'");
 }
 
@@ -270,6 +280,7 @@ export interface ActionsResult {
 export function executeActions(
   actions: ActionDef[],
   context: Record<string, unknown>,
+  timeoutMs?: number,
 ): ActionsResult {
   const accumulated: Record<string, unknown> = {};
   const runningContext = { ...context };
@@ -278,7 +289,7 @@ export function executeActions(
   let lastStdout: string | undefined;
 
   for (const action of actions) {
-    const result = executeAction(action, runningContext, pipe);
+    const result = executeAction(action, runningContext, pipe, timeoutMs);
     Object.assign(accumulated, result.extracted);
     Object.assign(runningContext, result.extracted);
     lastStdout = result.stdout;

@@ -108,6 +108,15 @@ export interface StepDef {
   meta?: Record<string, unknown>;
   actions?: ActionDef[];
   accumulate?: Record<string, AccumulateFieldConfig>;
+
+  /**
+   * Wall-clock budget for this step's js/shell actions, in milliseconds.
+   * Defaults to 30_000 when omitted. Raise on steps known to fan out
+   * heavier I/O (embedding calls, batch API, per-item lookups). Keeping
+   * this per-step rather than global preserves runaway protection on
+   * every other step.
+   */
+  timeout_ms?: number;
 }
 
 // ── Instance-scoped Tools ──

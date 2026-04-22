@@ -3,3 +3,4 @@ dist/
 .llm-rail/
 test-e2e-tmp/
 .publish-tmp/
+.DS_Store

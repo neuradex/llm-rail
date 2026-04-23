@@ -11,6 +11,7 @@ import { executeV1Actions } from "./actions-v1.js";
 import { buildStepContextV1 } from "./context-v1.js";
 import type { V1InstanceState, V1StepState } from "./state-v1.js";
 import { buildSchemaRegistry, type SchemaRegistry } from "./schemas.js";
+import { applyRouterGoto, evaluateRouter } from "./router-v1.js";
 
 // ── Errors ──
 
@@ -108,15 +109,49 @@ export function advance(
       return { kind: "awaiting_agent", pendingStep: step, autoCompleted };
     }
 
-    // Router / Call: not implemented in this PR.
+    // Router: evaluate cases, record decision, apply goto (forward or backward).
     if (isRouterStep(step)) {
-      const err = new V1RunnerError(
-        `router step '${stepId}' is not yet implemented (PR #3)`,
-      );
-      state.status = "error";
-      state.updated_at = nowISO();
-      return { kind: "error", autoCompleted, error: err };
+      try {
+        stepState.status = "in_progress";
+        const routerContext = buildStepContextV1(step.id, step.context_in, state);
+        const decision = evaluateRouter(step, routerContext, state);
+        const stepOrder = def.steps.map((s) => s.id);
+        const gotoResult = applyRouterGoto(step, decision.goto, stepOrder, state);
+
+        // Record the decision as the router's output. Backward gotos bump
+        // the iteration counter; forward gotos leave it untouched (the
+        // router completed once and advanced).
+        const output: Record<string, unknown> = {
+          selected_goto: decision.goto,
+          selected_case: decision.case_index,
+          used_default: decision.used_default,
+        };
+        if (gotoResult.backward) {
+          output.iteration = gotoResult.newIterations;
+        }
+        // On backward goto, applyRouterGoto reset the router's own state.
+        // We must re-mark it completed *after* the reset so its output is
+        // observable to downstream steps that reference it.
+        const freshRouterState = state.steps[step.id];
+        if (freshRouterState) {
+          freshRouterState.status = "completed";
+          freshRouterState.output = output;
+          freshRouterState.completed_at = nowISO();
+          freshRouterState.iterations = gotoResult.newIterations ?? (freshRouterState.iterations ?? 0) + 1;
+        }
+
+        autoCompleted.push(step.id);
+        state.status = state.status === "created" ? "in_progress" : state.status;
+        state.updated_at = nowISO();
+        continue;
+      } catch (err) {
+        stepState.status = "pending";
+        state.status = "error";
+        state.updated_at = nowISO();
+        return { kind: "error", autoCompleted, error: err as Error };
+      }
     }
+
     if (isCallStep(step)) {
       const err = new V1RunnerError(
         `call step '${stepId}' is not yet implemented (PR #4)`,

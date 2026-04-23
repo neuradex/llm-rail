@@ -248,25 +248,7 @@ describe("runner-v1 — v1 purity: no lrail injection", () => {
 });
 
 describe("runner-v1 — unimplemented step types", () => {
-  it("errors on router", () => {
-    const def = mkDef({
-      steps: [
-        {
-          id: "r",
-          type: "router",
-          cases: [{ when: { field: "x", op: "eq", value: 1 }, goto: "r" }],
-          default: "r",
-        },
-      ],
-    });
-    const state = mkState(def);
-    const result = advance(def, state);
-    assert.equal(result.kind, "error");
-    assert.ok(result.error instanceof V1RunnerError);
-    assert.ok(result.error?.message.includes("router"));
-  });
-
-  it("errors on call", () => {
+  it("errors on call (PR #4)", () => {
     const def = mkDef({
       steps: [
         { id: "c", type: "call", workflow: "other", inputs: {} },

@@ -280,7 +280,7 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
   },
 };
 
-function applyRule(rule: AssertionRule, value: unknown): string | null {
+export function applyRule(rule: AssertionRule, value: unknown): string | null {
   const handler = opHandlers[rule.op];
   if (!handler) {
     return `Unknown assertion op: '${rule.op}'`;

@@ -1,6 +1,6 @@
 ---
 name: design-process
-description: Step-by-step process for designing and writing lrail workflows
+description: Step-by-step process for designing v1 workflows
 ---
 
 ## Workflow Design Process
@@ -10,89 +10,163 @@ description: Step-by-step process for designing and writing lrail workflows
 Run `lrail docs workflow/requirements-analysis` and follow the procedure. This produces validated, user-confirmed requirements.
 
 From the confirmed requirements, identify:
-- **Inputs** — what params does the workflow need?
-- **Outputs** — what is the final deliverable?
+- **Input shape** — what does the caller provide? (workflow `input:`)
+- **Output shape** — what is the final deliverable? (workflow `output:`)
+- **External side effects** — files the workflow reads/writes, APIs it calls, queues it drains.
 
-### Phase 2: Propose step breakdown
+### Phase 2: Name the shapes
 
-Before writing YAML, outline each step:
-- What it produces (required_output)
-- **Programmatic** (deterministic: API calls, file ops, data transforms) vs **agentic** (needs LLM judgment: analysis, review, summarization)
-- Data flow — which step's output does each step consume? (context_in)
-- Parallelism — which steps are independent? (depends_on)
-- **Scale sensitivity** — if a param controls volume (e.g., `min_companies`), design the step to handle the full range. Use `accumulate` for large collections instead of single-shot submission.
+v1 starts from schemas. Before writing any steps, decide which data shapes the workflow exchanges and give them names:
 
-See `lrail docs workflow/design-tips` for design principles and anti-patterns.
+- `Input` and `Output` at the workflow boundary.
+- One shape per step that produces structured output (agentic or programmatic with `required_output`).
+- Shared entity shapes (`Record`, `Company`, `JobItem`) if multiple steps touch them.
 
-### Phase 3: Write the YAML
+Pick names that read as domain nouns, not implementation artifacts. `CompanyCandidate` beats `Step2Output` even though the latter is easier to auto-generate.
 
-Create `workflows/<name>.yml` (or `workflows/<name>/workflow.yml` for directory format).
+See `concepts/schemas` for the allowed JSON Schema subset.
 
-Required structure:
+### Phase 3: Propose step breakdown
+
+For each step, decide:
+
+- **Type**: agentic / programmatic / router / call. See `concepts/step-types`.
+  - Judgment / research / synthesis → agentic
+  - Deterministic transforms, API calls, shaping → programmatic
+  - A branch or a loop → router
+  - A reusable subtask with its own IO shape → call (possibly a workflow you haven't written yet)
+- **Output shape**: which schema is `required_output`?
+- **Inputs**: which prior step outputs or workflow input fields does it need? (`context_in`)
+- **Side effects**: any actions that touch the filesystem / network / DB? Which step does them?
+
+Don't prematurely introduce routers or calls. Add them when they genuinely express the shape you need; avoid them for linear flow.
+
+See `workflow/design-tips` for design principles and anti-patterns.
+
+### Phase 4: Write the YAML
+
+Create `workflows/<name>.yml` (or `workflows/<name>/workflow.yml` for directory format). Required structure:
+
 ```yaml
+format: v1
 name: <name>
 version: "0.1.0"
 description: <purpose>
 phase: draft
-params:             # if the workflow needs input
-  <key>:
-    type: string | number | boolean
-    required: boolean
-    default: any
-    description: string
+
+schemas:
+  Input: { ... }
+  Output: { ... }
+  # ...per-step / shared shapes
+
+input: Input
+output: Output
+
+# Only declare max_depth if a `call` step recurses into this workflow
+# directly or transitively.
+max_depth: 100
+
 steps:
   - id: <step-id>
-    instruction: <agent directive>         # required for agentic
-    description: <human-readable summary>  # optional
-    type: programmatic                     # omit for agentic (default)
-    depends_on: <step-id or [step-ids]>
-    required_output: [<fields>]
-    validation: [<AssertionRule>]
-    assertions: [<AssertionRule>]
-    context_in:
-      local_name: "{stepId.field}"
-    tips: [<actionable instructions>]
-    accumulate:                            # for incremental collection
-      <field>:
-        key: <dedupe field>
-    actions:                               # required for programmatic
-      - js: |                              # JS with auto-injected context, use return
-          return { key: context.field };
-      - shell: <shell command>             # shell with {{param}} templates
-        extract:
-          targetKey: sourceKey
-policy:
-  mode: trail                              # start with trail, switch to enforce later
+    type: agentic | programmatic | router | call
+    # ...type-specific fields
+```
+
+**agentic**:
+```yaml
+- id: <id>
+  type: agentic
+  instruction: <agent directive>
+  context_in:
+    <local>: "{prev-step.field}"
+  required_output: <SchemaName>
+  validation:                   # only for non-structural checks (script, verify_source)
+    - ...
+  assertions:                   # cross-step / cross-field rules
+    - ...
+```
+
+**programmatic**:
+```yaml
+- id: <id>
+  type: programmatic
+  context_in:
+    <local>: "{prev-step.field}"
+  required_output: <SchemaName>
+  actions:
+    - name: <short-name>        # REQUIRED
+      description: <one-liner>  # REQUIRED
+      js: |                     # OR shell:, exactly one
+        return { ... };
+```
+
+**router**:
+```yaml
+- id: <id>
+  type: router
+  context_in:
+    <local>: "{prev-step.field}"
+  cases:
+    - when: { field: "{{local}}", op: eq, value: ... }
+      goto: <step-id>
+  default: <step-id>            # REQUIRED
+  max_iterations: 50            # REQUIRED if any goto is backward
+```
+
+**call**:
+```yaml
+- id: <id>
+  type: call
+  workflow: <other-workflow-name>
+  inputs:
+    <child-input-key>: "{prev.field}"
 ```
 
 Key rules:
+
 - `instruction` is the agent directive (what to do). `description` is the human label (what it's called).
-- `required_output` = only fields consumed downstream or as final output
-- `validation` = structural checks (type, length). `assertions` = business logic (value ranges).
-- `context_in` for ALL cross-step data references — never rely on implicit merge
-- `tips` = actionable instructions, not suggestions. Encode domain knowledge here.
-- `depends_on` = only actual data dependencies
+- `required_output` points to a schema in the `schemas:` block. Structural rules (type, length, range, enum) live in the schema.
+- `validation` stays for non-structural checks only: `script`, `verify_source`, regex, cross-field. Everything else moves to the schema.
+- `context_in` is the **only** data channel. There is no `lrail.get` / `lrail.set` / `lrail.goto`.
+- Routers and recursive calls need explicit bounds (`max_iterations`, `max_depth`).
 
-See `lrail docs concepts/step-types` for step type details.
-See `lrail docs concepts/validation` for assertion operator reference.
-See `lrail docs concepts/actions` for programmatic action syntax.
+See `concepts/step-types`, `concepts/schemas`, `concepts/router`, `concepts/call`, `concepts/actions`, `concepts/validation` for detailed references.
 
-### Phase 4: Validate
+### Phase 5: Compile
 
 ```bash
-lrail wf <name> validate
+lrail wf <name> compile [--path <file>] [--registry <dir>]
 ```
 
-Fix all errors before proceeding.
+Compile catches:
+- Missing / unknown schema references
+- Context_in references to steps that don't exist or can't be reached in execution order
+- Router cases without a target, missing `default`, or backward goto without `max_iterations`
+- Self-recursive or transitively-recursive call without `max_depth`
+- Missing action `name` / `description`
+- Cross-workflow IO mismatches (with `--registry`)
 
-### Phase 5: Test run (optional, for `/build`)
+Fix all `Errors:` before proceeding. Review `Warnings:` — most are real signals.
 
-Create an instance and run end-to-end to verify the workflow completes:
+### Phase 6: Graph-check (optional)
+
+Export the structure to sanity-check:
 
 ```bash
-lrail wf <name> create [--param k=v]
-lrail <id> start
-lrail <id> next --result '<json>'   # for each agentic step
+lrail wf <name> graph --json | jq '.control_edges'
 ```
 
-Record rejection count and fix issues in the YAML if needed.
+Look for unexpected edges, orphan nodes, or surprise backward gotos.
+
+### Phase 7: Test run
+
+Create an instance and walk through it:
+
+```bash
+lrail wf <name> create [--param k=v ...]
+lrail <alias> start
+lrail <alias> next --result '<json>'   # for each agentic step
+lrail <alias> status                    # final state
+```
+
+Record agent rejections and iterate on the schema / instruction wording if they're frequent.

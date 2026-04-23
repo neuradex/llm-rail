@@ -1,3 +1,6 @@
+# TODO(1.0.0): variants still use the legacy `extends: base` shape. When
+# v1 variants land (post-1.0.0 RFC), migrate this to the v1 variant form
+# and verify against the now-v1 base workflow.
 extends: base
 variant: api-driven
 description: "StockAnalysis API指定。Haiku可、rate limit 5req/min"

@@ -7,18 +7,32 @@ description: How to review an lrail workflow — parallel trial runs, comparativ
 
 ### Phase 1: Static Review
 
-#### 1a. Validate
+#### 1a. Compile
 ```bash
-lrail wf <workflow-name> validate
+lrail wf <workflow-name> compile
 ```
-If validation fails, report errors with `lrail docs` references and stop.
+`compile` is a superset of `validate`. If it fails, report errors with `lrail docs` references and stop. Review warnings too — most are real signals (forward context refs without default, unknown call-IO fields, etc.).
 
-#### 1b. Design Review
+If the workflow calls other workflows, point `compile` at a registry so cross-IO compatibility is checked:
+```bash
+lrail wf <workflow-name> compile --registry workflows/
+```
+
+#### 1b. Graph inspection
+Export the structure and eyeball it:
+```bash
+lrail wf <workflow-name> graph --json | jq '.control_edges'
+lrail wf <workflow-name> graph --json | jq '.nodes[] | {id, type}'
+```
+Flag surprising control edges (unexpected backward goto, a router with no backward flag that you expected to loop, `call-entry` to a name you don't recognize).
+
+#### 1c. Design Review
 Read the workflow YAML (`workflows/<name>.yml`) and evaluate:
 
-- **Step type candidates**: For each agentic step, ask: "Does this step require LLM judgment, or is it deterministic?" Flag candidates for `programmatic`.
-- **API verification**: If tips mention specific APIs or data sources, verify they exist (try a sample request with `curl`). Flag non-existent or unreliable APIs.
-- **Validation coverage**: Steps with low or no validation on `required_output` — suggest specific rules.
+- **Step type candidates**: For each `agentic` step, ask: "Does this step require LLM judgment, or is it deterministic?" Flag candidates for `programmatic`.
+- **API verification**: If an instruction mentions specific APIs or data sources, verify they exist (try a sample request with `curl`). Flag non-existent or unreliable APIs.
+- **Schema tightness**: Steps whose `required_output` schema is permissive (no `minItems`, no `enum` where a fixed set is expected, missing `required`) — suggest tighter shapes.
+- **Residual validation**: `validation:` entries on the step should be non-structural only (`script`, `verify_source`, regex, each-item checks). Anything structural belongs in the schema.
 
 Report findings before proceeding to Phase 2.
 
@@ -35,7 +49,7 @@ lrail wf <workflow-name> create [--param k=v ...]   # → alias-b (for sonnet)
 
 #### 2b. Choose Agent Type
 
-Per `lrail docs concepts/step-types` "Agent Selection" section: if any agentic step's tips mention WebSearch, WebFetch, URLs, or external data → use `general-purpose`. Otherwise use `step-runner`.
+Per `lrail docs concepts/step-types` "Agent Selection" section: if any agentic step's instruction mentions WebSearch, WebFetch, URLs, or external data → use `general-purpose`. Otherwise use `step-runner`.
 
 #### 2c. Launch Both Agents in Parallel
 

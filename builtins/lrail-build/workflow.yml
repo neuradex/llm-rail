@@ -1,138 +1,186 @@
+format: v1
 name: lrail-build
-version: "0.2.0"
-description: "Generate a working lrail workflow — design, generate YAML, and verify by test run."
+version: "1.0.0"
+description: Generate a working v1 lrail workflow — design, generate YAML, compile, and verify by test run.
 phase: draft
-params:
-  requirements:
-    type: string
-    required: true
-    description: "Finalized requirements (post-analysis, confirmed by user)"
-  output_name:
-    type: string
-    required: false
-    default: "generated"
-    description: "Name for the generated workflow"
+
+schemas:
+  Input:
+    type: object
+    properties:
+      requirements:
+        type: string
+        description: Finalized requirements (post-analysis, confirmed by user).
+      output_name:
+        type: string
+        default: generated
+        description: Name for the generated workflow.
+    required: [requirements]
+
+  Output:
+    type: object
+    properties:
+      completed: { type: boolean }
+      total_rejections: { type: integer, minimum: 0 }
+      step_results:
+        type: array
+        items: { type: object }
+      modifications:
+        type: array
+        items: Modification
+    required: [completed, total_rejections, step_results, modifications]
+
+  StepPlanEntry:
+    type: object
+    properties:
+      id: { type: string, minLength: 1 }
+      type: { type: string, enum: [agentic, programmatic, router, call] }
+      description: { type: string }
+      produces: { type: string }
+      consumes:
+        type: array
+        items: { type: string }
+    required: [id, type]
+
+  DesignResult:
+    type: object
+    properties:
+      step_plan:
+        type: array
+        items: StepPlanEntry
+        minItems: 1
+      schema_names:
+        type: array
+        items: { type: string }
+      total_steps: { type: integer, minimum: 1 }
+      programmatic_count: { type: integer, minimum: 0 }
+      agentic_count: { type: integer, minimum: 0 }
+      router_count: { type: integer, minimum: 0 }
+      call_count: { type: integer, minimum: 0 }
+    required: [step_plan, total_steps]
+
+  GenerateResult:
+    type: object
+    properties:
+      workflow_yaml: { type: string, minLength: 1 }
+      compile_passed: { type: boolean }
+    required: [workflow_yaml, compile_passed]
+
+  Modification:
+    type: object
+    properties:
+      field: { type: string }
+      before: { type: string }
+      after: { type: string }
+      reason: { type: string }
+      type: { type: string, enum: [bug_fix, requirement_change] }
+    required: [field, reason, type]
+
+input: Input
+output: Output
+
 policy:
   mode: trail
+
 steps:
   - id: design
-    description: Analyze requirements and design workflow steps
+    type: agentic
+    context_in:
+      requirements: "{{requirements}}"
+      output_name: "{{output_name}}"
     instruction: |
-      Read the lrail design process and principles:
-      - `lrail docs workflow/design-process`
-      - `lrail docs workflow/design-tips`
-      - `lrail docs concepts/step-types`
-      - `lrail docs concepts/validation`
+      Read the v1 design guides:
+        - `lrail docs workflow/design-process`
+        - `lrail docs workflow/design-tips`
+        - `lrail docs concepts/step-types`
+        - `lrail docs concepts/schemas`
+        - `lrail docs concepts/router`
+        - `lrail docs concepts/call`
 
       Requirements: {{requirements}}
       Output workflow name: {{output_name}}
 
-      Follow Phase 1-2 of the design process: understand the task, then propose a step breakdown with ids, types (programmatic/agentic), required_output, and data flow.
-    required_output:
-      - step_plan
-      - total_steps
-      - programmatic_count
-      - agentic_count
-    validation:
-      - field: step_plan
-        op: type
-        value: array
-      - field: step_plan
-        op: not_empty
-      - field: step_plan
-        op: each_has
-        value: id
-      - field: step_plan
-        op: each_has
-        value: type
-      - field: total_steps
-        op: type
-        value: number
-      - field: total_steps
-        op: min
-        value: 1
-    tips:
-      - Prefer programmatic steps where possible (lower cost, deterministic)
-      - Each step should have a single clear responsibility
-      - Use context_in to pass data between steps explicitly
+      Follow Phases 1–3 of the v1 design process:
+        1. Understand the task.
+        2. Name the shapes (Input, Output, and one schema per step that
+           produces structured output; shared entity shapes too).
+        3. Propose a step breakdown with ids and types
+           (agentic / programmatic / router / call), what each step
+           produces (schema name), and what it consumes (prior step
+           fields or workflow input).
+
+      Prefer `programmatic` wherever the transform is deterministic;
+      only use `agentic` when judgment is needed; only use `router` for
+      real branches or bounded loops; only use `call` for reuse or
+      recursion.
+    required_output: DesignResult
 
   - id: generate-yaml
-    description: Generate workflow YAML from the design
-    instruction: |
-      Read Phase 3 of the design process:
-      - `lrail docs workflow/design-process`
-
-      Convert the step plan into a valid lrail workflow YAML for '{{output_name}}'.
-      Requirements: {{requirements}}
-
-      Save to `workflows/{{output_name}}/workflow.yml`, then validate with `lrail wf {{output_name}} validate`.
-      Fix any validation errors before submitting.
+    type: agentic
     context_in:
-      step_plan: "{design.step_plan}"
-    required_output:
-      - workflow_yaml
-      - validation_passed
-    validation:
-      - field: workflow_yaml
-        op: type
-        value: string
-      - field: workflow_yaml
-        op: not_empty
-      - field: validation_passed
+      plan: "{design.step_plan}"
+      schemas: "{design.schema_names}"
+      output_name: "{{output_name}}"
+      requirements: "{{requirements}}"
+    instruction: |
+      Read Phase 4 of the v1 design process:
+        - `lrail docs workflow/design-process`
+
+      Convert the step plan and named schemas into a valid v1
+      lrail workflow YAML for `{{output_name}}`.
+
+      Required top-level keys:
+        - `format: v1`
+        - `name`, optionally `version`, `description`, `phase`
+        - `schemas: { ... }` with named schemas only (no inline)
+        - `input:` and `output:` (schema name references)
+        - `steps: [ ... ]` — each step typed, with named `required_output`
+          when structured output is produced, `context_in:` for data
+          references, and for programmatic steps, actions with non-empty
+          `name` and `description`.
+
+      Save to `workflows/{{output_name}}/workflow.yml`, then run
+      `lrail wf {{output_name}} compile` and iterate until it passes.
+      Record `compile_passed: true` only after a clean compile.
+    required_output: GenerateResult
+    assertions:
+      - field: compile_passed
         op: eq
         value: true
-        message: "Workflow must pass lrail validation before proceeding"
-    tips:
-      - "instruction is the agent directive (required for agentic). description is optional human label."
-      - "Test with `lrail wf <name> validate` — fix all errors before submitting"
+        message: Workflow must pass `lrail wf <name> compile` before proceeding
 
   - id: test-run
-    description: Execute the generated workflow end-to-end
-    instruction: |
-      Read Phase 5 of the design process:
-      - `lrail docs workflow/design-process`
-
-      Run '{{output_name}}' end-to-end:
-      1. `lrail wf {{output_name}} create`
-      2. `lrail <id> start`
-      3. For each agentic step, perform the task and submit with `lrail <id> next --result '<json>'`
-      4. Programmatic steps auto-execute
-
-      Record rejection count and whether all steps completed.
-
-      If you modify the workflow YAML during the test run, record each change as a modification object
-      in the `modifications` output array with: field, before, after, reason, and type.
-      Type must be one of:
-      - "bug_fix" — syntax errors, EPIPE, wrong field names, broken scripts
-      - "requirement_change" — altering thresholds, criteria, or scope from the original requirements
-
-      Bug fixes are expected. Requirement changes should be a last resort —
-      exhaust other approaches first (better data sources, retry logic, etc.).
+    type: agentic
     context_in:
       workflow_yaml: "{generate-yaml.workflow_yaml}"
-    required_output:
-      - completed
-      - total_rejections
-      - step_results
-      - modifications
-    validation:
-      - field: completed
-        op: type
-        value: boolean
+      output_name: "{{output_name}}"
+    instruction: |
+      Read Phase 7 of the v1 design process:
+        - `lrail docs workflow/design-process`
+
+      Run `{{output_name}}` end-to-end:
+        1. `lrail wf {{output_name}} create [--param k=v ...]`
+        2. `lrail <alias> start`
+        3. For each agentic step, perform the task and submit with
+           `lrail <alias> next --result '<json>'`. Programmatic / router
+           / call steps auto-execute.
+
+      Record:
+        - `completed`: true iff the workflow reached its declared output.
+        - `total_rejections`: count of agentic submissions rejected by
+          the schema / validation before acceptance.
+        - `step_results`: per-step brief summary.
+        - `modifications`: each change to the workflow YAML during the
+          test run. Each entry needs `field`, `before`, `after`,
+          `reason`, and `type` ∈ {`bug_fix`, `requirement_change`}.
+
+      Bug fixes (syntax, runtime errors, regex mishaps) are expected.
+      Requirement changes (altering thresholds, scope) should be a last
+      resort — exhaust other approaches (better data, retry logic,
+      tighter schemas) first.
+    required_output: Output
+    assertions:
       - field: completed
         op: eq
         value: true
-        message: "Workflow must complete successfully"
-      - field: total_rejections
-        op: type
-        value: number
-      - field: step_results
-        op: type
-        value: array
-      - field: modifications
-        op: type
-        value: array
-    tips:
-      - If a step fails, analyze why and retry with corrected output
-      - Bug fixes (syntax, runtime errors) are fine — just record them
-      - Requirement changes (thresholds, criteria) are a last resort — try harder before changing the spec
+        message: Workflow must complete end-to-end

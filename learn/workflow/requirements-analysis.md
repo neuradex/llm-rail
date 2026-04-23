@@ -41,7 +41,7 @@ Procedure:
 2. Verify against real data — use WebSearch to spot-check whether criteria produce results
 3. Identify tool requirements — does the task need APIs, libraries, or specific data sources?
 4. Check logical consistency — do constraints conflict with each other?
-5. **Define parameter ranges** — if a value will be parameterized, ask the user for the realistic range (e.g., "min_companies: usually 10-20, sometimes 100+"). This determines design choices (e.g., `accumulate` for large collections) and test-run scenarios
+5. **Define parameter ranges** — if a value will be parameterized, ask the user for the realistic range (e.g., "min_companies: usually 10-20, sometimes 100+"). This determines design choices (e.g., recursive `call` for very large collections vs a single agentic step with a strict schema) and test-run scenarios
 
 ### Step 3: Present and Confirm
 

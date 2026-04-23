@@ -247,18 +247,18 @@ describe("runner-v1 — v1 purity: no lrail injection", () => {
   });
 });
 
-describe("runner-v1 — unimplemented step types", () => {
-  it("errors on call (PR #4)", () => {
+describe("runner-v1 — call without registry", () => {
+  it("errors when a call step is encountered but no registry is supplied", () => {
     const def = mkDef({
       steps: [
         { id: "c", type: "call", workflow: "other", inputs: {} },
       ],
     });
     const state = mkState(def);
-    const result = advance(def, state);
+    const result = advance(def, state); // no registry
     assert.equal(result.kind, "error");
     assert.ok(result.error instanceof V1RunnerError);
-    assert.ok(result.error?.message.includes("call"));
+    assert.ok(result.error?.message.includes("registry"));
   });
 });
 

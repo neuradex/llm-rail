@@ -55,11 +55,14 @@ export interface SchemaDef {
 
 /**
  * A context_in entry. Either a template string (`"{step.field}"` or
- * `"{{paramName}}"`) or an object form giving an explicit type hint.
+ * `"{{paramName}}"`) or an object form giving an explicit type hint
+ * and/or default value. The default is used when the referenced step
+ * has not completed (e.g. skipped by a forward goto, or absent in a
+ * recursive base case).
  */
 export type ContextInValue =
   | string
-  | { from: string; type?: SchemaRef };
+  | { from: string; type?: SchemaRef; default?: unknown };
 
 // ── Actions (v1) ──
 

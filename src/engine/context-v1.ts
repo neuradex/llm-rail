@@ -87,7 +87,16 @@ export function buildStepContextV1(
   const ctx: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contextIn)) {
     const template = typeof value === "string" ? value : value.from;
-    ctx[key] = resolveReference(stepId, key, template, state);
+    const hasDefault = typeof value !== "string" && "default" in value;
+    try {
+      ctx[key] = resolveReference(stepId, key, template, state);
+    } catch (err) {
+      if (hasDefault && err instanceof ContextResolutionError) {
+        ctx[key] = (value as { default: unknown }).default;
+        continue;
+      }
+      throw err;
+    }
   }
   return ctx;
 }

@@ -9,9 +9,15 @@ import {
 import { nowISO } from "../util.js";
 import { executeV1Actions } from "./actions-v1.js";
 import { buildStepContextV1 } from "./context-v1.js";
-import type { V1InstanceState, V1StepState } from "./state-v1.js";
+import type { V1InstanceState } from "./state-v1.js";
 import { buildSchemaRegistry, type SchemaRegistry } from "./schemas.js";
 import { applyRouterGoto, evaluateRouter } from "./router-v1.js";
+import {
+  beginCall,
+  collectWorkflowOutput,
+  V1CallError,
+  type V1WorkflowRegistry,
+} from "./call-v1.js";
 
 // ── Errors ──
 
@@ -40,15 +46,17 @@ export class V1OutputValidationError extends Error {
 
 export interface AdvanceResult {
   /**
-   * - "awaiting_agent": paused at an agentic step; caller must collect the
-   *    agent's output and feed it to `submitAgenticResult`.
-   * - "completed": the workflow has no more steps; state.status === "completed".
-   * - "error": an unrecoverable error occurred; state.status === "error".
+   * - "awaiting_agent": paused at an agentic step (possibly inside a
+   *    nested `call`); the caller must collect the agent's output and
+   *    feed it to `submitAgenticResult` on the *top-level* state. The
+   *    runner routes it down to the deepest active call automatically.
+   * - "completed": the instance has no more steps.
+   * - "error": an unrecoverable error occurred.
    */
   kind: "awaiting_agent" | "completed" | "error";
   /** Present when kind === "awaiting_agent". */
   pendingStep?: V1StepDef;
-  /** List of programmatic step ids executed during this advance. */
+  /** List of step ids auto-completed during this advance, at this level only. */
   autoCompleted: string[];
   /** Present when kind === "error". */
   error?: Error;
@@ -57,21 +65,30 @@ export interface AdvanceResult {
 // ── Public API ──
 
 /**
- * Drive the instance forward as far as possible without agent interaction.
+ * Drive an instance forward until either an agentic step pauses it or
+ * the workflow ends. If a `call` step spawns a child, execution
+ * transparently recurses into the child; a child's agentic pause
+ * propagates upward as awaiting_agent on this result.
  *
- * Starting from `state.current_step_id`, execute programmatic steps in
- * sequence, stopping at the first agentic step. Router and call steps are
- * recognized but not yet implemented (raise V1RunnerError) — they arrive
- * in PR #3 and PR #4 respectively.
+ * The registry is required only for workflows that contain `call`
+ * steps. Omit it for simple agentic/programmatic/router workflows.
  */
 export function advance(
   def: WorkflowV1Def,
   state: V1InstanceState,
+  registry?: V1WorkflowRegistry,
 ): AdvanceResult {
-  const { registry } = buildSchemaRegistry(def.schemas);
+  const { registry: schemaRegistry } = buildSchemaRegistry(def.schemas);
   const autoCompleted: string[] = [];
 
   while (true) {
+    // A child sub-instance is in-flight: delegate.
+    if (state.active_call) {
+      const r = advanceActiveCall(def, state, registry, autoCompleted);
+      if (r) return r;
+      continue; // child completed and parent resumed; keep going
+    }
+
     const stepId = state.current_step_id;
     if (!stepId) {
       state.status = "completed";
@@ -81,22 +98,16 @@ export function advance(
 
     const step = findStep(def, stepId);
     if (!step) {
-      const err = new V1RunnerError(
+      return errorResult(state, autoCompleted, new V1RunnerError(
         `current_step_id '${stepId}' does not exist in workflow`,
-      );
-      state.status = "error";
-      state.updated_at = nowISO();
-      return { kind: "error", autoCompleted, error: err };
+      ));
     }
 
     const stepState = state.steps[stepId];
     if (!stepState) {
-      const err = new V1RunnerError(
+      return errorResult(state, autoCompleted, new V1RunnerError(
         `instance state missing entry for step '${stepId}'`,
-      );
-      state.status = "error";
-      state.updated_at = nowISO();
-      return { kind: "error", autoCompleted, error: err };
+      ));
     }
 
     // Agentic: pause and hand control to the caller.
@@ -109,7 +120,7 @@ export function advance(
       return { kind: "awaiting_agent", pendingStep: step, autoCompleted };
     }
 
-    // Router: evaluate cases, record decision, apply goto (forward or backward).
+    // Router: evaluate cases, record decision, apply goto.
     if (isRouterStep(step)) {
       try {
         stepState.status = "in_progress";
@@ -118,9 +129,6 @@ export function advance(
         const stepOrder = def.steps.map((s) => s.id);
         const gotoResult = applyRouterGoto(step, decision.goto, stepOrder, state);
 
-        // Record the decision as the router's output. Backward gotos bump
-        // the iteration counter; forward gotos leave it untouched (the
-        // router completed once and advanced).
         const output: Record<string, unknown> = {
           selected_goto: decision.goto,
           selected_case: decision.case_index,
@@ -129,16 +137,19 @@ export function advance(
         if (gotoResult.backward) {
           output.iteration = gotoResult.newIterations;
         }
+
         // On backward goto, applyRouterGoto reset the router's own state.
-        // We must re-mark it completed *after* the reset so its output is
-        // observable to downstream steps that reference it.
+        // Re-mark it completed *after* the reset so downstream references
+        // to {router.selected_goto} work.
         const freshRouterState = state.steps[step.id];
         if (freshRouterState) {
           freshRouterState.status = "completed";
           freshRouterState.output = output;
           freshRouterState.completed_at = nowISO();
-          freshRouterState.iterations = gotoResult.newIterations ?? (freshRouterState.iterations ?? 0) + 1;
+          freshRouterState.iterations =
+            gotoResult.newIterations ?? (freshRouterState.iterations ?? 0) + 1;
         }
+        state.last_completed_step_id = step.id;
 
         autoCompleted.push(step.id);
         state.status = state.status === "created" ? "in_progress" : state.status;
@@ -146,22 +157,28 @@ export function advance(
         continue;
       } catch (err) {
         stepState.status = "pending";
-        state.status = "error";
-        state.updated_at = nowISO();
-        return { kind: "error", autoCompleted, error: err as Error };
+        return errorResult(state, autoCompleted, err as Error);
       }
     }
 
+    // Call: spawn the child, then loop so the active_call branch picks it up.
     if (isCallStep(step)) {
-      const err = new V1RunnerError(
-        `call step '${stepId}' is not yet implemented (PR #4)`,
-      );
-      state.status = "error";
-      state.updated_at = nowISO();
-      return { kind: "error", autoCompleted, error: err };
+      if (!registry) {
+        return errorResult(state, autoCompleted, new V1RunnerError(
+          `call step '${stepId}' requires a workflow registry`,
+        ));
+      }
+      try {
+        stepState.status = "in_progress";
+        beginCall(step, state, registry);
+        continue;
+      } catch (err) {
+        stepState.status = "pending";
+        return errorResult(state, autoCompleted, err as Error);
+      }
     }
 
-    // Programmatic: execute actions, validate output, advance to next step.
+    // Programmatic: execute actions, validate, advance.
     if (isProgrammaticStep(step)) {
       try {
         stepState.status = "in_progress";
@@ -170,10 +187,10 @@ export function advance(
         const result = executeV1Actions(step.actions, context, timeout);
 
         if (step.required_output) {
-          assertValidOutput(step.id, step.required_output, result.extracted, registry);
+          assertValidOutput(step.id, step.required_output, result.extracted, schemaRegistry);
         }
 
-        completeStep(stepState, result.extracted);
+        finishStep(state, step.id, result.extracted);
         autoCompleted.push(step.id);
         state.current_step_id = nextStepId(def, step.id);
         state.status = state.status === "created" ? "in_progress" : state.status;
@@ -181,36 +198,51 @@ export function advance(
         continue;
       } catch (err) {
         stepState.status = "pending";
-        state.status = "error";
-        state.updated_at = nowISO();
-        return { kind: "error", autoCompleted, error: err as Error };
+        return errorResult(state, autoCompleted, err as Error);
       }
     }
 
-    // Unknown type — defensive; validation should have caught this at load time.
-    const err = new V1RunnerError(
+    return errorResult(state, autoCompleted, new V1RunnerError(
       `unknown step type '${(step as { type: string }).type}' for step '${stepId}'`,
-    );
-    state.status = "error";
-    state.updated_at = nowISO();
-    return { kind: "error", autoCompleted, error: err };
+    ));
   }
 }
 
 /**
- * Submit an agent's proposed output for the current agentic step.
- * Validates against the step's `required_output` schema, records the
- * output on success, and advances to the next step.
- *
- * Throws if the current step is not agentic, or if validation fails.
- * Validation failure leaves the step in `in_progress` so the caller can
- * ask the agent to retry.
+ * Submit an agent's proposed output. This targets the deepest active
+ * agentic step: if there is an in-flight `call`, the output is routed
+ * to that child (possibly recursively). Callers only ever interact
+ * with the top-level state.
  */
 export function submitAgenticResult(
   def: WorkflowV1Def,
   state: V1InstanceState,
   output: Record<string, unknown>,
+  registry?: V1WorkflowRegistry,
 ): AdvanceResult {
+  // Descend into nested call if active.
+  if (state.active_call) {
+    if (!registry) {
+      throw new V1RunnerError(
+        "submitAgenticResult encountered an active call but no registry was provided",
+      );
+    }
+    const childDef = registry.load(state.active_call.child_workflow_name);
+    if (!childDef) {
+      throw new V1RunnerError(
+        `active call references unknown workflow '${state.active_call.child_workflow_name}'`,
+      );
+    }
+    // Recurse: this routes all the way down to the deepest agentic step.
+    submitAgenticResult(childDef, state.active_call.child, output, registry);
+    // After the recursive submit, the child may still be waiting, or may
+    // have completed (possibly through further programmatic / nested
+    // call steps). In either case we continue the parent by re-entering
+    // advance, which will re-inspect active_call and delegate.
+    return advance(def, state, registry);
+  }
+
+  // Top-level agentic submit.
   const stepId = state.current_step_id;
   if (!stepId) {
     throw new V1RunnerError("no current step to submit to");
@@ -226,15 +258,70 @@ export function submitAgenticResult(
     throw new V1RunnerError(`instance state missing entry for step '${stepId}'`);
   }
 
-  const { registry } = buildSchemaRegistry(def.schemas);
-  assertValidOutput(step.id, step.required_output, output, registry);
+  const { registry: schemaRegistry } = buildSchemaRegistry(def.schemas);
+  assertValidOutput(step.id, step.required_output, output, schemaRegistry);
 
-  completeStep(stepState, output);
+  finishStep(state, step.id, output);
   state.current_step_id = nextStepId(def, step.id);
   state.status = state.status === "created" ? "in_progress" : state.status;
   state.updated_at = nowISO();
 
-  return advance(def, state);
+  return advance(def, state, registry);
+}
+
+// ── Internal: active-call handling ──
+
+/**
+ * Execute one turn of delegating to the in-flight child. Returns a
+ * result to propagate, or `undefined` when the child finished and the
+ * parent should continue its own loop.
+ */
+function advanceActiveCall(
+  def: WorkflowV1Def,
+  state: V1InstanceState,
+  registry: V1WorkflowRegistry | undefined,
+  autoCompleted: string[],
+): AdvanceResult | undefined {
+  if (!state.active_call) return undefined;
+  if (!registry) {
+    return errorResult(state, autoCompleted, new V1RunnerError(
+      "active call present but no workflow registry provided",
+    ));
+  }
+  const { child, child_workflow_name, step_id } = state.active_call;
+  const childDef = registry.load(child_workflow_name);
+  if (!childDef) {
+    return errorResult(state, autoCompleted, new V1RunnerError(
+      `active call references unknown workflow '${child_workflow_name}'`,
+    ));
+  }
+
+  const childResult = advance(childDef, child, registry);
+  if (childResult.kind === "awaiting_agent") {
+    return {
+      kind: "awaiting_agent",
+      pendingStep: childResult.pendingStep,
+      autoCompleted,
+    };
+  }
+  if (childResult.kind === "error") {
+    return errorResult(state, autoCompleted, childResult.error!);
+  }
+
+  // Child completed: collect its output, stamp it on this call step, advance.
+  try {
+    const output = collectWorkflowOutput(childDef, child, step_id);
+    finishStep(state, step_id, output);
+    state.active_call = undefined;
+    state.current_step_id = nextStepId(def, step_id);
+    state.status = state.status === "created" ? "in_progress" : state.status;
+    state.updated_at = nowISO();
+    autoCompleted.push(step_id);
+    return undefined; // signal: continue parent loop
+  } catch (err) {
+    const e = err instanceof V1CallError ? err : err as Error;
+    return errorResult(state, autoCompleted, e);
+  }
 }
 
 // ── Internal helpers ──
@@ -249,11 +336,18 @@ function nextStepId(def: WorkflowV1Def, currentId: string): string | null {
   return def.steps[idx + 1].id;
 }
 
-function completeStep(stepState: V1StepState, output: Record<string, unknown>): void {
+function finishStep(
+  state: V1InstanceState,
+  stepId: string,
+  output: Record<string, unknown>,
+): void {
+  const stepState = state.steps[stepId];
+  if (!stepState) return;
   stepState.status = "completed";
   stepState.output = output;
   stepState.completed_at = nowISO();
   stepState.iterations = (stepState.iterations ?? 0) + 1;
+  state.last_completed_step_id = stepId;
 }
 
 function assertValidOutput(
@@ -266,4 +360,14 @@ function assertValidOutput(
   if (!result.valid) {
     throw new V1OutputValidationError(stepId, schemaName, result.errors);
   }
+}
+
+function errorResult(
+  state: V1InstanceState,
+  autoCompleted: string[],
+  error: Error,
+): AdvanceResult {
+  state.status = "error";
+  state.updated_at = nowISO();
+  return { kind: "error", autoCompleted, error };
 }

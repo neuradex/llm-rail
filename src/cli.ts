@@ -8,6 +8,7 @@ import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
 import { runCompile } from "./commands/compile.js";
+import { runGraph } from "./commands/graph.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
@@ -37,6 +38,7 @@ function usage(): never {
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
   lrail wf <name> validate [--variant <v>] [--path <file>]  Validate workflow YAML
   lrail wf <name> compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  lrail wf <name> graph --json [--path <file>]  Export v1 workflow as structured JSON
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
@@ -144,6 +146,7 @@ Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
   compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  graph --json [--path <file>]           Export v1 workflow as structured JSON
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
@@ -197,6 +200,19 @@ Instance commands (after 'create'):
         workflowName: pathFlag ? undefined : workflowName,
         filePath: pathFlag,
         registryDir,
+      });
+      break;
+    }
+
+    case "graph": {
+      if (!args.includes("--json")) {
+        console.error("Usage: lrail wf <name> graph --json [--path <file>]");
+        process.exit(1);
+      }
+      runGraph({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        format: "json",
       });
       break;
     }
@@ -288,6 +304,7 @@ Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
   compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  graph --json [--path <file>]           Export v1 workflow as structured JSON
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants

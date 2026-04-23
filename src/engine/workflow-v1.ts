@@ -267,7 +267,7 @@ function validateContextRef(
     errors.push(`${stepLabel} '${key}' must be a non-empty reference string`);
     return;
   }
-  const stepRef = tmpl.match(/^\{(\w+)\.[\w.]+\}$/);
+  const stepRef = tmpl.match(/^\{([\w-]+)\.[\w.-]+\}$/);
   if (stepRef) {
     if (!stepIds.has(stepRef[1])) {
       errors.push(
@@ -276,7 +276,7 @@ function validateContextRef(
     }
     return;
   }
-  const paramRef = tmpl.match(/^\{\{\w[\w.]*\}\}$/);
+  const paramRef = tmpl.match(/^\{\{[\w.-]+\}\}$/);
   if (paramRef) return; // workflow input reference, deferred to compile
   errors.push(
     `${stepLabel} '${key}' has malformed reference '${tmpl}' (expected "{step.field}" or "{{param}}")`,

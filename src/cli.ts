@@ -7,6 +7,7 @@ import { runQuery } from "./commands/query.js";
 import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
+import { runCompile } from "./commands/compile.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
@@ -35,6 +36,7 @@ function usage(): never {
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
   lrail wf <name> validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  lrail wf <name> compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
@@ -141,6 +143,7 @@ if (target === "init") {
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
@@ -186,6 +189,17 @@ Instance commands (after 'create'):
     case "validate":
       runValidate(workflowName, variantFlag, pathFlag);
       break;
+
+    case "compile": {
+      const registryIdx = args.indexOf("--registry");
+      const registryDir = registryIdx !== -1 ? args[registryIdx + 1] : undefined;
+      runCompile({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        registryDir,
+      });
+      break;
+    }
 
     case "show":
       runShow(workflowName, variantFlag);
@@ -273,6 +287,7 @@ Usage: lrail wf ${workflowName} <command>
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants

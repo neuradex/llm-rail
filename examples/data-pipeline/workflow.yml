@@ -1,81 +1,109 @@
+format: v1
 name: data-pipeline
-version: "0.1.0"
-description: データ取得・変換・レポート生成パイプライン
-params:
-  source:
-    type: string
-    required: true
-    description: データソースURL or パス
-  format:
-    type: string
-    required: false
-    default: json
-    description: 出力フォーマット
+version: "1.0.0"
+description: Fetch records, clean them with an agent, shape a report.
+
+schemas:
+  Input:
+    type: object
+    properties:
+      source:
+        type: string
+        description: Source URL or path
+      format:
+        type: string
+        enum: [json, csv]
+        default: json
+    required: [source]
+
+  Output:
+    type: object
+    properties:
+      report_text: { type: string, minLength: 20 }
+      record_count: { type: integer, minimum: 0 }
+      dropped_count: { type: integer, minimum: 0 }
+    required: [report_text, record_count, dropped_count]
+
+  Record:
+    type: object
+    properties:
+      id: { type: string, minLength: 1 }
+      data: { type: object }
+    required: [id, data]
+
+  FetchResult:
+    type: object
+    properties:
+      raw_data:
+        type: array
+        items: Record
+        minItems: 1
+      schema: { type: object }
+    required: [raw_data, schema]
+
+  CleaningResult:
+    type: object
+    properties:
+      transformed_data:
+        type: array
+        items: Record
+      dropped_count: { type: integer, minimum: 0 }
+      transform_log:
+        type: array
+        items: { type: string }
+    required: [transformed_data, dropped_count, transform_log]
+
+input: Input
+output: Output
+
 steps:
   - id: fetch
-    description: データ取得
-    instruction: "{{source}} からデータを取得"
-    required_output:
-      - raw_data
-      - record_count
-      - schema
-    validation:
-      - field: raw_data
-        op: type
-        value: array
-      - field: raw_data
-        op: not_empty
-      - field: record_count
-        op: gt
-        value: 0
-      - field: schema
-        op: type
-        value: object
-    tips:
-      - データソースのレート制限に注意
-      - schemaにはフィールド名と型を含める
+    type: agentic
+    context_in:
+      source: "{{source}}"
+      format: "{{format}}"
+    instruction: |
+      Fetch records from {{source}} as {{format}}.
+      Return each record with a stable `id` and a `data` object.
+      Also return a `schema` object describing the field names and types.
+    required_output: FetchResult
 
   - id: transform
-    description: データ変換・クレンジング
-    instruction: データ変換・クレンジング
+    type: agentic
     context_in:
-      data: "{fetch.raw_data}"
+      records: "{fetch.raw_data}"
       schema: "{fetch.schema}"
-    required_output:
-      - transformed_data
-      - dropped_count
-      - transform_log
-    validation:
-      - field: transformed_data
-        op: type
-        value: array
-      - field: dropped_count
-        op: gte
-        value: 0
-      - field: transform_log
-        op: type
-        value: array
+    instruction: |
+      Clean and validate each record against the schema. Drop records that
+      cannot be repaired. Return the cleaned list, the count of dropped
+      records, and a log of what was changed.
+    required_output: CleaningResult
     assertions:
       - field: dropped_count
         op: lte
         value: 100
-        message: ドロップされたレコードが多すぎます
+        message: Too many records dropped; review input quality.
 
   - id: report
-    description: レポート生成
-    instruction: "{{format}} 形式でレポート生成"
+    type: programmatic
     context_in:
-      data: "{transform.transformed_data}"
+      cleaned: "{transform.transformed_data}"
       dropped: "{transform.dropped_count}"
       log: "{transform.transform_log}"
-    required_output:
-      - report_content
-      - summary
-    validation:
-      - field: report_content
-        op: not_empty
-      - field: summary
-        op: min_length
-        value: 20
-    meta:
-      requires_approval: true
+    required_output: Output
+    actions:
+      - name: summarize
+        description: Produce a short human-readable summary of the pipeline run
+        js: |
+          const lines = [
+            `Pipeline processed ${context.cleaned.length + context.dropped} records.`,
+            `Kept ${context.cleaned.length}, dropped ${context.dropped}.`,
+            '',
+            'Changes:',
+            ...context.log.map(l => `  - ${l}`),
+          ];
+          return {
+            report_text: lines.join('\n'),
+            record_count: context.cleaned.length,
+            dropped_count: context.dropped,
+          };

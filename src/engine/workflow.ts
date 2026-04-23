@@ -1,16 +1,30 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { WorkflowDef } from "../types.js";
+import { isV1Workflow } from "../types-v1.js";
 import { loadYaml } from "../util.js";
 import { resolveWorkflowPath, loadVariant, mergeVariant } from "./variant.js";
 
+function guardNotV1(loaded: unknown, hint: string): void {
+  if (isV1Workflow(loaded)) {
+    throw new Error(
+      `${hint} is a v1 workflow (format: v1). The legacy loader cannot parse v1 definitions. Use loadWorkflowV1FromPath() from engine/workflow-v1.js.`,
+    );
+  }
+}
+
 export function loadWorkflowFromPath(filePath: string): WorkflowDef {
-  return loadYaml<WorkflowDef>(path.resolve(filePath));
+  const resolved = path.resolve(filePath);
+  const loaded = loadYaml<unknown>(resolved);
+  guardNotV1(loaded, resolved);
+  return loaded as WorkflowDef;
 }
 
 export function loadWorkflow(name: string, variant?: string): WorkflowDef {
   const { basePath } = resolveWorkflowPath(name);
-  const base = loadYaml<WorkflowDef>(basePath);
+  const loaded = loadYaml<unknown>(basePath);
+  guardNotV1(loaded, `Workflow '${name}' at ${basePath}`);
+  const base = loaded as WorkflowDef;
 
   if (variant) {
     const variantDef = loadVariant(name, variant);

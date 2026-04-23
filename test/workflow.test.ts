@@ -664,9 +664,9 @@ describe("pickTips", () => {
 // ── generateId ──
 
 describe("generateId", () => {
-  it("returns MMDD-HHmmss format", () => {
+  it("returns MMDD-HHMMSS-mmm-XXXX format", () => {
     const id = generateId();
-    assert.match(id, /^\d{4}-\d{6}$/);
+    assert.match(id, /^\d{4}-\d{6}-\d{3}-[a-f0-9]{4}$/);
   });
 });
 

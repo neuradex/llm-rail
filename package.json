@@ -38,6 +38,7 @@
     "prepublishOnly": "tsup"
   },
   "dependencies": {
+    "ajv": "^8.18.0",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

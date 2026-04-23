@@ -25,7 +25,17 @@ export interface GraphExport {
   schemas: Record<string, SchemaDef>;
   nodes: GraphNode[];
   control_edges: ControlEdge[];
+  /**
+   * Step-to-step data dependencies (context_in / call.inputs references of
+   * the form `{step.field}`). Workflow input references (`{{name}}`) live
+   * in `input_refs` instead to avoid mixing two kinds of source.
+   */
   data_edges: DataEdge[];
+  /**
+   * Workflow-input references. Renderers can draw them as edges from a
+   * synthetic "Input" box to each consumer step.
+   */
+  input_refs: InputRef[];
 }
 
 export interface GraphNode {
@@ -38,7 +48,7 @@ export interface GraphNode {
   /** programmatic */
   actions?: { name: string; description: string; kind: "js" | "shell" }[];
   /** router */
-  cases?: { index: number; when_summary: string; goto: string; backward: boolean }[];
+  cases?: { index: number; when_summary: string; goto: string }[];
   default?: string;
   max_iterations?: number;
   /** call */
@@ -59,7 +69,7 @@ export interface ControlEdge {
   /** router-case only */
   case_index?: number;
   when_summary?: string;
-  /** router-case / router-default: true if to is at or before from in step order. */
+  /** router-case / router-default: true if `to` is at or before `from`. */
   backward?: boolean;
   /** call-entry: the `to` is an external workflow name, not a local step id. */
   external?: boolean;
@@ -67,9 +77,28 @@ export interface ControlEdge {
 
 export interface DataEdge {
   from_step: string;
+  /** The first segment of the referenced path. Kept for simple consumers. */
   from_field: string;
+  /** The full dotted path as declared in the reference (e.g. "stats.count"). */
+  from_path: string;
+  to_step: string;
+  /**
+   * The consumer key. For context_in this is the local alias; for
+   * call-input it is the raw key on the child workflow's input (no
+   * "inputs." prefix — use `via` to disambiguate).
+   */
+  to_key: string;
+  via: "context_in" | "call-input";
+  has_default: boolean;
+}
+
+export interface InputRef {
   to_step: string;
   to_key: string;
+  /** First segment of the workflow-input path. */
+  field: string;
+  /** Full dotted path, e.g. "user.name". */
+  path: string;
   via: "context_in" | "call-input";
   has_default: boolean;
 }
@@ -79,12 +108,21 @@ export interface DataEdge {
 /**
  * Export a v1 workflow as a structured graph.
  *
- * Consumers (visualizers, Loom-style editors) consume this in place of
- * parsing the YAML. Control edges describe where execution can go;
- * data edges describe cross-step data flow driven by context_in /
- * call.inputs. Workflow-level input references (`{{name}}`) are not
- * represented as data edges (they all originate from the same virtual
- * source), but the raw input/output schema names are preserved.
+ * Intended as the consumer-facing API for visualizers and editors: consumers
+ * never have to parse YAML or regex out goto targets. Four kinds of edges
+ * are surfaced:
+ *
+ *   - `control_edges` — where execution can go (sequential / router /
+ *     call entry).
+ *   - `data_edges` — step-to-step data dependencies via context_in and
+ *     call.inputs.
+ *   - `input_refs` — references to workflow-level input fields (`{{name}}`).
+ *     Rendered as edges from a synthetic "Input" box in diagrams.
+ *
+ * `data_edges` and `input_refs` are intentionally kept separate: they
+ * describe different kinds of source (a prior step's output vs the
+ * workflow's input shape), and renderers usually want to style them
+ * differently.
  */
 export function exportGraph(def: WorkflowV1Def): GraphExport {
   const stepOrder = new Map<string, number>();
@@ -140,6 +178,7 @@ export function exportGraph(def: WorkflowV1Def): GraphExport {
   }
 
   const data_edges: DataEdge[] = [];
+  const input_refs: InputRef[] = [];
   for (const step of def.steps) {
     // context_in on agentic/programmatic/router
     const contextIn =
@@ -148,19 +187,13 @@ export function exportGraph(def: WorkflowV1Def): GraphExport {
         : undefined;
     if (contextIn) {
       for (const [key, value] of Object.entries(contextIn)) {
-        appendDataEdgeFromContextEntry(step.id, key, value, data_edges, "context_in");
+        appendReference(step.id, key, value, "context_in", data_edges, input_refs);
       }
     }
     // call.inputs
     if (isCallStep(step)) {
       for (const [key, tmpl] of Object.entries(step.inputs)) {
-        appendDataEdgeFromContextEntry(
-          step.id,
-          `inputs.${key}`,
-          tmpl,
-          data_edges,
-          "call-input",
-        );
+        appendReference(step.id, key, tmpl, "call-input", data_edges, input_refs);
       }
     }
   }
@@ -174,6 +207,7 @@ export function exportGraph(def: WorkflowV1Def): GraphExport {
     nodes,
     control_edges,
     data_edges,
+    input_refs,
   };
   if (def.version) graph.version = def.version;
   if (def.description) graph.description = def.description;
@@ -248,7 +282,6 @@ function buildNode(step: V1StepDef): GraphNode {
       index: i,
       when_summary: summarizeWhen(c.when),
       goto: c.goto,
-      backward: false, // filled in by caller context in control_edges, not here
     }));
     base.default = step.default;
     if (step.max_iterations !== undefined) base.max_iterations = step.max_iterations;
@@ -273,25 +306,51 @@ function isBackward(
   return t <= f;
 }
 
-function appendDataEdgeFromContextEntry(
+/**
+ * Parse a single context_in / call.inputs entry and route it into the
+ * correct bucket: step-ref → data_edges, workflow-input-ref → input_refs.
+ * Non-references and malformed templates are silently skipped (compile
+ * reports those separately).
+ */
+function appendReference(
   consumerId: string,
   key: string,
   value: ContextInValue | string,
-  out: DataEdge[],
-  via: DataEdge["via"],
+  via: "context_in" | "call-input",
+  dataEdges: DataEdge[],
+  inputRefs: InputRef[],
 ): void {
   const template = typeof value === "string" ? value : value.from;
   const hasDefault = typeof value !== "string" && "default" in value;
-  const m = template.match(/^\{([\w-]+)\.([\w.-]+)\}$/);
-  if (!m) return; // workflow input refs and non-refs are skipped
-  const fromStep = m[1];
-  const fromField = m[2].split(".")[0];
-  out.push({
-    from_step: fromStep,
-    from_field: fromField,
-    to_step: consumerId,
-    to_key: key,
-    via,
-    has_default: hasDefault,
-  });
+
+  const stepMatch = template.match(/^\{([\w-]+)\.([\w.-]+)\}$/);
+  if (stepMatch) {
+    const fullPath = stepMatch[2];
+    dataEdges.push({
+      from_step: stepMatch[1],
+      from_field: fullPath.split(".")[0],
+      from_path: fullPath,
+      to_step: consumerId,
+      to_key: key,
+      via,
+      has_default: hasDefault,
+    });
+    return;
+  }
+
+  const inputMatch = template.match(/^\{\{([\w.-]+)\}\}$/);
+  if (inputMatch) {
+    const fullPath = inputMatch[1];
+    inputRefs.push({
+      to_step: consumerId,
+      to_key: key,
+      field: fullPath.split(".")[0],
+      path: fullPath,
+      via,
+      has_default: hasDefault,
+    });
+    return;
+  }
+
+  // Unrecognized template shape — caller's static checks will complain.
 }

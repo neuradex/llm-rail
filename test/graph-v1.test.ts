@@ -235,7 +235,7 @@ describe("graph-v1 — control edges", () => {
 });
 
 describe("graph-v1 — data edges", () => {
-  it("captures context_in step→step references", () => {
+  it("captures context_in step→step references with path preserved", () => {
     const def = mkDef("data", {
       schemas: {
         Input: { type: "object" },
@@ -263,6 +263,7 @@ describe("graph-v1 — data edges", () => {
       {
         from_step: "src",
         from_field: "v",
+        from_path: "v",
         to_step: "sink",
         to_key: "val",
         via: "context_in",
@@ -271,7 +272,46 @@ describe("graph-v1 — data edges", () => {
     ]);
   });
 
-  it("captures call.inputs references and marks has_default", () => {
+  it("preserves sub-path in from_path when the reference is dotted (P2)", () => {
+    const def = mkDef("data", {
+      schemas: {
+        Input: { type: "object" },
+        Output: { type: "object" },
+        Nested: {
+          type: "object",
+          properties: {
+            stats: {
+              type: "object",
+              properties: { count: { type: "integer" } },
+              required: ["count"],
+            },
+          },
+          required: ["stats"],
+        },
+        R: { type: "object", properties: { v: { type: "integer" } }, required: ["v"] },
+      },
+      steps: [
+        {
+          id: "src",
+          type: "programmatic",
+          required_output: "Nested",
+          actions: [{ name: "x", description: "x", js: "return { stats: { count: 1 } };" }],
+        },
+        {
+          id: "sink",
+          type: "programmatic",
+          context_in: { n: "{src.stats.count}" },
+          required_output: "R",
+          actions: [{ name: "x", description: "x", js: "return { v: context.n };" }],
+        },
+      ],
+    });
+    const edge = exportGraph(def).data_edges[0];
+    assert.equal(edge.from_field, "stats");
+    assert.equal(edge.from_path, "stats.count");
+  });
+
+  it("captures call.inputs with raw key (no 'inputs.' prefix, P3)", () => {
     const def = mkDef("data", {
       schemas: {
         Input: { type: "object" },
@@ -307,16 +347,19 @@ describe("graph-v1 — data edges", () => {
     assert.deepEqual(callInput, {
       from_step: "src",
       from_field: "v",
+      from_path: "v",
       to_step: "callee",
-      to_key: "inputs.s",
+      to_key: "s",
       via: "call-input",
       has_default: false,
     });
     const withDefault = g.data_edges.find((e) => e.to_step === "consume");
     assert.ok(withDefault?.has_default);
   });
+});
 
-  it("ignores workflow input references ({{name}})", () => {
+describe("graph-v1 — input_refs (P1)", () => {
+  it("routes {{name}} references to input_refs, not data_edges", () => {
     const def = mkDef("data", {
       schemas: {
         Input: {
@@ -339,6 +382,111 @@ describe("graph-v1 — data edges", () => {
     });
     const g = exportGraph(def);
     assert.deepEqual(g.data_edges, []);
+    assert.deepEqual(g.input_refs, [
+      {
+        to_step: "s",
+        to_key: "x",
+        field: "start",
+        path: "start",
+        via: "context_in",
+        has_default: false,
+      },
+    ]);
+  });
+
+  it("preserves dotted paths in input_refs.path", () => {
+    const def = mkDef("data", {
+      schemas: {
+        Input: {
+          type: "object",
+          properties: {
+            user: {
+              type: "object",
+              properties: { name: { type: "string" } },
+              required: ["name"],
+            },
+          },
+          required: ["user"],
+        },
+        Output: { type: "object" },
+        R: { type: "object", properties: { v: { type: "string" } }, required: ["v"] },
+      },
+      steps: [
+        {
+          id: "s",
+          type: "programmatic",
+          context_in: { greeting: "{{user.name}}" },
+          required_output: "R",
+          actions: [{ name: "x", description: "x", js: "return { v: context.greeting };" }],
+        },
+      ],
+    });
+    const ref = exportGraph(def).input_refs[0];
+    assert.equal(ref.field, "user");
+    assert.equal(ref.path, "user.name");
+  });
+
+  it("captures {{name}} refs on call.inputs with raw to_key", () => {
+    const def = mkDef("data", {
+      schemas: {
+        Input: {
+          type: "object",
+          properties: { api_key: { type: "string" } },
+          required: ["api_key"],
+        },
+        Output: { type: "object" },
+      },
+      steps: [
+        {
+          id: "c",
+          type: "call",
+          workflow: "helper",
+          inputs: { token: "{{api_key}}" },
+        },
+      ],
+    });
+    const g = exportGraph(def);
+    assert.deepEqual(g.data_edges, []);
+    assert.deepEqual(g.input_refs, [
+      {
+        to_step: "c",
+        to_key: "token",
+        field: "api_key",
+        path: "api_key",
+        via: "call-input",
+        has_default: false,
+      },
+    ]);
+  });
+});
+
+describe("graph-v1 — node cases (P4)", () => {
+  it("router cases in nodes do NOT carry a placeholder backward field", () => {
+    const def = mkDef("r", {
+      schemas: {
+        Input: { type: "object" },
+        Output: { type: "object" },
+        R: { type: "object", properties: { v: { type: "integer" } }, required: ["v"] },
+      },
+      steps: [
+        {
+          id: "r",
+          type: "router",
+          cases: [{ when: { field: "{{mode}}", op: "eq", value: "a" }, goto: "a" }],
+          default: "a",
+        },
+        {
+          id: "a",
+          type: "programmatic",
+          required_output: "R",
+          actions: [{ name: "x", description: "x", js: "return { v: 1 };" }],
+        },
+      ],
+    });
+    const node = exportGraph(def).nodes[0];
+    const keys = Object.keys(node.cases?.[0] ?? {});
+    assert.ok(!keys.includes("backward"), "nodes[].cases[] must not carry a placeholder backward");
+    assert.deepEqual(keys.sort(), ["goto", "index", "when_summary"]);
   });
 });
 

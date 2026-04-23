@@ -9,6 +9,7 @@ import { runList, runListWorkflows, runListInstances } from "./commands/list.js"
 import { runValidate } from "./commands/validate.js";
 import { runCompile } from "./commands/compile.js";
 import { runGraph } from "./commands/graph.js";
+import { runMigrate } from "./commands/migrate.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
@@ -39,6 +40,7 @@ function usage(): never {
   lrail wf <name> validate [--variant <v>] [--path <file>]  Validate workflow YAML
   lrail wf <name> compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   lrail wf <name> graph --json [--path <file>]  Export v1 workflow as structured JSON
+  lrail wf <name> migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
@@ -147,6 +149,7 @@ Workflow commands:
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
   compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   graph --json [--path <file>]           Export v1 workflow as structured JSON
+  migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
@@ -213,6 +216,19 @@ Instance commands (after 'create'):
         workflowName: pathFlag ? undefined : workflowName,
         filePath: pathFlag,
         format: "json",
+      });
+      break;
+    }
+
+    case "migrate": {
+      const outIdx = args.indexOf("--output");
+      const outputPath = outIdx !== -1 ? args[outIdx + 1] : undefined;
+      const dryRun = args.includes("--dry-run");
+      runMigrate({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        outputPath,
+        dryRun,
       });
       break;
     }
@@ -305,6 +321,7 @@ Workflow commands:
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
   compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
   graph --json [--path <file>]           Export v1 workflow as structured JSON
+  migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants

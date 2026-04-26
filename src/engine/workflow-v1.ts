@@ -211,8 +211,8 @@ function validateStep(
   }
 
   if (isRouterStep(step)) {
-    if (!Array.isArray(step.cases) || step.cases.length === 0) {
-      errors.push(`${stepLabel} (router) must have at least one case`);
+    if (!Array.isArray(step.cases)) {
+      errors.push(`${stepLabel} (router) must have a 'cases' array (use [] for unconditional default)`);
     } else {
       step.cases.forEach((c, i) => {
         const loc = `${stepLabel} case[${i}]`;

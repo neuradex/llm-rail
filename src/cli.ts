@@ -124,14 +124,20 @@ if (target === "init") {
   const workflowName = args[1];
   const command = args[2];
 
-  // lrail wf / lrail wf list — list all workflows
-  if (!workflowName || (workflowName === "list" && !command)) {
+  // lrail wf / lrail wf list [--status <s>] — list all workflows.
+  // Treat any leading `--flag` after `list` as a flag, not a subcommand.
+  if (
+    !workflowName ||
+    (workflowName === "list" && (!command || command.startsWith("-")))
+  ) {
     runListWorkflows();
     process.exit(0);
   }
 
-  // lrail wf instances [--status <status>] — list all instances
-  if (workflowName === "instances" && !command) {
+  // lrail wf instances [--status <status>] — list all instances.
+  // Same treatment: a leading `--flag` is part of `instances`, not a
+  // workflow command on a workflow named "instances".
+  if (workflowName === "instances" && (!command || command.startsWith("-"))) {
     let statusFilter: string | undefined;
     const statusIdx = args.indexOf("--status");
     if (statusIdx !== -1 && args[statusIdx + 1]) {

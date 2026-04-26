@@ -1,76 +1,18 @@
-import { loadWorkflow } from "../engine/workflow.js";
-import { resolveDescription, resolveInstruction, buildStepContext, collectStepOutputs } from "../engine/context.js";
 import { loadInstanceAny } from "../engine/workflow-any.js";
 import { loadWorkflowV1 } from "../engine/workflow-v1.js";
-import { isAgenticStep, isProgrammaticStep, isRouterStep, isCallStep } from "../types-v1.js";
+import {
+  isAgenticStep,
+  isProgrammaticStep,
+  isRouterStep,
+  isCallStep,
+} from "../types-v1.js";
 import { buildStepContextV1 } from "../engine/context-v1.js";
 import type { V1InstanceState } from "../engine/state-v1.js";
 
 export function runQuery(id: string, stepId?: string): void {
-  const loaded = loadInstanceAny(id);
-  if (loaded.kind === "v1") {
-    runQueryV1(loaded.state, stepId);
-    return;
-  }
-
-  // ── Legacy path ──
-  const state = loaded.state;
-  const def = loadWorkflow(state.workflow_name, state.variant);
-
-  let stepIndex: number;
-  if (stepId) {
-    stepIndex = def.steps.findIndex((s) => s.id === stepId);
-    if (stepIndex === -1) {
-      console.error(`Step '${stepId}' not found in workflow.`);
-      process.exit(1);
-    }
-  } else {
-    stepIndex = state.current_step;
-  }
-
-  const step = def.steps[stepIndex];
-  const stepState = state.steps[step.id];
-  const params = state.params || {};
-  const stepOutputs = collectStepOutputs(state.steps, state.context);
-
-  const description = resolveDescription(step.description || step.id, params, stepOutputs);
-  const instruction = step.instruction ? resolveInstruction(step.instruction, params, stepOutputs) : undefined;
-  const context = buildStepContext(step, params, stepOutputs);
-
-  if (!step.context_in && Object.keys(params).length > 0) {
-    Object.assign(context, params);
-  }
-
-  const exampleResult: Record<string, string> = {};
-  for (const field of step.required_output || []) {
-    exampleResult[field] = "...";
-  }
-
-  const queryResult = {
-    instance_id: state.id,
-    workflow: state.workflow_name,
-    ...(Object.keys(params).length > 0 && { params }),
-    step: {
-      id: step.id,
-      index: stepIndex + 1,
-      total: def.steps.length,
-      description,
-      ...(instruction && { instruction }),
-      status: stepState.status,
-    },
-    context,
-    expected_output: step.required_output,
-    ...(step.tips && step.tips.length > 0 && { tips: step.tips }),
-    submit_command: `lrail ${state.id} next --result '${JSON.stringify(exampleResult)}'`,
-  };
-
-  console.log(JSON.stringify(queryResult, null, 2));
-}
-
-// ── v1 ──
-
-function runQueryV1(state: V1InstanceState, stepId?: string): void {
+  const { state } = loadInstanceAny(id);
   const def = loadWorkflowV1(state.workflow_name);
+
   const targetId = stepId ?? state.current_step_id;
   if (!targetId) {
     console.log(JSON.stringify({

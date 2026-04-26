@@ -205,3 +205,36 @@ export function loadV1Instance(idOrAlias: string): V1InstanceState {
   }
   return raw as V1InstanceState;
 }
+
+/**
+ * Enumerate every v1 instance under the data dir. Skips legacy
+ * instances and unreadable files silently.
+ */
+export function listV1Instances(): V1InstanceState[] {
+  const baseDir = path.resolve(getDataDir());
+  if (!fs.existsSync(baseDir)) return [];
+
+  const out: V1InstanceState[] = [];
+  for (const wfDir of fs.readdirSync(baseDir)) {
+    const wfPath = path.resolve(baseDir, wfDir);
+    if (!fs.statSync(wfPath).isDirectory()) continue;
+
+    for (const id of fs.readdirSync(wfPath)) {
+      const stateFile = path.resolve(wfPath, id, "state.yaml");
+      if (!fs.existsSync(stateFile)) continue;
+      try {
+        const raw = loadYaml<unknown>(stateFile);
+        if (
+          typeof raw === "object" &&
+          raw !== null &&
+          (raw as { format?: unknown }).format === "v1"
+        ) {
+          out.push(raw as V1InstanceState);
+        }
+      } catch {
+        // skip
+      }
+    }
+  }
+  return out;
+}

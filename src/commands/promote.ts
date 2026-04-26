@@ -1,9 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadWorkflow } from "../engine/workflow.js";
-import { listInstances } from "../engine/state.js";
 import { instanceDir } from "../audit/logger.js";
 import type { WorkflowPhase } from "../types.js";
+import { loadWorkflowAny } from "../engine/workflow-any.js";
+import { isAgenticStep, isProgrammaticStep, isRouterStep, isCallStep } from "../types-v1.js";
+import { listV1Instances } from "../engine/state-v1.js";
 
 interface PolicyLogEntry {
   timestamp: string;
@@ -13,18 +14,19 @@ interface PolicyLogEntry {
 }
 
 /**
- * Analyze completed runs and suggest phase promotion.
+ * v1 promote analysis: looks at completed runs and suggests phase
+ * advancement based on step-type composition (agentic vs programmatic),
+ * observed bash commands, and policy mode.
  */
 export function runPromote(workflowName: string): void {
-  const def = loadWorkflow(workflowName);
+  const { def } = loadWorkflowAny(workflowName);
   const currentPhase: WorkflowPhase = def.phase || "draft";
 
   console.log(`Workflow: ${workflowName}`);
   console.log(`Current phase: ${currentPhase}`);
   console.log("");
 
-  // Gather completed instances
-  const instances = listInstances()
+  const instances = listV1Instances()
     .filter((i) => i.workflow_name === workflowName && i.status === "completed");
 
   if (instances.length === 0) {
@@ -35,41 +37,23 @@ export function runPromote(workflowName: string): void {
   console.log(`Completed runs: ${instances.length}`);
   console.log("");
 
-  // Analyze each agentic step
-  const agenticSteps = def.steps.filter((s) => (s.type || "agentic") === "agentic");
-  const programmaticSteps = def.steps.filter((s) => s.type === "programmatic");
+  const counts = { agentic: 0, programmatic: 0, router: 0, call: 0 };
+  for (const s of def.steps) counts[s.type]++;
 
-  if (agenticSteps.length === 0) {
-    if (currentPhase === "dev") {
-      console.log("All steps are programmatic. Ready to promote to 'stable'.");
-      if (!def.policy || def.policy.mode !== "enforce") {
-        console.log("  → Add policy mode 'enforce' before locking.");
-      }
-    } else if (currentPhase === "stable") {
-      console.log("Already stable. No changes needed.");
-    } else {
-      console.log("All steps are programmatic. Consider promoting to 'stable'.");
-    }
-    return;
-  }
-
-  console.log(`Agentic steps: ${agenticSteps.map((s) => s.id).join(", ")}`);
-  console.log(`Programmatic steps: ${programmaticSteps.length > 0 ? programmaticSteps.map((s) => s.id).join(", ") : "(none)"}`);
+  console.log(`Step types: ${counts.agentic} agentic, ${counts.programmatic} programmatic, ${counts.router} router, ${counts.call} call`);
   console.log("");
 
-  // For each agentic step, analyze bash proxy logs from all completed instances
+  const agenticSteps = def.steps.filter(isAgenticStep);
   const stepCommands = new Map<string, Set<string>>();
   const stepCompletionCount = new Map<string, number>();
 
   for (const inst of instances) {
-    // Count step completions
     for (const [stepId, stepState] of Object.entries(inst.steps)) {
       if (stepState.status === "completed") {
         stepCompletionCount.set(stepId, (stepCompletionCount.get(stepId) || 0) + 1);
       }
     }
 
-    // Read policy log for bash commands
     const dir = instanceDir(workflowName, inst.id);
     const policyLogPath = path.resolve(dir, "proxy.jsonl");
     if (!fs.existsSync(policyLogPath)) continue;
@@ -89,32 +73,29 @@ export function runPromote(workflowName: string): void {
     }
   }
 
-  // Suggest promotions
-  console.log("─── Step Analysis ───");
-  console.log("");
-
-  for (const step of agenticSteps) {
-    const completions = stepCompletionCount.get(step.id) || 0;
-    const commands = stepCommands.get(step.id);
-
-    console.log(`  ${step.id} (agentic, ${completions} completions)`);
-
-    if (commands && commands.size > 0) {
-      console.log(`    Observed bash commands:`);
-      for (const cmd of commands) {
-        console.log(`      $ ${cmd}`);
-      }
-      console.log(`    → Candidate for programmatic conversion`);
-    } else if (completions >= 2) {
-      console.log(`    No bash commands observed. Step relies on agent judgment.`);
-      console.log(`    → Review if output pattern is stable enough for programmatic`);
-    } else {
-      console.log(`    → Need more runs to assess (${completions} so far)`);
-    }
+  if (agenticSteps.length > 0) {
+    console.log("─── Agentic step analysis ───");
     console.log("");
+    for (const step of agenticSteps) {
+      const completions = stepCompletionCount.get(step.id) || 0;
+      const commands = stepCommands.get(step.id);
+
+      console.log(`  ${step.id} (${completions} completions)`);
+      if (commands && commands.size > 0) {
+        console.log(`    Observed bash commands:`);
+        for (const cmd of commands) {
+          console.log(`      $ ${cmd}`);
+        }
+        console.log(`    → Candidate for programmatic conversion`);
+      } else if (completions >= 2) {
+        console.log(`    No bash commands observed. Step relies on agent judgment.`);
+      } else {
+        console.log(`    → Need more runs to assess (${completions} so far)`);
+      }
+      console.log("");
+    }
   }
 
-  // Phase suggestion
   console.log("─── Recommendation ───");
   console.log("");
 
@@ -123,18 +104,26 @@ export function runPromote(workflowName: string): void {
       console.log(`Promote to 'dev' — ${instances.length} successful runs recorded.`);
       console.log("  → Set phase: dev in your workflow YAML");
       if (agenticSteps.length > 0) {
-        console.log(`  → Consider converting stable agentic steps to programmatic`);
+        console.log("  → Consider converting stable agentic steps to programmatic");
       }
     } else {
       console.log("Stay at 'draft' — need more successful runs before promoting.");
     }
   } else if (currentPhase === "dev") {
     if (agenticSteps.length === 0) {
-      console.log("Ready to promote to 'stable' — all steps are programmatic.");
+      console.log("Ready to promote to 'stable' — all decision-making steps are deterministic.");
+      if (!def.policy || def.policy.mode !== "enforce") {
+        console.log("  → Add policy mode 'enforce' before locking.");
+      }
     } else {
       console.log(`${agenticSteps.length} agentic step(s) remain. Convert to programmatic before locking.`);
     }
   } else {
     console.log("Already stable.");
   }
+
+  // Silence unused-helper warnings while keeping imports for future use.
+  void isProgrammaticStep;
+  void isRouterStep;
+  void isCallStep;
 }

@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadInstance } from "../engine/state.js";
-import { loadWorkflow } from "../engine/workflow.js";
 import { evaluatePolicy } from "../engine/policy.js";
 import { instanceDir } from "../audit/logger.js";
 import { checkCommand, loadLrailConfig } from "../engine/gateway.js";
+import { loadInstanceAny } from "../engine/workflow-any.js";
+import { loadWorkflowV1 } from "../engine/workflow-v1.js";
 
 interface PolicyLogEntry {
   timestamp: string;
@@ -17,8 +17,8 @@ interface PolicyLogEntry {
  * Read proxy.jsonl and generate a minimal allow-list from observed commands.
  */
 export function runPolicyGenerate(instanceId: string): void {
-  const state = loadInstance(instanceId);
-  const dir = instanceDir(state.workflow_name, instanceId);
+  const { state } = loadInstanceAny(instanceId);
+  const dir = instanceDir(state.workflow_name, state.id);
   const logPath = path.resolve(dir, "proxy.jsonl");
 
   if (!fs.existsSync(logPath)) {
@@ -61,7 +61,7 @@ export function runPolicyGenerate(instanceId: string): void {
  * Dry-run check: evaluate a command against a workflow's policy.
  */
 export function runPolicyCheck(workflowName: string, command: string): void {
-  const def = loadWorkflow(workflowName);
+  const def = loadWorkflowV1(workflowName);
 
   if (!def.policy) {
     console.log("No policy defined for this workflow. All commands allowed.");

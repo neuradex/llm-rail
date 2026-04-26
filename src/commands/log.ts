@@ -5,19 +5,15 @@ import type { AuditEntry } from "../types.js";
 import { loadInstanceAny } from "../engine/workflow-any.js";
 
 export function runLog(instanceId: string, stepFilter?: string, follow?: boolean): void {
-  const loaded = loadInstanceAny(instanceId);
-  const workflowName = loaded.state.workflow_name;
-  const id = loaded.state.id;
-  const dir = instanceDir(workflowName, id);
+  const { state } = loadInstanceAny(instanceId);
+  const dir = instanceDir(state.workflow_name, state.id);
   const logPath = path.resolve(dir, "audit.jsonl");
 
   if (!fs.existsSync(logPath)) {
     console.log("No audit log found for this instance.");
     if (!follow) return;
-    // In follow mode, wait for the file to appear
   }
 
-  // Print existing entries
   let printedLines = 0;
   if (fs.existsSync(logPath)) {
     const content = fs.readFileSync(logPath, "utf-8").trim();
@@ -34,15 +30,13 @@ export function runLog(instanceId: string, stepFilter?: string, follow?: boolean
 
   if (!follow) return;
 
-  // Follow mode: watch for new lines
   let lastSize = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
 
-  const watcher = fs.watchFile(logPath, { interval: 500 }, () => {
+  fs.watchFile(logPath, { interval: 500 }, () => {
     if (!fs.existsSync(logPath)) return;
     const stat = fs.statSync(logPath);
     if (stat.size <= lastSize) return;
 
-    // Read only the new bytes
     const fd = fs.openSync(logPath, "r");
     const buf = Buffer.alloc(stat.size - lastSize);
     fs.readSync(fd, buf, 0, buf.length, lastSize);
@@ -59,7 +53,6 @@ export function runLog(instanceId: string, stepFilter?: string, follow?: boolean
         if (stepFilter && entry.step_id !== stepFilter && entry.step_id) continue;
         printEntry(entry);
 
-        // Stop following when workflow completes
         if (entry.event === "workflow_completed" || entry.event === "workflow_error") {
           fs.unwatchFile(logPath);
           process.exit(0);
@@ -70,11 +63,12 @@ export function runLog(instanceId: string, stepFilter?: string, follow?: boolean
     }
   });
 
-  // Handle Ctrl+C
   process.on("SIGINT", () => {
     fs.unwatchFile(logPath);
     process.exit(0);
   });
+
+  void printedLines;
 }
 
 function printEntry(entry: AuditEntry): void {
@@ -92,12 +86,11 @@ function eventIcon(event: string): string {
     case "step_completed": return "✓";
     case "step_auto_completed": return "⚙";
     case "step_rejected": return "✗";
-    case "pool_updated": return "↑";
     case "assertion_failed": return "✗";
     case "script_assertion": return "⚡";
-    case "action_failed": return "!";
     case "step_reset": return "↺";
     case "workflow_completed": return "★";
+    case "workflow_error": return "!";
     default: return "·";
   }
 }
@@ -107,9 +100,9 @@ function formatDetail(entry: AuditEntry): string {
 
   if (entry.event === "created") {
     const wf = entry.data.workflow_name || "";
-    const params = entry.data.params;
-    if (params && typeof params === "object" && Object.keys(params as object).length > 0) {
-      return `  ${wf} (${Object.entries(params as object).map(([k, v]) => `${k}=${v}`).join(", ")})`;
+    const input = entry.data.input;
+    if (input && typeof input === "object" && Object.keys(input as object).length > 0) {
+      return `  ${wf} (${Object.entries(input as object).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ")})`;
     }
     return `  ${wf}`;
   }
@@ -117,15 +110,6 @@ function formatDetail(entry: AuditEntry): string {
   if (entry.event === "step_rejected" || entry.event === "assertion_failed") {
     const errors = entry.data.errors as string[];
     if (errors) return `  ${errors.join("; ")}`;
-  }
-
-  if (entry.event === "pool_updated") {
-    const pool = entry.data.pool as string;
-    return pool ? `  ${pool}` : "";
-  }
-
-  if (entry.event === "action_failed") {
-    return `  ${entry.data.error || ""}`;
   }
 
   if (entry.event === "script_assertion") {
@@ -151,6 +135,10 @@ function formatDetail(entry: AuditEntry): string {
       return k;
     });
     return `  {${summary.join(", ")}}`;
+  }
+
+  if (entry.event === "workflow_error") {
+    return `  ${entry.data.message ?? ""}`;
   }
 
   return "";

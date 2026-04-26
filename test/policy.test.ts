@@ -208,7 +208,7 @@ describe("appendPolicyLog", () => {
 
 // ── Bash proxy E2E ──
 
-describe("bash proxy E2E", () => {
+describe("bash proxy E2E (v1)", () => {
   const testDir = path.resolve("test-bash-proxy-tmp");
   const origCwd = process.cwd();
 
@@ -218,7 +218,18 @@ describe("bash proxy E2E", () => {
     fs.mkdirSync("workflows", { recursive: true });
 
     const workflow = {
+      format: "v1",
       name: "bash-test",
+      schemas: {
+        Input: { type: "object" },
+        Output: {
+          type: "object",
+          properties: { result: { type: "string" } },
+          required: ["result"],
+        },
+      },
+      input: "Input",
+      output: "Output",
       policy: {
         mode: "enforce",
         rules: [
@@ -227,7 +238,12 @@ describe("bash proxy E2E", () => {
         ],
       },
       steps: [
-        { id: "s1", description: "Do stuff", required_output: ["result"] },
+        {
+          id: "s1",
+          type: "agentic",
+          instruction: "do stuff",
+          required_output: "Output",
+        },
       ],
     };
     fs.writeFileSync(
@@ -242,22 +258,22 @@ describe("bash proxy E2E", () => {
   });
 
   it("allows permitted commands and logs them", async () => {
-    const { createInstance, saveInstance } = await import("../src/engine/state.js");
-    const { loadWorkflow } = await import("../src/engine/workflow.js");
+    const { createV1Instance } = await import("../src/engine/state-v1.js");
+    const { loadWorkflowV1 } = await import("../src/engine/workflow-v1.js");
     const { runBash } = await import("../src/commands/bash.js");
 
-    const def = loadWorkflow("bash-test");
-    const state = createInstance(def);
+    const def = loadWorkflowV1("bash-test");
+    const state = createV1Instance(def, {});
     state.status = "in_progress";
     state.steps["s1"].status = "in_progress";
-    state.current_step = 0;
-    saveInstance(state);
 
-    // This should work (echo is allowed)
-    // We can't easily capture console.log in tests, but at least verify no throw
+    // Persist mutations the bash proxy expects to find on disk.
+    const { saveV1Instance } = await import("../src/engine/state-v1.js");
+    saveV1Instance(state);
+
+    // echo is in the allow list — should succeed.
     runBash(state.id, "echo hello");
 
-    // Verify policy log was written
     const logPath = path.resolve(".llm-rail", "bash-test", state.id, "proxy.jsonl");
     assert.ok(fs.existsSync(logPath));
     const lines = fs.readFileSync(logPath, "utf-8").trim().split("\n");

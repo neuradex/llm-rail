@@ -1,17 +1,13 @@
 import { execFileSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import type { StepDef, AssertionRule, AssertionOp, ValidationResult, ScriptLog } from "../types.js";
+import type {
+  AssertionOp,
+  AssertionRule,
+} from "../types.js";
 
 type OpHandler = (value: unknown, expected: unknown, field: string) => string | null;
 
-// Side-channel for script op to push logs during execution.
-// Collected by runAssertions and included in ValidationResult.
-let _scriptLogs: ScriptLog[] = [];
-
 const opHandlers: Record<AssertionOp, OpHandler> = {
-  exists: (_value, _expected, _field) => null, // handled by required check
+  exists: () => null,
 
   not_empty: (value, _expected, field) => {
     if (value === "" || value === null || value === undefined) {
@@ -187,12 +183,9 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
   },
 
   script: (value, expected, field) => {
-    // `value` is the field value, `expected` is the shell command to run.
-    // The command receives the field value as FIELD_VALUE env var and
-    // the full step output as CONTEXT env var (set by caller via runAssertions).
     const cmd = String(expected);
     try {
-      const stdout = execFileSync("sh", ["-c", cmd], {
+      execFileSync("sh", ["-c", cmd], {
         encoding: "utf-8",
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe"],
@@ -201,17 +194,9 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
           FIELD_VALUE: JSON.stringify(value),
         },
       });
-      _scriptLogs.push({ field, command: cmd, exit_code: 0, stdout: stdout.trimEnd(), stderr: "" });
     } catch (e: unknown) {
-      const err = e as { stdout?: string; stderr?: string; status?: number };
+      const err = e as { stderr?: string; status?: number };
       const exitCode = err.status || 1;
-      _scriptLogs.push({
-        field,
-        command: cmd,
-        exit_code: exitCode,
-        stdout: (err.stdout || "").trimEnd(),
-        stderr: (err.stderr || "").trimEnd(),
-      });
       const msg = err.stderr?.trim() || `script exited with code ${exitCode}`;
       return `Field '${field}': script assertion failed — ${msg}`;
     }
@@ -237,11 +222,10 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
         return `Field '${field}[${i}]' missing '${url_field}' for source verification`;
       }
 
-      // Collect snippets to verify, checking each contains its data value
       const snippetsToVerify: string[] = [];
       for (const [dataField, snippetField] of Object.entries(field_snippets)) {
         const dataVal = item[dataField];
-        if (dataVal === null || dataVal === undefined) continue; // skip null fields
+        if (dataVal === null || dataVal === undefined) continue;
 
         const snippet = item[snippetField];
         if (typeof snippet !== "string" || !snippet) {
@@ -256,7 +240,6 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
         snippetsToVerify.push(snippet);
       }
 
-      // Fetch the URL once and check all snippets exist on the page
       if (snippetsToVerify.length > 0) {
         let body: string;
         try {
@@ -280,6 +263,13 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
   },
 };
 
+/**
+ * Apply a single AssertionRule to a value. Returns null on success or
+ * a human-readable error message on failure. Used by router-v1 (when
+ * evaluating case conditions) and by runner-v1 (running residual
+ * `validation:` / `assertions:` blocks on agentic / programmatic
+ * outputs).
+ */
 export function applyRule(rule: AssertionRule, value: unknown): string | null {
   const handler = opHandlers[rule.op];
   if (!handler) {
@@ -288,88 +278,4 @@ export function applyRule(rule: AssertionRule, value: unknown): string | null {
   const err = handler(value, rule.value, rule.field);
   if (err && rule.message) return `Field '${rule.field}': ${rule.message}`;
   return err;
-}
-
-export function validateStepOutput(
-  step: StepDef,
-  output: Record<string, unknown>,
-): ValidationResult {
-  const errors: string[] = [];
-
-  for (const field of step.required_output || []) {
-    if (!(field in output) || output[field] === undefined || output[field] === null) {
-      errors.push(`Missing required field: '${field}'`);
-    }
-  }
-
-  if (step.validation) {
-    for (const rule of step.validation) {
-      const value = output[rule.field];
-      if (value === undefined || value === null) continue;
-      const err = applyRule(rule, value);
-      if (err) errors.push(err);
-    }
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-export function runAssertions(
-  rules: AssertionRule[],
-  data: Record<string, unknown>,
-): ValidationResult {
-  const errors: string[] = [];
-
-  // Set CONTEXT env var for script assertions
-  // When context JSON is large, write to temp file to avoid EPIPE/E2BIG
-  const hasScript = rules.some((r) => r.op === "script");
-  const prevContext = process.env.CONTEXT;
-  const prevContextFile = process.env.CONTEXT_FILE;
-  let contextTempFile: string | undefined;
-  if (hasScript) {
-    const contextJson = JSON.stringify(data);
-    if (contextJson.length <= 8192) {
-      process.env.CONTEXT = contextJson;
-    } else {
-      contextTempFile = path.join(os.tmpdir(), `lrail-assert-ctx-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
-      fs.writeFileSync(contextTempFile, contextJson, "utf-8");
-      process.env.CONTEXT_FILE = contextTempFile;
-      delete process.env.CONTEXT;
-    }
-    _scriptLogs = [];
-  }
-
-  try {
-    for (const rule of rules) {
-      const value = data[rule.field];
-      if (value === undefined || value === null) {
-        if (rule.op === "exists" || rule.op === "not_empty") {
-          const msg = rule.message
-            ? `Field '${rule.field}': ${rule.message}`
-            : `Field '${rule.field}' ${rule.op === "exists" ? "must exist" : "must not be empty"}`;
-          errors.push(msg);
-        }
-        continue;
-      }
-      const err = applyRule(rule, value);
-      if (err) errors.push(err);
-    }
-  } finally {
-    if (hasScript) {
-      if (prevContext !== undefined) process.env.CONTEXT = prevContext;
-      else delete process.env.CONTEXT;
-      if (prevContextFile !== undefined) process.env.CONTEXT_FILE = prevContextFile;
-      else delete process.env.CONTEXT_FILE;
-      if (contextTempFile && fs.existsSync(contextTempFile)) {
-        try { fs.unlinkSync(contextTempFile); } catch { /* ignore */ }
-      }
-    }
-  }
-
-  const result: ValidationResult = { valid: errors.length === 0, errors };
-  if (_scriptLogs.length > 0) {
-    result.script_logs = [..._scriptLogs];
-    _scriptLogs = [];
-  }
-  return result;
 }

@@ -1,6 +1,6 @@
 import type { AssertionRule } from "../types.js";
 import type { CaseDef, V1RouterStep, WhenExpr } from "../types-v1.js";
-import { applyRule } from "./validator.js";
+import { applyRule } from "./ops-v1.js";
 import type { V1InstanceState } from "./state-v1.js";
 
 // ── Errors ──

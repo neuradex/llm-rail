@@ -29,7 +29,7 @@
   <a href="./docs/README.ja.md">日本語</a>
 </p>
 
-> **Beta (0.x.x)** — Under active development. APIs and schema may change. Pin your version if you depend on stability.
+> **1.0.0** — First stable release. The legacy pre-1.0 workflow format is no longer executed; use `lrail wf <name> migrate` to convert old files. See `CHANGELOG.md`.
 
 ---
 

@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "LLM Rail — guardrails for agentic work. Workflow decomposition, policy enforcement, audit trail.",
-    "version": "0.2.0-beta"
+    "version": "1.0.0"
   },
   "plugins": [
     {

@@ -20,7 +20,7 @@ import { runSummary } from "./commands/summary.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
-import { resolveInstanceId } from "./engine/state.js";
+import { resolveInstanceId } from "./engine/alias.js";
 import { runTool } from "./commands/tool.js";
 import { runGlobalLog } from "./commands/global-log.js";
 import { runGlobalBash } from "./commands/global-bash.js";

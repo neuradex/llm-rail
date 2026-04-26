@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { validateWorkflowV1Def } from "../src/engine/workflow-v1.js";
 import { isV1Workflow, V1_FORMAT_MARKER } from "../src/types-v1.js";
 import type { WorkflowV1Def } from "../src/types-v1.js";
-import { loadWorkflowFromPath } from "../src/engine/workflow.js";
+import { loadWorkflowAnyFromPath } from "../src/engine/workflow-any.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -373,12 +373,13 @@ describe("validateWorkflowV1Def — context_in", () => {
   });
 });
 
-describe("legacy loader guard", () => {
-  it("rejects v1 files loaded via loadWorkflowFromPath", () => {
+describe("workflow-any loader", () => {
+  it("loads v1 files and rejects legacy ones with a migration message", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lrail-v1-"));
-    const file = path.join(dir, "w.yml");
+
+    const v1File = path.join(dir, "v1.yml");
     fs.writeFileSync(
-      file,
+      v1File,
       [
         "format: v1",
         "name: wf",
@@ -394,10 +395,23 @@ describe("legacy loader guard", () => {
         "    required_output: Output",
       ].join("\n"),
     );
-    assert.throws(
-      () => loadWorkflowFromPath(file),
-      /v1 workflow/,
+    const v1 = loadWorkflowAnyFromPath(v1File);
+    assert.equal(v1.kind, "v1");
+    assert.equal(v1.def.name, "wf");
+
+    const legacyFile = path.join(dir, "legacy.yml");
+    fs.writeFileSync(
+      legacyFile,
+      [
+        "name: legacy-wf",
+        "steps:",
+        "  - id: s1",
+        "    instruction: do",
+        "    required_output: [r]",
+      ].join("\n"),
     );
+    assert.throws(() => loadWorkflowAnyFromPath(legacyFile), /lrail wf .* migrate/);
+
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

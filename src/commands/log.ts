@@ -1,12 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadInstance } from "../engine/state.js";
 import { instanceDir } from "../audit/logger.js";
 import type { AuditEntry } from "../types.js";
+import { loadInstanceAny } from "../engine/workflow-any.js";
 
 export function runLog(instanceId: string, stepFilter?: string, follow?: boolean): void {
-  const state = loadInstance(instanceId);
-  const dir = instanceDir(state.workflow_name, instanceId);
+  const loaded = loadInstanceAny(instanceId);
+  const workflowName = loaded.state.workflow_name;
+  const id = loaded.state.id;
+  const dir = instanceDir(workflowName, id);
   const logPath = path.resolve(dir, "audit.jsonl");
 
   if (!fs.existsSync(logPath)) {

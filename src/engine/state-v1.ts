@@ -1,3 +1,15 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { instanceDir } from "../audit/logger.js";
+import { generateAlias, collectExistingAliases, resolveAlias } from "./alias.js";
+import {
+  ensureDir,
+  generateId,
+  getDataDir,
+  loadYaml,
+  nowISO,
+  saveYaml,
+} from "../util.js";
 import type { WorkflowV1Def } from "../types-v1.js";
 
 // ── Runtime state for a v1 instance ──
@@ -109,4 +121,87 @@ export function initialV1State(
   if (alias) state.alias = alias;
   if (parent) state.parent = parent;
   return state;
+}
+
+// ── Persistence ──
+
+/**
+ * Create a new v1 instance, persist it under .llm-rail/<workflow>/<id>/state.yaml,
+ * and return the live state for further work.
+ */
+export function createV1Instance(
+  def: WorkflowV1Def,
+  input: Record<string, unknown>,
+): V1InstanceState {
+  const id = generateId();
+  const baseDir = path.resolve(getDataDir());
+  const existingAliases = collectExistingAliases(baseDir);
+  const alias = generateAlias(existingAliases);
+  const state = initialV1State(def, id, alias, input, nowISO());
+
+  const dir = instanceDir(def.name, id);
+  ensureDir(dir);
+  saveYaml(path.resolve(dir, "state.yaml"), state);
+  fs.writeFileSync(path.resolve(dir, "alias"), alias, "utf-8");
+  return state;
+}
+
+/**
+ * Persist a state mutation. Bumps `updated_at`. The caller is responsible
+ * for invariants (status transitions, current_step_id consistency).
+ */
+export function saveV1Instance(state: V1InstanceState): void {
+  state.updated_at = nowISO();
+  const dir = instanceDir(state.workflow_name, state.id);
+  ensureDir(dir);
+  saveYaml(path.resolve(dir, "state.yaml"), state);
+}
+
+/**
+ * Resolve an instance id or alias to a state.yaml path. Throws if no
+ * matching instance exists.
+ */
+export function resolveV1InstancePath(idOrAlias: string): string {
+  const baseDir = path.resolve(getDataDir());
+
+  // Try direct id first.
+  if (fs.existsSync(baseDir)) {
+    for (const wfDir of fs.readdirSync(baseDir)) {
+      const wfPath = path.resolve(baseDir, wfDir);
+      if (!fs.statSync(wfPath).isDirectory()) continue;
+      const direct = path.resolve(wfPath, idOrAlias, "state.yaml");
+      if (fs.existsSync(direct)) return direct;
+    }
+  }
+
+  // Try alias resolution.
+  const resolvedId = resolveAlias(baseDir, idOrAlias);
+  if (resolvedId) {
+    for (const wfDir of fs.readdirSync(baseDir)) {
+      const wfPath = path.resolve(baseDir, wfDir);
+      if (!fs.statSync(wfPath).isDirectory()) continue;
+      const candidate = path.resolve(wfPath, resolvedId, "state.yaml");
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  throw new Error(`Instance not found: ${idOrAlias}`);
+}
+
+/**
+ * Load a v1 instance by id or alias. Throws if the file is not a v1
+ * state (missing `format: v1`).
+ */
+export function loadV1Instance(idOrAlias: string): V1InstanceState {
+  const filePath = resolveV1InstancePath(idOrAlias);
+  const raw = loadYaml<unknown>(filePath);
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    (raw as { format?: unknown }).format !== "v1"
+  ) {
+    throw new Error(
+      `Instance ${idOrAlias} is not a v1 instance (state.yaml at ${filePath} missing format: v1)`,
+    );
+  }
+  return raw as V1InstanceState;
 }

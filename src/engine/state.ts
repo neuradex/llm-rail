@@ -72,7 +72,17 @@ export function loadInstance(idOrAlias: string): InstanceState {
 
     const stateFile = path.resolve(dirPath, id, "state.yaml");
     if (fs.existsSync(stateFile)) {
-      return loadYaml<InstanceState>(stateFile);
+      const raw = loadYaml<unknown>(stateFile);
+      if (
+        typeof raw === "object" &&
+        raw !== null &&
+        (raw as { format?: unknown }).format === "v1"
+      ) {
+        throw new Error(
+          `Instance ${idOrAlias} is a v1 instance (state.yaml at ${stateFile} has format: v1). Use the v1 loader (loadV1Instance) or the unified loadInstanceAny helper.`,
+        );
+      }
+      return raw as InstanceState;
     }
   }
 

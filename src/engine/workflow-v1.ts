@@ -11,6 +11,7 @@ import {
   type WorkflowV1Def,
 } from "../types-v1.js";
 import { buildSchemaRegistry } from "./schemas.js";
+import { resolveWorkflowPath } from "./variant.js";
 
 // ── Loading ──
 
@@ -22,6 +23,18 @@ export function loadWorkflowV1FromPath(filePath: string): WorkflowV1Def {
     );
   }
   return loaded;
+}
+
+/**
+ * Resolve a workflow by name (using the standard search order: user
+ * `workflows/` first, then package `builtins/`) and load it as v1.
+ *
+ * Throws if the file is not a v1 workflow. Use `loadWorkflowAny` for
+ * code that should accept either format.
+ */
+export function loadWorkflowV1(name: string): WorkflowV1Def {
+  const { basePath } = resolveWorkflowPath(name);
+  return loadWorkflowV1FromPath(basePath);
 }
 
 // ── Validation ──

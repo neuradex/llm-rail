@@ -10,14 +10,17 @@ interface WorkflowEntry {
   source: "user" | "builtin";
 }
 
-function scanWorkflowDir(dirPath: string): string[] {
+function scanWorkflowDir(dirPath: string, opts: { allowSingleFile?: boolean } = {}): string[] {
   if (!fs.existsSync(dirPath)) return [];
   const names: string[] = [];
+  const allowSingleFile = opts.allowSingleFile ?? true;
 
-  // Single-file: *.yml
-  for (const f of fs.readdirSync(dirPath)) {
-    if (f.endsWith(".yml") || f.endsWith(".yaml")) {
-      names.push(f.replace(/\.ya?ml$/, ""));
+  if (allowSingleFile) {
+    // Single-file: *.yml
+    for (const f of fs.readdirSync(dirPath)) {
+      if (f.endsWith(".yml") || f.endsWith(".yaml")) {
+        names.push(f.replace(/\.ya?ml$/, ""));
+      }
     }
   }
 
@@ -39,9 +42,11 @@ function scanWorkflowDir(dirPath: string): string[] {
 export function runListWorkflows(): void {
   const entries = new Map<string, WorkflowEntry>();
 
-  // Builtins first (user can override)
+  // Builtins first (user can override). Only directory-style workflows
+  // count here — single-file YAMLs in builtins/ are templates (e.g.
+  // lrail.default.yml), not runnable workflows.
   const builtinsDir = resolvePackageDir("builtins");
-  for (const name of scanWorkflowDir(builtinsDir)) {
+  for (const name of scanWorkflowDir(builtinsDir, { allowSingleFile: false })) {
     entries.set(name, { name, source: "builtin" });
   }
 

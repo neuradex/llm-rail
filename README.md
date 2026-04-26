@@ -400,13 +400,11 @@ lrail <id> policy generate                            # Generate policy from tra
 
 | Skill | What it does |
 |---|---|
-| `/llm-rail:design` | Describe a task → get a validated workflow |
-| `/llm-rail:build` | Generate, optimize, and test a workflow automatically |
+| `/llm-rail:design` | Describe a task → get a validated v1 workflow |
 | `/llm-rail:run` | Execute a workflow end-to-end |
 | `/llm-rail:review` | Trial run + analysis — detect issues, suggest fixes |
-| `/llm-rail:optimize` | 7-step optimization pipeline with variant output |
-
-The framework builds and improves its own workflows — it's self-hosting.
+| `/llm-rail:status` | Inspect workflow instances |
+| `/llm-rail:init` | Initialize lrail in a project |
 
 ---
 

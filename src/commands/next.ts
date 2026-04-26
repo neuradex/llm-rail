@@ -2,7 +2,11 @@ import { appendLog } from "../audit/logger.js";
 import { loadInstanceAny } from "../engine/workflow-any.js";
 import { loadWorkflowV1 } from "../engine/workflow-v1.js";
 import { saveV1Instance, type V1InstanceState } from "../engine/state-v1.js";
-import { submitAgenticResult, V1OutputValidationError } from "../engine/runner-v1.js";
+import {
+  submitAgenticResult,
+  V1AssertionFailure,
+  V1OutputValidationError,
+} from "../engine/runner-v1.js";
 import { makeFilesystemV1Registry } from "../engine/registry-v1.js";
 import {
   formatV1AgenticStart,
@@ -48,12 +52,32 @@ function runNextV1(idOrAlias: string, state: V1InstanceState, resultJson: string
         errors: err.validationErrors,
       });
       if (pendingStep) {
+        const ctx = buildPendingContextV1(def, state, pendingStep.id);
         console.log(
-          formatV1Rejection(state, pendingStep, err.schemaName, err.validationErrors),
+          formatV1Rejection(state, pendingStep, err.schemaName, err.validationErrors, ctx),
         );
       } else {
         console.log(
           `Submission rejected:\n${err.validationErrors.map((e) => `  - ${e}`).join("\n")}`,
+        );
+      }
+      process.exit(1);
+    }
+    if (err instanceof V1AssertionFailure) {
+      saveV1Instance(state);
+      const pendingStep = currentAgenticStep(def, state);
+      appendLog(state.workflow_name, state.id, "step_rejected", err.stepId, {
+        errors: err.errors,
+        kind: err.kind,
+      });
+      if (pendingStep) {
+        const ctx = buildPendingContextV1(def, state, pendingStep.id);
+        console.log(
+          formatV1Rejection(state, pendingStep, err.kind, err.errors, ctx),
+        );
+      } else {
+        console.log(
+          `Submission rejected (${err.kind}):\n${err.errors.map((e) => `  - ${e}`).join("\n")}`,
         );
       }
       process.exit(1);

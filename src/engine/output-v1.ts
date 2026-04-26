@@ -16,6 +16,29 @@ const SEPARATOR = "────────────────────�
 const aliasOrId = (state: V1InstanceState) => state.alias || state.id;
 
 /**
+ * Resolve `{{name}}` and `{{a.b}}` templates inside a string against
+ * the merged scope of (resolved context_in) ∪ (workflow input).
+ * Unknown names are left in place so the agent can spot them.
+ */
+function interpolate(
+  template: string,
+  scope: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{([\w.-]+)\}\}/g, (_match, expr: string) => {
+    const parts = expr.split(".");
+    let cur: unknown = scope;
+    for (const p of parts) {
+      if (cur === null || cur === undefined) return `{{${expr}}}`;
+      if (typeof cur !== "object" || Array.isArray(cur)) return `{{${expr}}}`;
+      cur = (cur as Record<string, unknown>)[p];
+    }
+    if (cur === undefined) return `{{${expr}}}`;
+    if (typeof cur === "object") return JSON.stringify(cur);
+    return String(cur);
+  });
+}
+
+/**
  * Render the prompt shown when execution pauses at an agentic step.
  * Includes the resolved context_in, the schema-derived field list, and
  * the exact `next` command the agent should run.
@@ -31,6 +54,8 @@ export function formatV1AgenticStart(
   const total = stepIds.length;
   const headerLabel = pendingStep.description || pendingStep.id;
   const exampleResult = buildExampleResult(def, pendingStep.required_output);
+  const interpScope = { ...state.input, ...resolvedContext };
+  const resolvedInstruction = interpolate(pendingStep.instruction.trim(), interpScope);
 
   const lines: string[] = [
     SEPARATOR,
@@ -67,7 +92,7 @@ export function formatV1AgenticStart(
 
   lines.push(
     "",
-    `>>> NEXT ACTION: ${pendingStep.instruction.trim()}`,
+    `>>> NEXT ACTION: ${resolvedInstruction}`,
     `    lrail ${aliasOrId(state)} next --result '${exampleResult}'`,
     "",
     "!!! WARNING: Output must validate against the declared schema, or it will be rejected.",
@@ -85,7 +110,10 @@ export function formatV1Rejection(
   step: V1AgenticStep,
   schemaName: string,
   errors: string[],
+  resolvedContext: Record<string, unknown> = {},
 ): string {
+  const interpScope = { ...state.input, ...resolvedContext };
+  const resolvedInstruction = interpolate(step.instruction.trim(), interpScope);
   return [
     SEPARATOR,
     "SUBMISSION REJECTED",
@@ -94,7 +122,7 @@ export function formatV1Rejection(
     "Errors:",
     ...errors.map((e) => `  - ${e}`),
     "",
-    `>>> RETRY: ${step.instruction.trim()}`,
+    `>>> RETRY: ${resolvedInstruction}`,
     `    lrail ${aliasOrId(state)} next --result '<json>'`,
     "",
     "!!! Adjust your output to match the schema and resubmit.",

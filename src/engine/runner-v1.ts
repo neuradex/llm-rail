@@ -18,6 +18,8 @@ import {
   V1CallError,
   type V1WorkflowRegistry,
 } from "./call-v1.js";
+import { applyRule } from "./ops-v1.js";
+import type { AssertionRule } from "../types.js";
 
 // ── Errors ──
 
@@ -40,6 +42,41 @@ export class V1OutputValidationError extends Error {
     );
     this.name = "V1OutputValidationError";
   }
+}
+
+export class V1AssertionFailure extends Error {
+  constructor(
+    public readonly stepId: string,
+    public readonly kind: "validation" | "assertions",
+    public readonly errors: string[],
+  ) {
+    super(
+      `Step '${stepId}' ${kind} failed:\n` +
+        errors.map((e) => `  - ${e}`).join("\n"),
+    );
+    this.name = "V1AssertionFailure";
+  }
+}
+
+/**
+ * Run a list of AssertionRule entries against an output object. Each
+ * rule's `field` is looked up on `output`; missing fields are skipped
+ * (use schema `required` for presence). Aggregates every failure
+ * into a single error array — first failure does not short-circuit.
+ */
+function runRules(
+  rules: AssertionRule[] | undefined,
+  output: Record<string, unknown>,
+): string[] {
+  if (!rules || rules.length === 0) return [];
+  const errs: string[] = [];
+  for (const rule of rules) {
+    const value = output[rule.field];
+    if (value === undefined || value === null) continue;
+    const err = applyRule(rule, value);
+    if (err) errs.push(err);
+  }
+  return errs;
 }
 
 // ── Advance result ──
@@ -190,7 +227,19 @@ export function advance(
           assertValidOutput(step.id, step.required_output, result.extracted, schemaRegistry);
         }
 
+        const valErrs = runRules(step.validation, result.extracted);
+        if (valErrs.length > 0) {
+          throw new V1AssertionFailure(step.id, "validation", valErrs);
+        }
+
         finishStep(state, step.id, result.extracted);
+
+        const asnErrs = runRules(step.assertions, result.extracted);
+        if (asnErrs.length > 0) {
+          revertStep(state, step.id);
+          throw new V1AssertionFailure(step.id, "assertions", asnErrs);
+        }
+
         autoCompleted.push(step.id);
         state.current_step_id = nextStepId(def, step.id);
         state.status = state.status === "created" ? "in_progress" : state.status;
@@ -261,7 +310,24 @@ export function submitAgenticResult(
   const { registry: schemaRegistry } = buildSchemaRegistry(def.schemas);
   assertValidOutput(step.id, step.required_output, output, schemaRegistry);
 
+  // Residual `validation:` rules (script, verify_source, matches,
+  // each_has, contains, etc.) — schema doesn't cover these. Failure
+  // here keeps the step in_progress so the agent can retry.
+  const valErrs = runRules(step.validation, output);
+  if (valErrs.length > 0) {
+    throw new V1AssertionFailure(step.id, "validation", valErrs);
+  }
+
   finishStep(state, step.id, output);
+
+  // Cross-step `assertions:` (post-completion). Failure reverts the
+  // step back to in_progress so the agent retries with full context.
+  const asnErrs = runRules(step.assertions, output);
+  if (asnErrs.length > 0) {
+    revertStep(state, step.id);
+    throw new V1AssertionFailure(step.id, "assertions", asnErrs);
+  }
+
   state.current_step_id = nextStepId(def, step.id);
   state.status = state.status === "created" ? "in_progress" : state.status;
   state.updated_at = nowISO();
@@ -348,6 +414,43 @@ function finishStep(
   stepState.completed_at = nowISO();
   stepState.iterations = (stepState.iterations ?? 0) + 1;
   state.last_completed_step_id = stepId;
+}
+
+/**
+ * Undo a finishStep: used when a post-completion `assertions:` rule
+ * fails and the agent needs to retry. Output is cleared, status is
+ * set back to in_progress, the iteration counter is decremented so
+ * the retry doesn't artificially inflate the count.
+ */
+function revertStep(state: V1InstanceState, stepId: string): void {
+  const stepState = state.steps[stepId];
+  if (!stepState) return;
+  stepState.status = "in_progress";
+  stepState.output = undefined;
+  stepState.completed_at = undefined;
+  if (stepState.iterations && stepState.iterations > 0) {
+    stepState.iterations -= 1;
+  }
+  // last_completed_step_id may now point at this step; back it up to
+  // the prior completed step so collectWorkflowOutput stays accurate.
+  if (state.last_completed_step_id === stepId) {
+    state.last_completed_step_id = priorCompletedId(state, stepId) ?? null;
+  }
+}
+
+function priorCompletedId(state: V1InstanceState, stepId: string): string | undefined {
+  // Best-effort: search instance steps for any other completed step.
+  // This is only used for collectWorkflowOutput when a revert pulls
+  // last_completed_step_id off the reverted step.
+  let mostRecent: { id: string; at: string } | undefined;
+  for (const [id, ss] of Object.entries(state.steps)) {
+    if (id === stepId) continue;
+    if (ss.status !== "completed" || !ss.completed_at) continue;
+    if (!mostRecent || ss.completed_at > mostRecent.at) {
+      mostRecent = { id, at: ss.completed_at };
+    }
+  }
+  return mostRecent?.id;
 }
 
 function assertValidOutput(

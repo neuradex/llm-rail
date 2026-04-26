@@ -648,6 +648,344 @@ steps:
   });
 });
 
+// ── Instruction interpolation + post-completion assertions ──
+
+describe("cli e2e — instruction interpolation + assertions", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "greeter", `
+format: v1
+name: greeter
+schemas:
+  Input:
+    type: object
+    properties: { name: { type: string } }
+    required: [name]
+  Output:
+    type: object
+    properties: { greeting: { type: string } }
+    required: [greeting]
+input: Input
+output: Output
+steps:
+  - id: greet
+    type: agentic
+    context_in: { name: "{{name}}" }
+    instruction: "Say hello to {{name}}"
+    required_output: Output
+    assertions:
+      - field: greeting
+        op: matches
+        value: "^hello"
+        message: "must start with hello (lowercase)"
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("substitutes {{name}} into the agent prompt", () => {
+    runCli(project.dir, ["wf", "greeter", "create", "--param", "name=World"]);
+    const alias = aliasOf(project.dir, "greeter");
+    const start = runCli(project.dir, [alias, "start"]);
+    assert.equal(start.status, 0, start.stderr);
+    assert.match(start.stdout, /Say hello to World/);
+    assert.doesNotMatch(start.stdout, /\{\{name\}\}/);
+  });
+
+  it("rejects an output that fails an assertion (post-completion)", () => {
+    const alias = aliasOf(project.dir, "greeter");
+    const bad = runCli(project.dir, [alias, "next", "--result", JSON.stringify({ greeting: "WORLD" })]);
+    assert.equal(bad.status, 1);
+    assert.match(bad.stdout, /SUBMISSION REJECTED/);
+    assert.match(bad.stdout, /must start with hello/);
+  });
+
+  it("accepts a corrected output and completes the workflow", () => {
+    const alias = aliasOf(project.dir, "greeter");
+    const ok = runCli(project.dir, [alias, "next", "--result", JSON.stringify({ greeting: "hello world" })]);
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.match(ok.stdout, /completed/);
+  });
+});
+
+// ── Tool result fed downstream via {_tools.<name>.field} ──
+
+describe("cli e2e — tool output as context_in source", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "tooled", `
+format: v1
+name: tooled
+schemas:
+  Input: { type: object }
+  Output:
+    type: object
+    properties: { greeting: { type: string } }
+    required: [greeting]
+  Greeting:
+    type: object
+    properties: { greeting: { type: string } }
+    required: [greeting]
+input: Input
+output: Output
+tools:
+  greet:
+    description: greet
+    params:
+      who: { type: string, required: true }
+    actions:
+      - name: build
+        description: build greeting
+        js: "return { hello: 'hi ' + context.who };"
+steps:
+  - id: ask
+    type: agentic
+    instruction: "Call the greet tool, then submit its result as 'greeting'."
+    required_output: Greeting
+  - id: shape
+    type: programmatic
+    context_in: { fromtool: "{_tools.greet.hello}" }
+    required_output: Output
+    actions:
+      - { name: pass, description: pass, js: "return { greeting: context.fromtool };" }
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("a tool result is referenceable as {_tools.<name>.<field>} in a later step", () => {
+    runCli(project.dir, ["wf", "tooled", "create"]);
+    const alias = aliasOf(project.dir, "tooled");
+    runCli(project.dir, [alias, "start"]);
+
+    const tool = runCli(project.dir, [alias, "tool", "greet", "--args", JSON.stringify({ who: "earth" })]);
+    assert.equal(tool.status, 0, tool.stderr);
+    const toolOut = JSON.parse(tool.stdout);
+    assert.equal(toolOut.hello, "hi earth");
+
+    const next = runCli(project.dir, [alias, "next", "--result", JSON.stringify({ greeting: "hi earth" })]);
+    assert.equal(next.status, 0, next.stderr);
+    assert.match(next.stdout, /completed/);
+
+    const dataDir = path.join(project.dir, ".llm-rail", "tooled");
+    const id = fs.readdirSync(dataDir)[0];
+    const state = fs.readFileSync(path.join(dataDir, id, "state.yaml"), "utf-8");
+    assert.match(state, /shape:/);
+    assert.match(state, /greeting: hi earth/);
+  });
+});
+
+// ── Audit log file shape ──
+
+describe("cli e2e — audit log writes", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "logged", `
+format: v1
+name: logged
+schemas:
+  Input: { type: object }
+  Output:
+    type: object
+    properties: { v: { type: integer } }
+    required: [v]
+input: Input
+output: Output
+steps:
+  - id: only
+    type: programmatic
+    required_output: Output
+    actions:
+      - { name: x, description: x, js: "return { v: 1 };" }
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("creates state.yaml + alias + audit.jsonl with sane events", () => {
+    runCli(project.dir, ["wf", "logged", "create"]);
+    const dir = path.join(project.dir, ".llm-rail", "logged");
+    const id = fs.readdirSync(dir)[0];
+    const instDir = path.join(dir, id);
+
+    assert.ok(fs.existsSync(path.join(instDir, "state.yaml")));
+    assert.ok(fs.existsSync(path.join(instDir, "alias")));
+
+    const alias = fs.readFileSync(path.join(instDir, "alias"), "utf-8").trim();
+    runCli(project.dir, [alias, "start"]);
+
+    const audit = fs.readFileSync(path.join(instDir, "audit.jsonl"), "utf-8").trim();
+    const events = audit.split("\n").map((l) => JSON.parse(l));
+    const eventNames = events.map((e) => e.event);
+    assert.ok(eventNames.includes("created"), eventNames.join(","));
+    assert.ok(eventNames.includes("step_auto_completed"), eventNames.join(","));
+    assert.ok(eventNames.includes("workflow_completed"), eventNames.join(","));
+  });
+});
+
+// ── Action chain pipe (js → js, js → shell, shell → js) ──
+
+describe("cli e2e — action chain pipe", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "chained", `
+format: v1
+name: chained
+schemas:
+  Input: { type: object }
+  Output:
+    type: object
+    properties:
+      doubled: { type: integer }
+      shouted: { type: string }
+    required: [doubled, shouted]
+input: Input
+output: Output
+steps:
+  - id: chain
+    type: programmatic
+    required_output: Output
+    actions:
+      - name: seed
+        description: seed
+        js: "return { n: 7, msg: 'hello' };"
+      - name: double
+        description: double the seeded n
+        js: "return { doubled: context.n * 2 };"
+      - name: shout
+        description: uppercase via shell using template
+        shell: "echo {{msg}} | tr a-z A-Z"
+      - name: collect
+        description: shape final output (consumes shell stdout)
+        js: "return { doubled: context.doubled, shouted: (context.stdout || '').trim() };"
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("threads return values + shell stdout across actions", () => {
+    runCli(project.dir, ["wf", "chained", "create"]);
+    const alias = aliasOf(project.dir, "chained");
+    const start = runCli(project.dir, [alias, "start"]);
+    assert.equal(start.status, 0, start.stderr);
+
+    const dataDir = path.join(project.dir, ".llm-rail", "chained");
+    const id = fs.readdirSync(dataDir)[0];
+    const state = fs.readFileSync(path.join(dataDir, id, "state.yaml"), "utf-8");
+    assert.match(state, /doubled: 14/);
+    assert.match(state, /shouted: HELLO/);
+  });
+});
+
+// ── Dotted-path context_in ──
+
+describe("cli e2e — dotted context_in", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "deep", `
+format: v1
+name: deep
+schemas:
+  Input: { type: object }
+  Output:
+    type: object
+    properties: { count: { type: integer } }
+    required: [count]
+  Stats:
+    type: object
+    properties:
+      stats:
+        type: object
+        properties: { count: { type: integer } }
+        required: [count]
+    required: [stats]
+input: Input
+output: Output
+steps:
+  - id: src
+    type: programmatic
+    required_output: Stats
+    actions:
+      - { name: build, description: build, js: "return { stats: { count: 99 } };" }
+  - id: read
+    type: programmatic
+    context_in: { c: "{src.stats.count}" }
+    required_output: Output
+    actions:
+      - { name: pass, description: pass, js: "return { count: context.c };" }
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("resolves nested paths inside {step.a.b}", () => {
+    runCli(project.dir, ["wf", "deep", "create"]);
+    const alias = aliasOf(project.dir, "deep");
+    const r = runCli(project.dir, [alias, "start"]);
+    assert.equal(r.status, 0, r.stderr);
+    const dataDir = path.join(project.dir, ".llm-rail", "deep");
+    const id = fs.readdirSync(dataDir)[0];
+    const state = fs.readFileSync(path.join(dataDir, id, "state.yaml"), "utf-8");
+    assert.match(state, /count: 99/);
+  });
+});
+
+// ── Default-on-missing context_in ──
+
+describe("cli e2e — context_in default", () => {
+  let project: { dir: string; cleanup: () => void };
+  before(() => {
+    project = makeProject();
+    writeWorkflow(project.dir, "defaulty", `
+format: v1
+name: defaulty
+schemas:
+  Input: { type: object }
+  Output:
+    type: object
+    properties: { source: { type: string } }
+    required: [source]
+  Branched:
+    type: object
+    properties: { v: { type: integer } }
+    required: [v]
+input: Input
+output: Output
+steps:
+  - id: pick
+    type: router
+    cases: []
+    default: combine
+  - id: branch
+    type: programmatic
+    required_output: Branched
+    actions:
+      - { name: never, description: never reached, js: "return { v: 1 };" }
+  - id: combine
+    type: programmatic
+    context_in:
+      maybe: { from: "{branch.v}", default: "fallback" }
+    required_output: Output
+    actions:
+      - { name: pick, description: pick, js: "return { source: String(context.maybe) };" }
+`.trim());
+  });
+  after(() => project.cleanup());
+
+  it("uses the declared default when the source step never ran", () => {
+    runCli(project.dir, ["wf", "defaulty", "create"]);
+    const alias = aliasOf(project.dir, "defaulty");
+    const r = runCli(project.dir, [alias, "start"]);
+    // The router default jumps past 'branch' to 'combine'; combine
+    // references {branch.v} which is pending, so default kicks in.
+    assert.equal(r.status, 0, r.stderr);
+    const dataDir = path.join(project.dir, ".llm-rail", "defaulty");
+    const id = fs.readdirSync(dataDir)[0];
+    const state = fs.readFileSync(path.join(dataDir, id, "state.yaml"), "utf-8");
+    assert.match(state, /source: fallback/);
+  });
+});
+
 // ── Missing required input ──
 
 describe("cli e2e — missing required input", () => {

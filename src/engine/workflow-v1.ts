@@ -282,7 +282,10 @@ function validateContextRef(
   }
   const stepRef = tmpl.match(/^\{([\w-]+)\.[\w.-]+\}$/);
   if (stepRef) {
-    if (!stepIds.has(stepRef[1])) {
+    // `_tools` is a sentinel pseudo-step id used by `lrail <id> tool`
+    // to expose tool call results; it never appears in `steps:` but is
+    // a legitimate context_in source.
+    if (stepRef[1] !== "_tools" && !stepIds.has(stepRef[1])) {
       errors.push(
         `${stepLabel} '${key}' references unknown step '${stepRef[1]}'`,
       );

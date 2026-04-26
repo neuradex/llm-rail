@@ -432,3 +432,53 @@ describe("compile-v1 — cross-workflow IO (with registry)", () => {
     );
   });
 });
+
+describe("compile-v1 — call.inputs forward reference", () => {
+  it("warns when call.inputs references a step at or after the call step", () => {
+    const child = mkDef("child", {
+      schemas: {
+        Input: {
+          type: "object",
+          properties: { x: { type: "integer" } },
+          required: ["x"],
+        },
+        Output: { type: "object", properties: { v: { type: "integer" } }, required: ["v"] },
+      },
+      steps: [
+        {
+          id: "x",
+          type: "programmatic",
+          required_output: "Output",
+          actions: [{ name: "x", description: "x", js: "return { v: 1 };" }],
+        },
+      ],
+    });
+    const parent = mkDef("p", {
+      schemas: {
+        Input: { type: "object" },
+        Output: { type: "object", properties: { v: { type: "integer" } }, required: ["v"] },
+        Mid: { type: "object", properties: { x: { type: "integer" } }, required: ["x"] },
+      },
+      steps: [
+        // call references {later.x} — but later is after call → warning
+        {
+          id: "call-c",
+          type: "call",
+          workflow: "child",
+          inputs: { x: "{later.x}" },
+        },
+        {
+          id: "later",
+          type: "programmatic",
+          required_output: "Mid",
+          actions: [{ name: "x", description: "x", js: "return { x: 1 };" }],
+        },
+      ],
+    });
+    const r = compileV1Workflow(parent, makeInMemoryRegistry({ p: parent, child }));
+    assert.ok(
+      r.warnings.some((w) => /Call step 'call-c' inputs\.x.*after/.test(w)),
+      r.warnings.join(" | "),
+    );
+  });
+});

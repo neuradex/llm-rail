@@ -1,9 +1,9 @@
-import { loadInstance } from "../engine/state.js";
-import { loadWorkflow } from "../engine/workflow.js";
-import { formatStatus } from "../engine/output.js";
+import { loadInstanceAny } from "../engine/workflow-any.js";
+import { loadWorkflowV1 } from "../engine/workflow-v1.js";
+import { formatV1Status } from "../engine/output-v1.js";
 
 export function runStatus(id: string): void {
-  const state = loadInstance(id);
-  const def = loadWorkflow(state.workflow_name, state.variant);
-  console.log(formatStatus(def, state));
+  const { state } = loadInstanceAny(id);
+  const def = loadWorkflowV1(state.workflow_name);
+  console.log(formatV1Status(def, state));
 }

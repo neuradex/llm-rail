@@ -1,27 +1,27 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { listInstances } from "../engine/state.js";
-import { loadWorkflow } from "../engine/workflow.js";
-import { listVariants } from "../engine/variant.js";
 import { resolvePackageDir } from "../util.js";
+import { listV1Instances } from "../engine/state-v1.js";
+import { loadWorkflowAny } from "../engine/workflow-any.js";
 
 interface WorkflowEntry {
   name: string;
   source: "user" | "builtin";
 }
 
-function scanWorkflowDir(dirPath: string): string[] {
+function scanWorkflowDir(dirPath: string, opts: { allowSingleFile?: boolean } = {}): string[] {
   if (!fs.existsSync(dirPath)) return [];
   const names: string[] = [];
+  const allowSingleFile = opts.allowSingleFile ?? true;
 
-  // Single-file: *.yml
-  for (const f of fs.readdirSync(dirPath)) {
-    if (f.endsWith(".yml") || f.endsWith(".yaml")) {
-      names.push(f.replace(/\.ya?ml$/, ""));
+  if (allowSingleFile) {
+    for (const f of fs.readdirSync(dirPath)) {
+      if (f.endsWith(".yml") || f.endsWith(".yaml")) {
+        names.push(f.replace(/\.ya?ml$/, ""));
+      }
     }
   }
 
-  // Directory: */workflow.yml
   for (const entry of fs.readdirSync(dirPath)) {
     const entryPath = path.resolve(dirPath, entry);
     if (!fs.statSync(entryPath).isDirectory()) continue;
@@ -39,13 +39,14 @@ function scanWorkflowDir(dirPath: string): string[] {
 export function runListWorkflows(): void {
   const entries = new Map<string, WorkflowEntry>();
 
-  // Builtins first (user can override)
+  // builtins/ holds only templates and (eventually) v1 builtin workflows.
+  // Single-file YAMLs there (e.g. lrail.default.yml) are configuration
+  // templates, not workflows.
   const builtinsDir = resolvePackageDir("builtins");
-  for (const name of scanWorkflowDir(builtinsDir)) {
+  for (const name of scanWorkflowDir(builtinsDir, { allowSingleFile: false })) {
     entries.set(name, { name, source: "builtin" });
   }
 
-  // User workflows (override builtins)
   const workflowDir = path.resolve("workflows");
   for (const name of scanWorkflowDir(workflowDir)) {
     entries.set(name, { name, source: "user" });
@@ -56,75 +57,57 @@ export function runListWorkflows(): void {
     return;
   }
 
-  const allInstances = listInstances();
+  const allInstances = listV1Instances();
 
   console.log("Workflows:");
   for (const { name, source } of [...entries.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     const instances = allInstances.filter((i) => i.workflow_name === name);
     let phase = "draft";
+    let formatTag = "";
     try {
-      const def = loadWorkflow(name);
+      const { def } = loadWorkflowAny(name);
       phase = def.phase || "draft";
-    } catch { /* skip */ }
+      formatTag = " [v1]";
+    } catch {
+      formatTag = " [legacy — run `lrail wf migrate`]";
+    }
     const tag = source === "builtin" ? "[builtin]" : `[${phase}]`;
-    const parts = [`  ${name}`, tag];
-    const variants = listVariants(name);
-    if (variants.length > 0) parts.push(`(${variants.length} variants)`);
+    const parts = [`  ${name}`, tag + formatTag];
     if (instances.length > 0) parts.push(`(${instances.length} instances)`);
     console.log(parts.join("  "));
   }
 }
 
-/**
- * List all instances across all workflows.
- */
 export function runListInstances(statusFilter?: string): void {
-  let instances = listInstances();
-
+  let instances = listV1Instances();
   if (statusFilter) {
     instances = instances.filter((i) => i.status === statusFilter);
   }
-
   if (instances.length === 0) {
     console.log("No instances found.");
     return;
   }
-
-  // Sort by created_at descending
   instances.sort((a, b) => b.created_at.localeCompare(a.created_at));
-
   for (const inst of instances) {
     const stepCount = Object.keys(inst.steps).length;
     const completedCount = Object.values(inst.steps).filter((s) => s.status === "completed").length;
     const label = inst.alias ? `${inst.alias} (${inst.id})` : inst.id;
-    const variant = inst.variant ? ` [${inst.variant}]` : "";
     console.log(
-      `${label}  ${inst.workflow_name}${variant}  ${inst.status}  (${completedCount}/${stepCount} steps)`,
+      `${label}  ${inst.workflow_name}  ${inst.status}  (${completedCount}/${stepCount} steps)`,
     );
   }
 }
 
-/**
- * List instances for a specific workflow.
- */
 export function runList(workflowName: string, statusFilter?: string): void {
-  let instances = listInstances();
-
-  // Filter by workflow name
-  instances = instances.filter((i) => i.workflow_name === workflowName);
-
+  let instances = listV1Instances().filter((i) => i.workflow_name === workflowName);
   if (statusFilter) {
     instances = instances.filter((i) => i.status === statusFilter);
   }
-
   if (instances.length === 0) {
     console.log(`No instances found for workflow '${workflowName}'.`);
     return;
   }
-
-  // Sort by created_at descending
   instances.sort((a, b) => b.created_at.localeCompare(a.created_at));
-
   for (const inst of instances) {
     const stepCount = Object.keys(inst.steps).length;
     const completedCount = Object.values(inst.steps).filter((s) => s.status === "completed").length;

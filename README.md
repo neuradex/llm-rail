@@ -29,7 +29,7 @@
   <a href="./docs/README.ja.md">日本語</a>
 </p>
 
-> **Beta (0.x.x)** — Under active development. APIs and schema may change. Pin your version if you depend on stability.
+> **1.0.0** — First stable release. The legacy pre-1.0 workflow format is no longer executed; use `lrail wf <name> migrate` to convert old files. See `CHANGELOG.md`.
 
 ---
 
@@ -152,41 +152,59 @@ The workflow engine solves this by decomposing work into steps where **each step
 This has a direct cost implication: when context is narrow enough, **Haiku produces the same quality as Opus** at a fraction of the cost. The model doesn't need to be smart — it needs to be focused. LLM Rail makes focus structural.
 
 ```yaml
+format: v1
 name: code-review
+schemas:
+  Input:
+    type: object
+    properties:
+      base_branch: { type: string }
+    required: [base_branch]
+  Diff:
+    type: object
+    properties:
+      diff: { type: string, minLength: 1 }
+    required: [diff]
+  Output:
+    type: object
+    properties:
+      issues: { type: array, items: { type: object } }
+      severity: { type: string, enum: [low, medium, high, critical] }
+    required: [issues, severity]
+input: Input
+output: Output
 steps:
   - id: fetch-diff
     type: programmatic
+    context_in:
+      base: "{{base_branch}}"
+    required_output: Diff
     actions:
-      - shell: "git diff {{base_branch}}...HEAD"
+      - name: git-diff
+        description: Collect the diff for the current branch against base
+        shell: "git diff {{base}}...HEAD"
         extract: { diff: "." }
 
   - id: review
-    description: "Review the diff for issues"
-    depends_on: fetch-diff
+    type: agentic
     context_in:
       diff: "{fetch-diff.diff}"
-    required_output: [issues, severity]
-    validation:
-      - field: issues
-        op: type
-        value: array
-      - field: severity
-        op: one_of
-        value: [low, medium, high, critical]
+    instruction: "Review the diff for issues."
+    required_output: Output
 ```
 
-`fetch-diff` runs as a shell command — no LLM, no tokens, milliseconds. `review` gets exactly the diff it needs via `context_in`, produces exactly the output declared in `required_output`, and the output must pass `validation` before the workflow advances.
+`fetch-diff` runs as a shell command — no LLM, no tokens, milliseconds. `review` gets exactly the diff it needs via `context_in`, produces exactly the shape declared by the `Output` schema, and that shape is validated before the workflow advances.
 
-### Two step types, one workflow
+### Four step types, one workflow
 
-| | Programmatic | Agentic |
-|---|---|---|
-| Execution | CLI runs it directly | LLM agent does the work |
-| Cost | Zero tokens | Minimal (scoped context) |
-| Speed | Milliseconds | Seconds |
-| Use when | Deterministic ops (fetch, filter, post) | Judgment needed (analyze, review, write) |
+| | Programmatic | Agentic | Router | Call |
+|---|---|---|---|---|
+| Execution | CLI runs it directly | LLM agent does the work | CLI routes flow | CLI invokes a sub-workflow |
+| Cost | Zero tokens | Minimal (scoped context) | Zero tokens | (child's cost) |
+| Speed | Milliseconds | Seconds | Instant | (child's speed) |
+| Use when | Deterministic ops (fetch, filter, post) | Judgment needed (analyze, review, write) | Conditional branch / bounded loop | Reuse a whole workflow as a function |
 
-The power is in mixing them. Fetch data programmatically, analyze with an agent, post results programmatically. The deterministic parts never hallucinate because no LLM is involved.
+The power is in composing them. Fetch data programmatically, analyze with an agent, branch with a router, delegate a whole chunk via a call. The deterministic parts never hallucinate because no LLM is involved.
 
 ### Instance-scoped tools
 
@@ -218,29 +236,40 @@ lrail <id> tool fetch-price --args '{"symbol": "AAPL"}'
 
 Tool calls are audited and persisted to instance state. Results are accessible via `{_tools.fetch-price}` in `context_in` and assertions.
 
-### Validation gates
+### Validation: schemas first, rules second
 
-Each step's output passes through two tiers of checks:
-
-- **validation** — runs before the step completes. Rejects bad output immediately. The agent gets the error message and retries.
-- **assertions** — runs after the step completes (including any post-step actions). Reverts the step on failure. The agent retries automatically.
+Each step declares its output shape by naming a schema from the workflow's `schemas:` block. Every submission is validated against that schema before the step completes. Structural constraints (type, length, range, enum, required fields) live in the schema itself.
 
 ```yaml
-validation:
-  - field: score
-    op: between
-    value: [0, 100]
-  - field: sources
-    op: each_has
-    value: url
-    message: "Every source must have a URL"
+schemas:
+  Review:
+    type: object
+    properties:
+      score: { type: number, minimum: 0, maximum: 100 }
+      sources:
+        type: array
+        items:
+          type: object
+          properties: { url: { type: string } }
+          required: [url]
+    required: [score, sources]
+```
+
+Anything that can't be expressed as a JSON Schema keyword (custom scripts, anti-fabrication checks, cross-step invariants) stays on the step:
+
+```yaml
 assertions:
   - field: sources
     op: verify_source          # fetches URLs, verifies data actually exists
     value: { field: "snippet", sample_size: 3 }
 ```
 
-22 built-in operators cover type checks, ranges, array validation, uniqueness, and anti-fabrication (`verify_source` fetches URLs and confirms the cited data actually exists on the page). For anything custom, `script` runs a shell command as a validation gate.
+Two tiers run at different times:
+
+- **schema / validation** — before the step completes. Rejects bad output immediately; the agent sees the error and retries.
+- **assertions** — after the step completes (including post-step actions). Reverts the step on failure; the agent retries automatically.
+
+`verify_source` fetches URLs and confirms the cited data actually exists on the page. `script` runs a shell command as a gate. Built-in operators cover the rest.
 
 ### Policy per workflow
 
@@ -348,10 +377,13 @@ lrail log [-n <count>] [-f] [--raw]                   # Command history
 lrail bash '<command>'                                # Execute through global proxy
 
 # Workflow management
-lrail wf list                                         # List workflows
-lrail wf <name> create [--variant <v>] [--param k=v]  # Create instance
-lrail wf <name> validate [--variant <v>]              # Validate YAML
-lrail wf <name> promote                               # Check promotion readiness
+lrail wf list                                              # List workflows
+lrail wf <name> create [--variant <v>] [--param k=v]       # Create instance
+lrail wf <name> validate [--variant <v>]                   # Parse-time validation
+lrail wf <name> compile [--path <file>] [--registry <dir>] # v1: static checks (superset of validate)
+lrail wf <name> graph --json [--path <file>]               # v1: structured export (for Loom / visualizers)
+lrail wf <name> migrate [--path <file>] [--output <file>]  # v1: convert a legacy workflow to v1
+lrail wf <name> promote                                    # Check promotion readiness
 
 # Instance execution
 lrail <id> start                                      # Begin execution
@@ -368,13 +400,11 @@ lrail <id> policy generate                            # Generate policy from tra
 
 | Skill | What it does |
 |---|---|
-| `/llm-rail:design` | Describe a task → get a validated workflow |
-| `/llm-rail:build` | Generate, optimize, and test a workflow automatically |
+| `/llm-rail:design` | Describe a task → get a validated v1 workflow |
 | `/llm-rail:run` | Execute a workflow end-to-end |
 | `/llm-rail:review` | Trial run + analysis — detect issues, suggest fixes |
-| `/llm-rail:optimize` | 7-step optimization pipeline with variant output |
-
-The framework builds and improves its own workflows — it's self-hosting.
+| `/llm-rail:status` | Inspect workflow instances |
+| `/llm-rail:init` | Initialize lrail in a project |
 
 ---
 

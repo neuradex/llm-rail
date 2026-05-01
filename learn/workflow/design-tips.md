@@ -1,85 +1,108 @@
 ---
 name: design-tips
-description: Design principles and tips for writing good LLM Rail workflows
+description: Design principles and anti-patterns for v1 workflows
 ---
 
 ## Workflow Design Principles
 
 ### 1. One clear output per step
 
-Each step should produce a single, well-defined deliverable. If a step does two unrelated things, split it.
+Each step produces a single, well-defined deliverable whose shape is named in `schemas:`. If a step does two unrelated things, split it — named units are the cost of v1 and also its value.
 
-### 2. Choose the right step type
+### 2. Pick the right step type
 
-See `lrail docs concepts/step-types` for decision criteria.
+See `concepts/step-types` for full criteria.
 
-- Use `programmatic` for deterministic work: filtering, sorting, arithmetic, API calls
-- Use `agentic` only when LLM judgment is needed: analysis, review, summarization
-- Prefer programmatic — it's faster, cheaper, and deterministic
+- `programmatic` for deterministic work: filtering, sorting, arithmetic, API calls, reshaping.
+- `agentic` only when LLM judgment is needed: analysis, review, synthesis.
+- `router` only for real branches or bounded loops. Don't add one for linear flow.
+- `call` only for reuse or recursion. Don't extract a one-action helper into its own workflow.
 
-### 3. required_output = what the next step actually consumes
+Prefer `programmatic` — it's faster, cheaper, and deterministic.
 
-Don't ask for data nobody uses. Every required_output field should appear in a downstream context_in or be the final deliverable.
+### 3. required_output = shape actually consumed
+
+Don't ask for data nobody uses. Every field in a step's `required_output` schema should appear in a downstream `context_in`, in the final workflow `output`, or in an assertion. If the last step drops a field, the schema shouldn't require it.
 
 ### 4. Explicit data flow with context_in
 
-Never rely on implicit flat-merge of all prior outputs. Always use `context_in` to declare exactly which data a step needs and from where:
+The only data channel is `context_in`. Every cross-step reference declares exactly what it needs and from where:
 
 ```yaml
 - id: step-b
   context_in:
     items: "{step-a.items}"
+    threshold: "{{threshold}}"
 ```
+
+There is no implicit merge of prior outputs, no global store.
 
 ### 5. validation vs assertions
 
-See `lrail docs concepts/validation` for operator reference.
+See `concepts/validation` for operator reference.
 
-- `validation`: structural checks — "Is the output an array with at least 5 items?"
-- `assertions`: business logic checks — "Do the allocation weights sum to 100?"
+- **Schema** (in `schemas:`): structural shape — type, length, range, enum, required fields.
+- **`validation:`** (on the step): non-structural, pre-completion — `script`, `verify_source`, regex match, each-item checks.
+- **`assertions:`** (on the step): post-completion, cross-step or cross-field invariants.
 
-### 6. Actionable tips
+If a rule is expressible as a JSON Schema keyword, put it in the schema.
 
-Tips are instructions, not suggestions. Agents follow them. Use them to encode domain knowledge:
+### 6. Actionable prompts
+
+Agentic `instruction` must be directive, not suggestive. Encode domain knowledge inline:
 
 ```yaml
-tips:
-  - Use PER trailing twelve months, not forward
-  - If a metric is unavailable, set to null — never guess
-  - Sentiment must be one of: positive, neutral, negative
+instruction: |
+  Extract each company's PER (trailing twelve months, not forward).
+  If a metric is unavailable, return null — never guess.
+  Sentiment must be one of: positive, neutral, negative.
 ```
 
-See `lrail docs concepts/step-types` for agent capability constraints (step-runner vs general-purpose) — tips that mention WebSearch require a general-purpose agent.
+v1 has no separate `tips:` field. If the prompt is getting long, split the step.
 
-### 7. Minimal depends_on
+See `concepts/step-types` "Agent selection" for step-runner vs general-purpose constraints — prompts that mention WebSearch/WebFetch require a general-purpose agent.
 
-Only declare actual data dependencies. If step C needs data from A but not B, don't make C depend on B just because B runs between them.
+### 7. Schemas as the contract surface
 
-### 8. Policy when agents run commands
+When you change a shape, change its schema name or version. Consumers (downstream steps, `call` sites, Loom visualizers) read schemas as the contract. Drifting a schema without renaming is a silent breaking change.
 
-See `lrail docs concepts/policy`. Start with trail mode during development, then switch to enforce with a minimal allow-list.
+### 8. Bound loops and recursion
+
+- `router` backward goto → declare `max_iterations`. Compile enforces this.
+- `call` that can reach itself → declare `max_depth`. Compile enforces this.
+
+These aren't nannying — they prevent runaway cost.
+
+### 9. Policy when agents run commands
+
+See `concepts/policy`. Start with `trail` mode during development, then switch to `enforce` with a minimal allow-list.
 
 ## Anti-Patterns
 
-### Deterministic operations as agentic steps
+### Deterministic work masquerading as agentic
 
-LLMs can and will manipulate data to pass validation.
+LLMs will manipulate data to pass validation. If the transform is deterministic, the step type is `programmatic`.
 
 Bad:
 ```yaml
 - id: filter
-  description: "Filter items where score > 80"
-  required_output: [filtered]
+  type: agentic
+  instruction: "Return items where score > 80"
+  required_output: FilteredItems
 ```
 
 Good:
 ```yaml
 - id: filter
   type: programmatic
+  context_in:
+    items: "{collect.items}"
+  required_output: FilteredItems
   actions:
-    - js: |
-        const filtered = context.items.filter(x => x.score > 80);
-        return { filtered };
+    - name: score-filter
+      description: Keep items with score > 80
+      js: |
+        return { filtered: context.items.filter(x => x.score > 80) };
 ```
 
 ### Design for the weakest model
@@ -89,99 +112,103 @@ If Haiku will run this workflow, assume it will:
 - Round numbers and use suspiciously clean values
 - Optimize for passing validation over being correct
 
-Guard against this with programmatic steps, strong validation, and `verify_source`.
+Guard against this with `programmatic` steps, strict schemas, and `verify_source` assertions for data that must actually exist.
 
-### Start with fewer, broader steps
+### Start coarse, refine later
 
-It's easier to split a step later than to merge steps. Start with 3-5 steps and add granularity as needed.
+It is easier to split a step than to merge two. Start with 3–5 steps and add granularity as gates in the larger schemas reveal real sub-structure.
 
-### Cross-step validation (the `reject_to` temptation)
+### Cross-step validation (the "reject_to" temptation)
 
-When a later step's gate fails because of an earlier step's output, it is tempting to add a "go back to step N" mechanism (`reject_to`, `on_reject: step-N`, etc.). **Do not do this.** LLM Rail intentionally has no backward-jump primitive, and you should not need one.
+When a later step fails because an earlier step's output was wrong, it is tempting to reach for a "go back to step N" mechanism. v1 does not provide one — and you do not need one.
 
-The root cause is that the validation lives in a different step from the one that produces the gated output. The fix is to **move the gate into the step that generates the output**, so the built-in reject→retry loop handles it automatically.
+The root cause is always the same: the validation lives in a different step from the one that produces the gated value. The fix is to **move the gate into the step that produces the output**, so the step's own retry loop handles it.
 
 Bad — validation separated from the producing step:
 ```yaml
 - id: generate-variant
-  description: "Generate an optimized variant"
-  required_output: [variant_code]
+  type: agentic
+  instruction: "Generate an optimized variant"
+  required_output: Variant
 
 - id: execute-variant
   type: programmatic
+  context_in:
+    code: "{generate-variant.code}"
+  required_output: ExecutionResult
   actions:
-    - shell: "node variant_code.js"
+    - name: run
+      description: Execute candidate script
+      shell: "node ./variant.js"
       extract:
-        variant_result: result
+        result: result
 
 - id: compare
   type: programmatic
-  description: "Compare baseline vs variant"
-  validation:
-    - field: improvement
-      op: gt
-      value: 0
-  # If this fails, we need to redo generate-variant — not supported
+  context_in:
+    baseline: "{{baseline_score}}"
+    observed: "{execute-variant.result}"
+  required_output: ComparisonResult
+  # If improvement <= 0, we want to redo generate-variant — not supported
 ```
 
-Good — gate lives in the same step that produces the output:
+Good — gate lives in the same step that produces the candidate:
 ```yaml
-- id: generate-and-evaluate-variant
-  description: "Generate variant, execute it, return comparison metrics"
-  required_output: [variant_code, variant_result, improvement]
-  validation:
+- id: generate-and-evaluate
+  type: agentic
+  instruction: |
+    Generate a variant, execute it (use the bash proxy), and return code +
+    execution result + improvement over baseline.
+  required_output: EvaluatedVariant
+  assertions:
     - field: improvement
       op: gt
       value: 0
-  # If rejected, agent retries this step with a different approach
+  # Rejection keeps the agent in this step; it retries with a different
+  # approach until the assertion passes.
 ```
 
-**Principle:** if a step's failure requires redoing a previous step, those steps should be merged. Wanting `reject_to` / `on_reject` is a code smell — it means the steps are poorly decomposed.
+**Principle**: if a step's failure requires redoing a previous step, those steps should be merged. Wanting `reject_to` is a sign of bad decomposition.
 
-### Deferred quality validation in accumulate pipelines
+### Accumulator via router loop
 
-When a pipeline collects items in one step and filters by quality in a later step, the filter renders earlier collection effort wasted. **Pull the quality gate into the accumulate step** so only qualified items enter the pool.
+In the legacy format, `accumulate:` collected items across retries in a single agentic step. v1 removes it. The right pattern depends on what you're building:
 
-Bad — collect first, validate quality later:
+- **"Validate an item at collection time, keep trying"** — use the agent's own retry on the step's schema / assertions. Its `required_output` schema enforces the whole batch, so it retries until correct.
+- **"Grow a pool by iterating an external queue"** — model it as a recursive `call` whose `inputs` include the in-progress pool. Each recursion appends the next batch and decides whether to call again or return. See `concepts/call` for the full pattern.
+
+Bad (mental model: "collect first, filter later"):
 ```yaml
 - id: collect-companies
+  type: agentic
   instruction: "Search for 100 companies"
-  accumulate:
-    companies: { key: name }
-  validation:
-    - field: companies
-      op: min_length
-      value: 100
+  required_output: Companies
 
 - id: find-forms
-  depends_on: collect-companies
-  instruction: "Find contact form URLs for each company"
-  # Companies without forms are wasted — we can't go back
-
-- id: extract-structure
-  depends_on: find-forms
-  instruction: "Extract form HTML structure"
-  # If 40% have no forms, we only get 60 usable results from 100 collected
+  type: agentic
+  context_in:
+    companies: "{collect-companies.items}"
+  instruction: "Find a contact form URL for each company"
+  required_output: CompaniesWithForms
+  # Companies without forms are wasted collection effort
 ```
 
-Good — validate quality at collection time:
+Good (mental model: "only collect what's already usable"):
 ```yaml
 - id: collect-companies-with-forms
-  instruction: "Find 100 companies AND verify each has a contact form before adding"
-  accumulate:
-    companies: { key: name }
-  validation:
-    - field: companies
-      op: min_length
-      value: 100
-    - field: companies
-      op: each_has
-      value: form_url
-  # Only companies with verified forms enter the pool
-
-- id: extract-structure
-  depends_on: collect-companies-with-forms
-  instruction: "Extract form HTML structure for each company's form_url"
+  type: agentic
+  instruction: |
+    Find 100 companies. For each, verify it has a public contact form and
+    include form_url in the result. Skip companies that have no form.
+  required_output: CompaniesWithForms
 ```
 
-**Principle:** accumulate validation is the quality gate. If a downstream step would reject or skip items from the pool, move that check into the accumulate step's validation. The pool should only contain items that are fully usable by all downstream steps.
+**Principle**: the collection step's schema is the quality gate. If a downstream step would skip or reject items, move that check into the collector's schema.
+
+### Premature `call`
+
+Extracting a one-action helper into its own `call`-able workflow doesn't buy you anything — it just adds a boundary. Reach for `call` when you have a **reusable subtask with its own input/output shape and tests**, or when you need recursion for accumulation.
+
+### Premature `router`
+
+Two linear steps don't need a router between them. Add `router` when there's a real branch (two destinations that depend on data) or a loop (a backward goto that will actually run more than once in practice).

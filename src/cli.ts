@@ -7,6 +7,9 @@ import { runQuery } from "./commands/query.js";
 import { runReset } from "./commands/reset.js";
 import { runList, runListWorkflows, runListInstances } from "./commands/list.js";
 import { runValidate } from "./commands/validate.js";
+import { runCompile } from "./commands/compile.js";
+import { runGraph } from "./commands/graph.js";
+import { runMigrate } from "./commands/migrate.js";
 import { runBash } from "./commands/bash.js";
 import { runPolicyGenerate, runPolicyCheck, runPolicyEval, runPolicyVisible } from "./commands/policy.js";
 import { runPromote } from "./commands/promote.js";
@@ -17,7 +20,7 @@ import { runSummary } from "./commands/summary.js";
 import { runVariants } from "./commands/variants.js";
 import { runMerge } from "./commands/merge.js";
 import { runSaveVariant } from "./commands/save-variant.js";
-import { resolveInstanceId } from "./engine/state.js";
+import { resolveInstanceId } from "./engine/alias.js";
 import { runTool } from "./commands/tool.js";
 import { runGlobalLog } from "./commands/global-log.js";
 import { runGlobalBash } from "./commands/global-bash.js";
@@ -35,6 +38,9 @@ function usage(): never {
   lrail wf instances [--status <status>]              List all instances
   lrail wf <name> create [--variant <v>] [--param k=v ...]  Create a new instance
   lrail wf <name> validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  lrail wf <name> compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  lrail wf <name> graph --json [--path <file>]  Export v1 workflow as structured JSON
+  lrail wf <name> migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   lrail wf <name> show [--variant <v>]                Show workflow YAML
   lrail wf <name> summary [--variant <v>] [--param k=v]  Structured summary with warnings
   lrail wf <name> variants                            List variants
@@ -118,14 +124,20 @@ if (target === "init") {
   const workflowName = args[1];
   const command = args[2];
 
-  // lrail wf / lrail wf list — list all workflows
-  if (!workflowName || (workflowName === "list" && !command)) {
+  // lrail wf / lrail wf list [--status <s>] — list all workflows.
+  // Treat any leading `--flag` after `list` as a flag, not a subcommand.
+  if (
+    !workflowName ||
+    (workflowName === "list" && (!command || command.startsWith("-")))
+  ) {
     runListWorkflows();
     process.exit(0);
   }
 
-  // lrail wf instances [--status <status>] — list all instances
-  if (workflowName === "instances" && !command) {
+  // lrail wf instances [--status <status>] — list all instances.
+  // Same treatment: a leading `--flag` is part of `instances`, not a
+  // workflow command on a workflow named "instances".
+  if (workflowName === "instances" && (!command || command.startsWith("-"))) {
     let statusFilter: string | undefined;
     const statusIdx = args.indexOf("--status");
     if (statusIdx !== -1 && args[statusIdx + 1]) {
@@ -141,6 +153,9 @@ if (target === "init") {
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  graph --json [--path <file>]           Export v1 workflow as structured JSON
+  migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants
@@ -186,6 +201,43 @@ Instance commands (after 'create'):
     case "validate":
       runValidate(workflowName, variantFlag, pathFlag);
       break;
+
+    case "compile": {
+      const registryIdx = args.indexOf("--registry");
+      const registryDir = registryIdx !== -1 ? args[registryIdx + 1] : undefined;
+      runCompile({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        registryDir,
+      });
+      break;
+    }
+
+    case "graph": {
+      if (!args.includes("--json")) {
+        console.error("Usage: lrail wf <name> graph --json [--path <file>]");
+        process.exit(1);
+      }
+      runGraph({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        format: "json",
+      });
+      break;
+    }
+
+    case "migrate": {
+      const outIdx = args.indexOf("--output");
+      const outputPath = outIdx !== -1 ? args[outIdx + 1] : undefined;
+      const dryRun = args.includes("--dry-run");
+      runMigrate({
+        workflowName: pathFlag ? undefined : workflowName,
+        filePath: pathFlag,
+        outputPath,
+        dryRun,
+      });
+      break;
+    }
 
     case "show":
       runShow(workflowName, variantFlag);
@@ -273,6 +325,9 @@ Usage: lrail wf ${workflowName} <command>
 Workflow commands:
   create [--variant <v>] [--param k=v]   Create a new instance
   validate [--variant <v>] [--path <file>]  Validate workflow YAML
+  compile [--path <file>] [--registry <dir>]  Compile v1 workflow (static checks)
+  graph --json [--path <file>]           Export v1 workflow as structured JSON
+  migrate [--path <file>] [--output <file>] [--dry-run]  Convert legacy to v1
   show [--variant <v>]                   Show workflow YAML
   summary [--variant <v>] [--param k=v]  Structured summary with warnings
   variants                               List variants

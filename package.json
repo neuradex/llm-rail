@@ -1,7 +1,7 @@
 {
   "name": "llm-rail",
-  "version": "0.4.12",
-  "description": "Deterministic workflow control CLI for LLM agents",
+  "version": "1.0.0",
+  "description": "Declarative workflow orchestration for LLM agents — schemas, routers, sub-workflow composition, full audit",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -38,6 +38,7 @@
     "prepublishOnly": "tsup"
   },
   "dependencies": {
+    "ajv": "^8.18.0",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

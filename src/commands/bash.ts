@@ -1,16 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { loadInstance } from "../engine/state.js";
-import { loadWorkflow } from "../engine/workflow.js";
+import { loadInstanceAny } from "../engine/workflow-any.js";
+import { loadWorkflowV1 } from "../engine/workflow-v1.js";
 import { checkCommand } from "../engine/gateway.js";
 import { appendCommandLog } from "../audit/command-log.js";
-import { fireHook, makeHookPayload } from "../engine/hooks.js";
 
 export function runBash(id: string, command: string): void {
-  const state = loadInstance(id);
-  const def = loadWorkflow(state.workflow_name, state.variant);
+  const { state } = loadInstanceAny(id);
+  const def = loadWorkflowV1(state.workflow_name);
 
-  const currentStep = def.steps[state.current_step];
-  const stepId = currentStep?.id || "unknown";
+  const stepId = state.current_step_id ?? "unknown";
 
   const result = checkCommand(command, {
     workflowName: state.workflow_name,
@@ -20,12 +18,6 @@ export function runBash(id: string, command: string): void {
   });
 
   if (!result.allowed) {
-    fireHook(
-      makeHookPayload("policy:denied", state.id, state.workflow_name, stepId, {
-        command,
-        reason: result.reason,
-      }),
-    );
     console.error(`Policy denied: ${result.reason}`);
     console.error(`Command: ${command}`);
     process.exit(1);

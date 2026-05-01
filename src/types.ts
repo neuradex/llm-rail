@@ -65,17 +65,6 @@ export interface LrailConfig {
   policy?: PolicyDef;
 }
 
-// ── Flow Control ──
-
-/**
- * Branded class returned by lrail.goto() inside JS actions.
- * The engine detects this via instanceof to distinguish from regular output.
- */
-export class LrailGoto {
-  readonly __brand = "lrail_goto" as const;
-  constructor(public readonly target: string) {}
-}
-
 // ── Workflow Phase ──
 
 export type WorkflowPhase = "draft" | "dev" | "stable";
@@ -214,33 +203,3 @@ export interface ValidationResult {
   script_logs?: ScriptLog[];
 }
 
-// ── Hooks ──
-
-export type HookEvent =
-  | "workflow:created"
-  | "workflow:completed"
-  | "workflow:error"
-  | "step:before_start"
-  | "step:started"
-  | "step:before_complete"
-  | "step:completed"
-  | "step:rejected"
-  | "step:reset"
-  | "action:before_run"
-  | "action:completed"
-  | "action:failed"
-  | "policy:denied";
-
-export interface HookPayload {
-  event: HookEvent;
-  instance_id: string;
-  workflow_name: string;
-  step_id?: string;
-  data?: Record<string, unknown>;
-  meta?: Record<string, unknown>;
-}
-
-export interface HookResult {
-  allow: boolean;
-  message?: string;
-}

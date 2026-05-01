@@ -19,8 +19,11 @@ export function evaluatePolicy(policy: PolicyDef, command: string): PolicyResult
     return { allowed: true, reason: "trail mode: all commands logged" };
   }
 
-  // Normalize line continuations (backslash + newline) to prevent evasion
-  command = command.replace(/\\\n\s*/g, "");
+  // Normalize line continuations (backslash + newline + leading whitespace)
+  // to a single space, matching shell word-splitting semantics. Replacing
+  // with the empty string would let an attacker collapse `rm -rf\<NL> *`
+  // into `rm -rf*`, slipping past a `rm -rf *` rule.
+  command = command.replace(/\\\n\s*/g, " ");
 
   // Enforce mode
   const defaultEffect = policy.default || "deny";

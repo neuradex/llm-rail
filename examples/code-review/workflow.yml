@@ -1,77 +1,166 @@
+format: v1
 name: code-review
-version: "0.1.0"
-description: コードレビューワークフロー
-params:
-  target:
-    type: string
-    required: false
-    default: "."
-    description: レビュー対象パス
+version: "1.0.0"
+description: Analyze a codebase, write per-file review comments, and produce a verdict.
+
+schemas:
+  Input:
+    type: object
+    properties:
+      target:
+        type: string
+        default: "."
+        description: Path to review (defaults to the current directory).
+    # `target` has a default, so nothing is strictly required at creation time.
+
+  Output:
+    type: object
+    properties:
+      verdict: { type: string, enum: [approve, request_changes, comment] }
+      summary_text: { type: string, minLength: 10 }
+      comment_count: { type: integer, minimum: 0 }
+    required: [verdict, summary_text, comment_count]
+
+  Analysis:
+    type: object
+    properties:
+      file_list:
+        type: array
+        items: { type: string }
+        minItems: 1
+      complexity_score: { type: integer, minimum: 1, maximum: 10 }
+    required: [file_list, complexity_score]
+
+  Comment:
+    type: object
+    properties:
+      file: { type: string, minLength: 1 }
+      line: { type: integer, minimum: 1 }
+      severity: { type: string, enum: [critical, warning, info] }
+      message: { type: string, minLength: 1 }
+    required: [file, severity, message]
+
+  Review:
+    type: object
+    properties:
+      comments:
+        type: array
+        items: Comment
+        minItems: 1
+      severity_counts:
+        type: object
+        properties:
+          critical: { type: integer, minimum: 0 }
+          warning: { type: integer, minimum: 0 }
+          info: { type: integer, minimum: 0 }
+        required: [critical, warning, info]
+    required: [comments, severity_counts]
+
+input: Input
+output: Output
+
 steps:
   - id: analyze
-    description: コードベース分析
-    instruction: "{{target}} のコードベース分析"
-    required_output:
-      - file_list
-      - complexity_score
-    validation:
-      - field: file_list
-        op: type
-        value: array
-      - field: file_list
-        op: min_length
-        value: 1
-      - field: complexity_score
-        op: min
-        value: 1
-      - field: complexity_score
-        op: max
-        value: 10
-    tips:
-      - 変更のあったファイルだけでなく影響範囲も含めろ
-      - complexity_scoreは1-10のスケールで評価
-      - テストファイルも分析対象に含めろ
+    type: agentic
+    context_in:
+      target: "{{target}}"
+    instruction: |
+      Analyze the codebase at {{target}}.
+
+      Produce `file_list` (all files relevant to the review — include
+      impacted files, not just changed ones; include tests too) and
+      `complexity_score` on a 1–10 scale assessing overall change
+      complexity and review burden.
+    required_output: Analysis
 
   - id: review
-    description: レビューコメント作成
-    instruction: レビューコメント作成
+    type: agentic
     context_in:
       files: "{analyze.file_list}"
       score: "{analyze.complexity_score}"
-    required_output:
-      - comments
-      - severity_counts
-    validation:
-      - field: comments
-        op: type
-        value: array
-      - field: comments
-        op: min_length
-        value: 1
-      - field: comments
-        op: each_has
-        value: file
-    tips:
-      - セキュリティ関連を先に確認
-      - コメントにはファイルパスと行番号を含めろ
-      - 重要度レベル（critical/warning/info）を付与
+    instruction: |
+      Review the listed files. Write per-issue comments; each needs
+      `file` (path), optionally `line`, `severity`
+      (critical / warning / info), and `message`.
 
-  - id: summary
-    description: レビューサマリー作成
-    instruction: レビューサマリー作成
+      Check security concerns first.
+    required_output: Review
+
+  - id: decide-verdict
+    type: router
+    context_in:
+      critical: "{review.severity_counts.critical}"
+      warning: "{review.severity_counts.warning}"
+    cases:
+      - when: { field: "{{critical}}", op: gt, value: 0 }
+        goto: summarize-request-changes
+      - when:
+          all:
+            - { field: "{{critical}}", op: eq, value: 0 }
+            - { field: "{{warning}}", op: eq, value: 0 }
+        goto: summarize-approve
+    default: summarize-comment
+
+  - id: summarize-request-changes
+    type: programmatic
+    context_in:
+      counts: "{review.severity_counts}"
+      comments: "{review.comments}"
+    required_output: Output
+    actions:
+      - name: shape-request-changes
+        description: Produce the 'request_changes' summary
+        js: |
+          const c = context.counts;
+          const top = context.comments
+            .filter(x => x.severity === 'critical')
+            .slice(0, 5)
+            .map(x => `- ${x.file}${x.line ? `:${x.line}` : ''} — ${x.message}`)
+            .join('\n');
+          return {
+            verdict: 'request_changes',
+            summary_text: [
+              `Request changes: ${c.critical} critical issue(s), ${c.warning} warning(s).`,
+              '',
+              'Top critical issues:',
+              top || '  (none listed)',
+            ].join('\n'),
+            comment_count: context.comments.length,
+          };
+
+  - id: summarize-approve
+    type: programmatic
     context_in:
       comments: "{review.comments}"
-      severity: "{review.severity_counts}"
-    required_output:
-      - verdict
-      - summary_text
-    validation:
-      - field: verdict
-        op: one_of
-        value: [approve, request_changes, comment]
-      - field: summary_text
-        op: min_length
-        value: 10
-    tips:
-      - verdictはapprove/request_changes/commentのいずれか
-      - サマリーにはcriticalな問題を必ず含めろ
+    required_output: Output
+    actions:
+      - name: shape-approve
+        description: Produce the 'approve' summary
+        js: |
+          return {
+            verdict: 'approve',
+            summary_text: [
+              'Approved. No critical or warning issues found.',
+              context.comments.length > 0
+                ? `${context.comments.length} informational note(s).`
+                : 'No comments.',
+            ].join(' '),
+            comment_count: context.comments.length,
+          };
+
+  - id: summarize-comment
+    type: programmatic
+    context_in:
+      counts: "{review.severity_counts}"
+      comments: "{review.comments}"
+    required_output: Output
+    actions:
+      - name: shape-comment
+        description: Produce the 'comment' summary (warnings but no criticals)
+        js: |
+          const c = context.counts;
+          return {
+            verdict: 'comment',
+            summary_text: `Commented: ${c.warning} warning(s), ${c.info} info note(s). No critical blockers.`,
+            comment_count: context.comments.length,
+          };

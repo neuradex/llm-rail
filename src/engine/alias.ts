@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getDataDir } from "../util.js";
 
 const ADJECTIVES = [
   "bold", "calm", "cool", "dark", "deep", "dry", "fair", "fast", "firm", "flat",
@@ -47,6 +48,31 @@ export function collectExistingAliases(stateDir: string): Set<string> {
     }
   }
   return aliases;
+}
+
+/**
+ * Resolve a string that is either an instance id or an alias to a
+ * canonical id. Throws if neither matches an instance under the data
+ * directory. Format-agnostic — works for v1 instances (the only
+ * supported runtime in 1.0.0).
+ */
+export function resolveInstanceId(idOrAlias: string): string {
+  const baseDir = path.resolve(getDataDir());
+
+  if (fs.existsSync(baseDir)) {
+    for (const workflowDir of fs.readdirSync(baseDir)) {
+      const wfPath = path.resolve(baseDir, workflowDir);
+      if (!fs.statSync(wfPath).isDirectory()) continue;
+      if (fs.existsSync(path.resolve(wfPath, idOrAlias, "state.yaml"))) {
+        return idOrAlias;
+      }
+    }
+  }
+
+  const resolved = resolveAlias(baseDir, idOrAlias);
+  if (resolved) return resolved;
+
+  throw new Error(`Instance not found: ${idOrAlias}`);
 }
 
 /** Resolve an alias to an instance ID. Returns null if not found. */

@@ -1,63 +1,105 @@
 ---
 name: validation
-description: Declarative guards and cross-step assertions
+description: Schema-driven structural checks and residual assertion rules
 ---
 
-## Validation
+## Two layers
 
-Two tiers of output checking, both declarative.
+v1 validation happens in two layers:
 
-### validation (pre-completion guards)
+1. **Schemas** (primary) — the structural shape of every step's output is declared up front in `schemas:`. Every submission is validated against the named schema before the step completes.
+2. **`validation:` / `assertions:`** (residual) — per-step rules that can't be expressed by JSON Schema alone. Mostly `script`, `verify_source`, and cross-field checks.
 
-Checked when the agent submits with `next`. Rejected submissions don't advance the workflow.
+Most legacy `validation:` blocks disappear in v1 because structural rules (type, length, range, enum) move into the schema.
 
-```yaml
-validation:
-  - field: companies
-    op: type
-    value: array
-  - field: companies
-    op: min_length
-    value: 20
-    message: "Must collect at least 20 companies"
-  - field: companies
-    op: each_has
-    value: ticker
-```
-
-### assertions (post-completion checks)
-
-Checked after validation passes. Failures revert the step.
+## Layer 1: schemas
 
 ```yaml
-assertions:
-  - field: total_weight
-    op: eq
-    value: 100
-    message: "Allocation weights must sum to exactly 100"
+schemas:
+  ResearchResult:
+    type: object
+    properties:
+      companies:
+        type: array
+        items: Company
+        minItems: 20
+      notes: { type: string, maxLength: 500 }
+    required: [companies]
+
+  Company:
+    type: object
+    properties:
+      ticker: { type: string, minLength: 1 }
+      score: { type: number, minimum: 0, maximum: 100 }
+    required: [ticker, score]
+
+steps:
+  - id: research
+    type: agentic
+    instruction: Find 20+ companies
+    required_output: ResearchResult
 ```
 
-### Available operators
+When the agent submits, the runner validates against `ResearchResult`. Schema failures list every problem (multiple errors per submission, not just the first):
 
-| Op | Description | Value |
-|---|---|---|
-| `exists` | Field is present | — |
-| `not_empty` | Non-null, non-empty | — |
-| `type` | Type check | `array`, `object`, `string`, `number` |
-| `min_length` / `max_length` / `length` | Length check | number |
-| `min` / `max` / `between` | Numeric range | number or `[min, max]` |
-| `eq` / `neq` | Equality | any |
-| `gt` / `gte` / `lt` / `lte` | Comparison | number |
-| `contains` / `not_contains` | Substring or array inclusion | any |
-| `matches` | Regex match | pattern string |
-| `one_of` | Value in list | array |
-| `each_has` | Every array item has field | field name |
-| `verify_source` | Fetch URL, check per-field snippets exist | `{ url_field, field_snippets }` |
-| `script` | Run shell command, exit 0 = pass | shell command string |
+```
+Step 'research' output failed validation against schema 'ResearchResult':
+  - /companies must NOT have fewer than 20 items
+  - /companies/3/score must be <= 100
+```
+
+The agent's step stays `in_progress` on failure so it can retry with the feedback.
+
+### What moves into schemas
+
+All structural operators in the legacy list are now schema keywords:
+
+| Legacy op | Schema keyword |
+|---|---|
+| `type` | `type` |
+| `min_length` / `max_length` / `length` | `minLength` / `maxLength` (string) or `minItems` / `maxItems` (array) |
+| `min` / `max` | `minimum` / `maximum` |
+| `one_of` | `enum` |
+| `not_empty` (on string/array) | `minLength: 1` / `minItems: 1` |
+| (required field) | `required: [...]` |
+
+If your workflow had these rules, the `lrail wf migrate` tool folds them automatically into the generated schema.
+
+## Layer 2: residual assertion rules
+
+Some checks can't be expressed structurally. They stay on the step as `validation:` or `assertions:` entries.
+
+```yaml
+- id: optimize
+  type: agentic
+  instruction: Produce an optimized workflow
+  required_output: OptimizedWorkflow
+  validation:
+    - field: ratio
+      op: script
+      value: |
+        echo "$CONTEXT" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          if d['ratio'] <= d['baseline_ratio']:
+            print('ratio must improve over baseline', file=sys.stderr)
+            sys.exit(1)
+        "
+      message: Optimization must improve over baseline
+```
+
+### Residual operators
+
+| Op | Use |
+|---|---|
+| `script` | Arbitrary shell command, exit 0 = pass. Receives `FIELD_VALUE`, `CONTEXT`, `CONTEXT_FILE` env vars. |
+| `verify_source` | Fetch a URL and check per-field snippets exist (anti-fabrication). |
+| `contains` / `not_contains` | Substring / array inclusion (not structural) |
+| `matches` | Regex match (structural-ish, but we keep it residual for now) |
+| `each_has` | Every array item has a named field (could be schema-encoded but legacy ergonomics stay) |
+| Cross-field comparisons | e.g. "total equals sum of parts" — expressed via `script` |
 
 ### verify_source — anti-fabrication guard
-
-Each data field gets its own snippet. The agent submits a verbatim text excerpt from the source page for each field, and the CLI verifies both that the snippet contains the claimed value and exists on the page.
 
 ```yaml
 validation:
@@ -66,70 +108,41 @@ validation:
     value:
       url_field: source_url
       field_snippets:
-        per: per_snippet    # per_snippet must contain the PER value
-        roe: roe_snippet    # roe_snippet must contain the ROE value
-    message: "Data source could not be verified"
+        per: per_snippet
+        roe: roe_snippet
+    message: Data source could not be verified
 ```
 
-The agent must submit for each array item:
-- `source_url` — the page URL where data was found
-- `per_snippet` — verbatim excerpt containing the PER value (e.g., `"PE Ratio 17.33"`)
-- `roe_snippet` — verbatim excerpt containing the ROE value (e.g., `"Return on equity (ROE) is 14.48%"`)
+For each array item the agent submits: the claimed values must appear verbatim in the declared source page. The CLI fetches the URL once per item and checks.
 
-Per-field snippets allow values that appear in different sections of the same page.
-
-Verification order:
-1. **Value check** — each snippet must contain the string representation of its data field's value (null fields are skipped)
-2. **URL fetch** — CLI fetches the URL once and checks all snippets exist in the page body
-
-**Note**: Adds network latency to validation (one HTTP request per array item). Use only on steps where data integrity is critical.
+Use only where data integrity is critical — there is a network round-trip per item.
 
 ### script — custom validation via shell
 
-Run arbitrary shell commands as assertion gates. The command receives:
-- `FIELD_VALUE` env var: JSON value of the field being validated
-- `CONTEXT` env var: full step output data as JSON (assertions only, payloads ≤ 8KB)
-- `CONTEXT_FILE` env var: path to a temp JSON file with the same data (for payloads > 8KB; `CONTEXT` is unset in this case)
-
-Exit code 0 = pass, non-zero = fail. stderr is used as the error message.
-
-**Handling large context**: When using Node.js scripts, read context safely:
-```javascript
-node -e '
-const fs = require("fs");
-const ctx = process.env.CONTEXT
-  ? JSON.parse(process.env.CONTEXT)
-  : JSON.parse(fs.readFileSync(process.env.CONTEXT_FILE, "utf8"));
-// use ctx...
-'
-```
-
 ```yaml
-assertions:
-  - field: ratio
+validation:
+  - field: result
     op: script
-    value: |
-      echo $CONTEXT | python3 -c "
-        import sys, json
-        d = json.load(sys.stdin)
-        if d['ratio'] <= d['baseline_ratio']:
-          print('ratio must improve over baseline', file=sys.stderr)
-          sys.exit(1)
-      "
-    message: "Optimization must improve programmatic ratio"
+    value: "node -e 'const d = JSON.parse(process.env.CONTEXT); process.exit(d.valid ? 0 : 1)'"
 ```
 
-Use `script` for comparison logic that can't be expressed with built-in operators (e.g., comparing against baseline metrics from a previous step).
+Script execution results are recorded as `script_assertion` events in the instance audit log (`audit.jsonl`).
 
-**Logging**: Script execution results (stdout, stderr, exit code) are automatically recorded as `script_assertion` events in the instance audit log (`audit.jsonl`). Use `lrail <id> query` or read the log file directly to inspect results:
+## validation vs assertions
 
-```jsonl
-{"event":"script_assertion","step_id":"synthesize","data":{"logs":[{"field":"ratio","command":"...","exit_code":0,"stdout":"...","stderr":""}]}}
-```
+Both are declarative. The difference is timing:
 
-### When to use which
+- **`validation:`** — checked when the agent submits. Failure rejects the submission; the step stays `in_progress` and the agent sees the feedback.
+- **`assertions:`** — checked *after* validation passes. Failure reverts the step (back to `in_progress`) so the agent retries. Use for cross-step integrity (e.g., "weights across this step's output and another step's output must sum to 100").
 
-- **validation**: structure checks (is it an array? does it have required fields?)
-- **assertions**: cross-step integrity (do weights sum to 100? does output reference valid IDs?)
+## When to use which
 
-Both are declarative — no code to write, just YAML rules.
+- Structural shape of the output → **schema**.
+- Numeric/length/enum constraints → **schema**.
+- Data has to actually exist on the web → `validation` with `verify_source`.
+- Complex cross-field, cross-step, or external-tool check → `validation` or `assertions` with `script`.
+- A check that fires only in specific phases or variants → `validation` (phase is a workflow-level gate, not a per-rule one).
+
+## What disappears
+
+Legacy validation had one awkward pattern: `required_output: [a, b, c]` as a field list **plus** `validation:` with type rules for each. You declared shape twice. In v1 you declare shape once, in the schema, and `required_output` is just the schema's name.

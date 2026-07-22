@@ -42,6 +42,14 @@ function interpolate(
  * Render the prompt shown when execution pauses at an agentic step.
  * Includes the resolved context_in, the schema-derived field list, and
  * the exact `next` command the agent should run.
+ *
+ * Block order is load-bearing for cost. Everything down to the WARNING line
+ * is byte-identical on every run of a given step, so a provider prefix cache
+ * can serve it; everything below it changes per iteration (context values,
+ * instance alias) and cannot be cached. The instruction is by far the largest
+ * constant — kilobytes of task description — so it belongs in the static half.
+ * It used to sit *after* the context block, which put the whole task behind a
+ * cache-busting payload and re-billed it at full price on every call.
  */
 export function formatV1AgenticStart(
   def: WorkflowV1Def,
@@ -57,6 +65,7 @@ export function formatV1AgenticStart(
   const interpScope = { ...state.input, ...resolvedContext };
   const resolvedInstruction = interpolate(pendingStep.instruction.trim(), interpScope);
 
+  // ── Cacheable prefix: constant for every run of this step ──────────────
   const lines: string[] = [
     SEPARATOR,
     `Step ${stepNum}/${total}: ${headerLabel}`,
@@ -69,8 +78,21 @@ export function formatV1AgenticStart(
     lines.push(`  Fields: ${fields}`);
   }
 
+  lines.push(
+    "",
+    ">>> NEXT ACTION:",
+    resolvedInstruction,
+    "",
+    "!!! WARNING: Output must validate against the declared schema, or it will be rejected.",
+  );
+
+  // ── Per-run tail: values and instance-scoped commands ──────────────────
   if (Object.keys(resolvedContext).length > 0) {
-    lines.push("", "Context:");
+    // Instructions refer to these by name as {placeholder}. lrail does not
+    // substitute single-brace names into the instruction text (only {{input}}
+    // params are interpolated), so the header states the mapping explicitly
+    // rather than leaving the agent to infer it.
+    lines.push("", "Context — values for the {placeholders} named above:");
     for (const [key, val] of Object.entries(resolvedContext)) {
       const display = typeof val === "object" ? JSON.stringify(val) : String(val);
       lines.push(`  ${key}: ${display}`);
@@ -92,10 +114,8 @@ export function formatV1AgenticStart(
 
   lines.push(
     "",
-    `>>> NEXT ACTION: ${resolvedInstruction}`,
+    "Submit with:",
     `    lrail ${aliasOrId(state)} next --result '${exampleResult}'`,
-    "",
-    "!!! WARNING: Output must validate against the declared schema, or it will be rejected.",
     SEPARATOR,
   );
   return lines.join("\n");
@@ -115,17 +135,22 @@ export function formatV1Rejection(
   const interpScope = { ...state.input, ...resolvedContext };
   const resolvedInstruction = interpolate(step.instruction.trim(), interpScope);
   return [
+    // Same static-prefix-first ordering as formatV1AgenticStart: the restated
+    // instruction is constant, the errors are not. Trailing the errors also
+    // puts the corrective signal closest to the agent's next output.
     SEPARATOR,
     "SUBMISSION REJECTED",
     "",
     `Schema: ${schemaName}`,
-    "Errors:",
+    "",
+    ">>> RETRY:",
+    resolvedInstruction,
+    "",
+    "Errors from your last submission:",
     ...errors.map((e) => `  - ${e}`),
     "",
-    `>>> RETRY: ${resolvedInstruction}`,
-    `    lrail ${aliasOrId(state)} next --result '<json>'`,
-    "",
     "!!! Adjust your output to match the schema and resubmit.",
+    `    lrail ${aliasOrId(state)} next --result '<json>'`,
     SEPARATOR,
   ].join("\n");
 }

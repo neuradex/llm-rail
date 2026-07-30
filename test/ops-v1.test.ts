@@ -281,6 +281,115 @@ describe("ops-v1 script", () => {
       null,
     );
   });
+
+  // Cross-field assertions were impossible before STEP_OUTPUT: a rule declared on
+  // one field could not see its siblings. Authors reached for an env var that did not
+  // exist, and `JSON.parse(process.env.CONTEXT || "{}")` made the assertion pass
+  // vacuously instead of failing — silent, and invisible in logs.
+  it("exposes the whole step output as STEP_OUTPUT", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "has_relation", `echo "$STEP_OUTPUT" | grep -q '"subject_hint":"entity:e1"'`),
+        true,
+        { has_relation: true, subject_hint: "entity:e1", object_hint: "entity:e2" },
+      ),
+      null,
+    );
+  });
+
+  it("STEP_OUTPUT lets a rule check sibling fields — the case that used to be dead", () => {
+    const crossField = rule(
+      "script",
+      "has_relation",
+      `node -e '
+        const ctx = JSON.parse(process.env.STEP_OUTPUT || "{}");
+        if (ctx.has_relation !== true) process.exit(0);
+        if (!/^entity:/.test(ctx.subject_hint || "")) {
+          console.error("subject_hint must be entity:<id>");
+          process.exit(1);
+        }
+      '`,
+    );
+    // sibling is well-formed → passes
+    assert.equal(
+      applyRule(crossField, true, { has_relation: true, subject_hint: "entity:e1" }),
+      null,
+    );
+    // sibling is malformed → fails, and says why
+    const err = applyRule(crossField, true, { has_relation: true, subject_hint: "User" });
+    assert.match(err!, /subject_hint must be entity/);
+  });
+
+  // CONTEXT is intentionally NOT provided. Scripts that read it have been passing
+  // vacuously; switching them on by stealth would flip them to failing every
+  // submission, because at least one also depends on a per-rule `env:` map this
+  // engine drops. Opting in via STEP_OUTPUT forces the author to look once.
+  it("does not provide CONTEXT — silent revival is as bad as silent death", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "f", `[ -z "$CONTEXT" ]`),
+        "x",
+        { f: "x", sibling: 1 },
+      ),
+      null,
+    );
+  });
+
+  it("rule env reaches the script", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "f", `[ "$PAIR_A" = "e1" ]`),
+        "x",
+        { f: "x" },
+        { PAIR_A: "e1" },
+      ),
+      null,
+    );
+  });
+
+  // A declared `env:` that never arrives is the failure that hides: the script
+  // compares against undefined, the comparison is false, and the assertion rejects
+  // every submission. Before this was wired, ontology-fixer's pair check would have
+  // done exactly that the moment anything revived it.
+  it("missing rule env makes the comparison fail loudly, not silently pass", () => {
+    const pairCheck = rule(
+      "script",
+      "has_relation",
+      `node -e '
+        const ctx = JSON.parse(process.env.STEP_OUTPUT || "{}");
+        const a = process.env.PAIR_A, b = process.env.PAIR_B;
+        if (ctx.subject !== a || ctx.object !== b) {
+          console.error("subject/object must match the input pair (" + a + ", " + b + ")");
+          process.exit(1);
+        }
+      '`,
+    );
+    const output = { has_relation: true, subject: "e1", object: "e2" };
+    // env supplied → passes
+    assert.equal(applyRule(pairCheck, true, output, { PAIR_A: "e1", PAIR_B: "e2" }), null);
+    // env missing → rejects, and the message names what was compared
+    const err = applyRule(pairCheck, true, output);
+    assert.match(err!, /must match the input pair/);
+  });
+
+  it("engine-owned names win over a rule env typo", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "f", `[ "$FIELD_VALUE" = '"real"' ]`),
+        "real",
+        { f: "real" },
+        { FIELD_VALUE: "hijacked" },
+      ),
+      null,
+    );
+  });
+
+  it("without output, STEP_OUTPUT is {} — the field is still checkable", () => {
+    assert.equal(
+      applyRule(rule("script", "f", `[ "$STEP_OUTPUT" = '{}' ] && [ "$FIELD_VALUE" = '"x"' ]`), "x"),
+      null,
+    );
+  });
 });
 
 // ── unknown op ──

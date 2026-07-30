@@ -271,6 +271,44 @@ Two tiers run at different times:
 
 `verify_source` fetches URLs and confirms the cited data actually exists on the page. `script` runs a shell command as a gate. Built-in operators cover the rest.
 
+#### `op: script` — what the shell gets
+
+| env | contents |
+|---|---|
+| `FIELD_VALUE` | the rule's own `field`, JSON-encoded |
+| `STEP_OUTPUT` | the **whole step output**, JSON-encoded |
+| anything in `env:` | values you declare; `{step.field}` resolves against completed steps |
+
+`STEP_OUTPUT` is what makes cross-field checks possible — a rule declared on one field can gate on it and then validate its siblings. `env:` reaches further back, to facts an earlier step produced:
+
+```yaml
+assertions:
+  - field: has_relation
+    op: script
+    env:
+      PAIR_A: "{fetch.entity_a_id}"
+      PAIR_B: "{fetch.entity_b_id}"
+    value: |
+      node -e '
+        const ctx = JSON.parse(process.env.STEP_OUTPUT || "{}");
+        if (ctx.has_relation !== true) process.exit(0);
+        if (!/^entity:/.test(ctx.subject_hint || "")) {
+          console.error("subject_hint must be entity:<id>");
+          process.exit(1);
+        }
+      '
+```
+
+Exit 0 passes; any non-zero fails and stderr becomes the message the agent sees.
+
+> **Write the assertion, then run it.** A script that reads an env var nobody sets does not fail — it parses a default, iterates nothing, and **passes**. That is invisible: a passing assertion produces no output and no log line, so a dead guard looks exactly like a satisfied one. Check both directions before shipping:
+>
+> ```bash
+> STEP_OUTPUT='{"has_relation":true,"subject_hint":"User"}' node -e '<your script>'; echo "exit=$?"
+> ```
+>
+> There is deliberately no `CONTEXT` variable. Older workflows reached for that name; giving it meaning now would switch those assertions on by stealth, and at least one of them would then reject every submission instead of accepting every submission. Opt in by naming `STEP_OUTPUT`.
+
 ### Policy per workflow
 
 The project-level policy in `lrail.yml` protects everything globally. Workflows can layer additional restrictions on top:

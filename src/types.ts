@@ -29,6 +29,18 @@ export interface AssertionRule {
   op: AssertionOp;
   value?: unknown;
   message?: string;
+  /**
+   * Extra environment for `op: script`, on top of `FIELD_VALUE` / `STEP_OUTPUT`.
+   *
+   * Values may be `{step.field}` references, resolved against completed steps the
+   * same way `context_in` is. Use this for facts the assertion needs that are not in
+   * the step's own output — the id pair a step was asked about, for instance.
+   *
+   * Workflows in the wild already declared this key and the engine dropped it, so the
+   * scripts read `undefined` and compared against it without complaint. Typing it
+   * here is what makes it real; see the `script` handler in ops-v1.
+   */
+  env?: Record<string, string>;
 }
 
 /** @deprecated Use AssertionRule instead */

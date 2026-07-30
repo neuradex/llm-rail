@@ -4,7 +4,18 @@ import type {
   AssertionRule,
 } from "../types.js";
 
-type OpHandler = (value: unknown, expected: unknown, field: string) => string | null;
+/**
+ * `output` is the **whole step output** the rule was evaluated against — not just
+ * the field. Only `script` uses it (see below); every other op is a pure function of
+ * its own field and ignores the argument.
+ */
+type OpHandler = (
+  value: unknown,
+  expected: unknown,
+  field: string,
+  output?: Record<string, unknown>,
+  env?: Record<string, string>,
+) => string | null;
 
 const opHandlers: Record<AssertionOp, OpHandler> = {
   exists: () => null,
@@ -182,16 +193,50 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
     return null;
   },
 
-  script: (value, expected, field) => {
+  /**
+   * Shell assertion. Exit 0 passes; any non-zero fails with stderr as the message.
+   *
+   * Two env vars are injected:
+   *
+   *   FIELD_VALUE  the rule's own field, JSON-encoded
+   *   STEP_OUTPUT  the **whole step output**, JSON-encoded
+   *
+   * `STEP_OUTPUT` exists because cross-field assertions are common and were
+   * previously impossible: a rule declared on one field could not see its siblings.
+   * Authors worked around it by reading an env var that did not exist, which is worse
+   * than failing — `JSON.parse(process.env.CONTEXT || "{}")` yields `{}`, the checks
+   * iterate nothing, and the assertion **passes silently**. Four assertions in a
+   * downstream repo were dead that way for weeks; nothing in the logs showed it,
+   * because a passing assertion says nothing. One of them was the only guard on edge
+   * payloads, so malformed edges reached the API and a foreign-key violation there
+   * killed whole workflow runs.
+   *
+   * Deliberately **not** aliased to `CONTEXT`, even though that is the name the dead
+   * scripts reach for. Reviving them silently is the same class of mistake as letting
+   * them die silently: one of those assertions also depends on a per-rule `env:` map
+   * that this engine drops on the floor, so switching it on by stealth would make it
+   * fail every submission instead of passing every submission. Opting in by writing
+   * `STEP_OUTPUT` forces an author to look at the assertion once.
+   */
+  script: (value, expected, field, output, env) => {
     const cmd = String(expected);
+    // Rule-declared env first, so a typo in `env:` can never shadow the two names the
+    // engine guarantees (assigned last, below).
+    const scriptEnv: Record<string, string | undefined> = { ...process.env, ...(env ?? {}) };
+    // `CONTEXT` must be *absent*, not merely unset by us. It can arrive two other ways —
+    // inherited from the parent process, or declared in a rule's `env:` — and either one
+    // silently revives a legacy assertion that has been passing vacuously. Deleting it
+    // here is what makes the contract enforceable rather than aspirational.
+    delete scriptEnv.CONTEXT;
     try {
       execFileSync("sh", ["-c", cmd], {
         encoding: "utf-8",
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe"],
         env: {
-          ...process.env,
+          ...scriptEnv,
           FIELD_VALUE: JSON.stringify(value),
+          STEP_OUTPUT: JSON.stringify(output ?? {}),
         },
       });
     } catch (e: unknown) {
@@ -270,12 +315,26 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
  * `validation:` / `assertions:` blocks on agentic / programmatic
  * outputs).
  */
-export function applyRule(rule: AssertionRule, value: unknown): string | null {
+export function applyRule(
+  rule: AssertionRule,
+  value: unknown,
+  /**
+   * The whole step output the rule is being evaluated against. Optional so existing
+   * callers keep compiling; without it a `script` assertion sees `{}` in
+   * `STEP_OUTPUT` and can only check its own `FIELD_VALUE`.
+   */
+  output?: Record<string, unknown>,
+  /**
+   * `rule.env` with any `{step.field}` references already resolved. The caller owns
+   * resolution because only it has the instance state.
+   */
+  env?: Record<string, string>,
+): string | null {
   const handler = opHandlers[rule.op];
   if (!handler) {
     return `Unknown assertion op: '${rule.op}'`;
   }
-  const err = handler(value, rule.value, rule.field);
+  const err = handler(value, rule.value, rule.field, output, env);
   if (err && rule.message) return `Field '${rule.field}': ${rule.message}`;
   return err;
 }

@@ -8,7 +8,7 @@ import {
 } from "../types-v1.js";
 import { nowISO } from "../util.js";
 import { executeV1Actions } from "./actions-v1.js";
-import { buildStepContextV1 } from "./context-v1.js";
+import { buildStepContextV1, resolveReference } from "./context-v1.js";
 import type { V1InstanceState } from "./state-v1.js";
 import { buildSchemaRegistry, type SchemaRegistry } from "./schemas.js";
 import { applyRouterGoto, evaluateRouter } from "./router-v1.js";
@@ -67,16 +67,54 @@ export class V1AssertionFailure extends Error {
 function runRules(
   rules: AssertionRule[] | undefined,
   output: Record<string, unknown>,
+  /**
+   * Needed only to resolve `{step.field}` references in a rule's `env:`. Omitted by
+   * callers that have no state at hand; those rules then see `env:` values verbatim.
+   */
+  envScope?: { stepId: string; state: V1InstanceState },
 ): string[] {
   if (!rules || rules.length === 0) return [];
   const errs: string[] = [];
   for (const rule of rules) {
     const value = output[rule.field];
     if (value === undefined || value === null) continue;
-    const err = applyRule(rule, value);
+    // Pass the whole output so `script` assertions can check across fields — a rule
+    // declared on one field often needs its siblings (ops-v1 `script` comment).
+    const err = applyRule(rule, value, output, resolveRuleEnv(rule, envScope));
     if (err) errs.push(err);
   }
   return errs;
+}
+
+/**
+ * Resolve a rule's `env:` map. `{step.field}` templates go through the same resolver
+ * `context_in` uses; anything else is a literal.
+ *
+ * A reference that cannot be resolved becomes the empty string rather than throwing.
+ * An assertion is a guard, and a guard that explodes on its own plumbing is worse than
+ * one that reports a missing value — the script sees `""`, its comparison fails, and
+ * the author gets an assertion message instead of a runner crash.
+ */
+function resolveRuleEnv(
+  rule: AssertionRule,
+  envScope?: { stepId: string; state: V1InstanceState },
+): Record<string, string> | undefined {
+  if (!rule.env) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(rule.env)) {
+    const template = String(raw ?? "");
+    if (!envScope || !/^\{[\w-]+\.[\w.-]+\}$/.test(template)) {
+      out[key] = template;
+      continue;
+    }
+    try {
+      const v = resolveReference(envScope.stepId, key, template, envScope.state);
+      out[key] = v === null || v === undefined ? "" : String(v);
+    } catch {
+      out[key] = "";
+    }
+  }
+  return out;
 }
 
 // ── Advance result ──
@@ -227,14 +265,14 @@ export function advance(
           assertValidOutput(step.id, step.required_output, result.extracted, schemaRegistry);
         }
 
-        const valErrs = runRules(step.validation, result.extracted);
+        const valErrs = runRules(step.validation, result.extracted, { stepId: step.id, state });
         if (valErrs.length > 0) {
           throw new V1AssertionFailure(step.id, "validation", valErrs);
         }
 
         finishStep(state, step.id, result.extracted);
 
-        const asnErrs = runRules(step.assertions, result.extracted);
+        const asnErrs = runRules(step.assertions, result.extracted, { stepId: step.id, state });
         if (asnErrs.length > 0) {
           revertStep(state, step.id);
           throw new V1AssertionFailure(step.id, "assertions", asnErrs);
@@ -313,7 +351,7 @@ export function submitAgenticResult(
   // Residual `validation:` rules (script, verify_source, matches,
   // each_has, contains, etc.) — schema doesn't cover these. Failure
   // here keeps the step in_progress so the agent can retry.
-  const valErrs = runRules(step.validation, output);
+  const valErrs = runRules(step.validation, output, { stepId: step.id, state });
   if (valErrs.length > 0) {
     throw new V1AssertionFailure(step.id, "validation", valErrs);
   }
@@ -322,7 +360,7 @@ export function submitAgenticResult(
 
   // Cross-step `assertions:` (post-completion). Failure reverts the
   // step back to in_progress so the agent retries with full context.
-  const asnErrs = runRules(step.assertions, output);
+  const asnErrs = runRules(step.assertions, output, { stepId: step.id, state });
   if (asnErrs.length > 0) {
     revertStep(state, step.id);
     throw new V1AssertionFailure(step.id, "assertions", asnErrs);

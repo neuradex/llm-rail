@@ -23,13 +23,20 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      # Node 22 bundles npm 10.x, but OIDC trusted publishing needs npm >= 11.5.1.
+      # Without this the Publish step has no credentials at all and dies with ENEEDAUTH.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
       - run: pnpm install --frozen-lockfile
 
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          npm version "$VERSION" --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build
         run: pnpm build
@@ -48,7 +55,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
           git commit -m "chore: release v$VERSION" || true
-          git push origin HEAD:main
+          # npm publish already succeeded by this point, so a push failure must not
+          # cost us the GitHub Release — that is how npm and Releases drift apart.
+          git push origin HEAD:main \
+            || echo "::warning::could not push version commit to main; releasing anyway"
           gh release create "v$VERSION" --title "v$VERSION" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

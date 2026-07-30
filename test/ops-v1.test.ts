@@ -335,6 +335,46 @@ describe("ops-v1 script", () => {
     );
   });
 
+  // CONTEXT can arrive two ways other than us setting it, and either one revives a
+  // legacy assertion that has been passing vacuously. Absence has to be enforced.
+  it("CONTEXT inherited from the parent process is stripped", () => {
+    const saved = process.env.CONTEXT;
+    process.env.CONTEXT = JSON.stringify({ edges: [{ a: 1 }] });
+    try {
+      assert.equal(
+        applyRule(rule("script", "f", `[ -z "$CONTEXT" ]`), "x", { f: "x" }),
+        null,
+      );
+    } finally {
+      if (saved === undefined) delete process.env.CONTEXT;
+      else process.env.CONTEXT = saved;
+    }
+  });
+
+  it("CONTEXT declared in a rule env is stripped", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "f", `[ -z "$CONTEXT" ]`),
+        "x",
+        { f: "x" },
+        { CONTEXT: JSON.stringify({ edges: [{ a: 1 }] }) },
+      ),
+      null,
+    );
+  });
+
+  it("stripping CONTEXT does not disturb other rule env values", () => {
+    assert.equal(
+      applyRule(
+        rule("script", "f", `[ -z "$CONTEXT" ] && [ "$PAIR_A" = "e1" ]`),
+        "x",
+        { f: "x" },
+        { CONTEXT: "{}", PAIR_A: "e1" },
+      ),
+      null,
+    );
+  });
+
   it("rule env reaches the script", () => {
     assert.equal(
       applyRule(

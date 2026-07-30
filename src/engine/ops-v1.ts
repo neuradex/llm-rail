@@ -220,16 +220,21 @@ const opHandlers: Record<AssertionOp, OpHandler> = {
    */
   script: (value, expected, field, output, env) => {
     const cmd = String(expected);
+    // Rule-declared env first, so a typo in `env:` can never shadow the two names the
+    // engine guarantees (assigned last, below).
+    const scriptEnv: Record<string, string | undefined> = { ...process.env, ...(env ?? {}) };
+    // `CONTEXT` must be *absent*, not merely unset by us. It can arrive two other ways —
+    // inherited from the parent process, or declared in a rule's `env:` — and either one
+    // silently revives a legacy assertion that has been passing vacuously. Deleting it
+    // here is what makes the contract enforceable rather than aspirational.
+    delete scriptEnv.CONTEXT;
     try {
       execFileSync("sh", ["-c", cmd], {
         encoding: "utf-8",
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe"],
         env: {
-          ...process.env,
-          // Rule-declared env first, so a typo in `env:` can never shadow the two
-          // names the engine guarantees.
-          ...(env ?? {}),
+          ...scriptEnv,
           FIELD_VALUE: JSON.stringify(value),
           STEP_OUTPUT: JSON.stringify(output ?? {}),
         },
